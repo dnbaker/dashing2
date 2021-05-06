@@ -1,0 +1,6 @@
+[submodule "libBigWig"]
+	path = libBigWig
+	url = https://github.com/dpryan79/libBigWig
+[submodule "bonsai"]
+	path = bonsai
+	url = https://github.com/dnbaker/bonsai
