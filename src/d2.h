@@ -64,6 +64,7 @@ struct Counter {
             count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1: -1);
         }
     }
+    bool empty() const {return c64_.empty() && c128_.empty() && std::find_if(count_sketch_.begin(), count_sketch_.end(), [](auto x) {return x != 0;}) == count_sketch_.end();}
     void add(uint64_t x) {
         if(ct_ == EXACT_COUNTING) {
             auto it = c64_.find(x);
@@ -87,25 +88,37 @@ struct ParseOptions {
     bool parse_by_seq_ = false;
     bool trim_chr_ = true;
     size_t sketchsize_ = 2048;
+    size_t countsketchsize_ = 80'000'000ull; // Default to 80-million count-sketch
     bool one_perm_ = true;
+    bool by_chrom_ = false;
+    bool bed_parse_normalize_intervals_ = false;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
     SketchSpace sspace_;
     CountingType count_;
     DataType dtype_;
-    ParseOptions(int k, int w=-1, std::string spacing="", bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, CountingType count=EXACT_COUNTING, DataType dtype=FASTX):
-        k_(k), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), count_(count), dtype_(dtype) {}
+    size_t nthreads_;
+    ParseOptions(int k, int w=-1, std::string spacing="", bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, CountingType count=EXACT_COUNTING, DataType dtype=FASTX, size_t nthreads=0):
+        k_(k), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), count_(count), dtype_(dtype), nthreads_(nthreads) {
+        if(nthreads == 0)
+            if(char *s = std::getenv("OMP_NUM_THREADS"))
+                nthreads = std::max(std::atoi(s), 1);
+    }
     ParseOptions &parse_by_seq() {parse_by_seq_ = true; return *this;}
     ParseOptions &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     ParseOptions &parse_bed() {dtype_ = BED; return *this;}
     ParseOptions &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
     ParseOptions &sketchsize(size_t sz) {sketchsize_ = sz; return *this;}
+    ParseOptions &nthreads(size_t nthreads) {nthreads_ = nthreads; return *this;}
+    size_t nthreads() const {return nthreads_;}
+    size_t sketchsize() const {return sketchsize_;}
 };
 
 using FullSetSketch = sketch::CSetSketch<RegT>;
 using OPSetSketch = sketch::setsketch::OPCSetSketch<RegT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
+using ProbMinHash = sketch::pmh2_t<RegT>;
 
 enum OutputKind {
     SYMMETRIC_ALL_PAIRS,
@@ -128,5 +141,6 @@ struct Collection {
 
 
 std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts);
+ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, const ParseOptions &opts);
 
 #endif

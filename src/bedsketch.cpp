@@ -1,6 +1,9 @@
 #include "d2.h"
+
 std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts) {
     if(opts.sspace_ > SPACE_PSET) throw std::invalid_argument("Can't do edit distance for BED files");
+    if(opts.bed_parse_normalize_intervals_ && opts.sspace_ == SPACE_SET)
+        throw std::invalid_argument("Can't normalize BED rows in set space. Use SPACE_MULTISET or SPACE_PSET");
     std::ifstream ifs(path);
     FullSetSketch ss(opts.one_perm_ ? size_t(1): opts.sketchsize_);
     OPSetSketch opss(opts.one_perm_ ? opts.sketchsize_: size_t(1));
@@ -15,13 +18,14 @@ std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts) {
         const uint64_t chrhash = XXH3_64bits(p, p2 - p);
         p = p2 + 1;
         unsigned long start = std::strtoul(p, &p, 10), stop =  std::strtoul(p, &p, 10);
+        const float inc = opts.bed_parse_normalize_intervals_ ? 1. / (stop - start): 1.f;
         // If set space, sketch directly.
         if(opts.sspace_ == SPACE_SET) {
             if(opts.one_perm_) for(auto i = start; i < stop; ss.update(chrhash ^ i++));
             else               for(auto i = start; i < stop; opss.update(chrhash ^ i++));
         } else {
             // else, we need to compute counts before we sketch
-            for(auto i = start; i < stop; ctr.add(chrhash ^ i++));
+            for(auto i = start; i < stop; ctr.add(chrhash ^ i++, inc));
         }
     }
     if(0) {
