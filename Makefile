@@ -7,10 +7,12 @@ WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts
 EXTRA+=-DNOCURL
 
 OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp))
+OBJ=$(OFS)
 OBJLD=$(patsubst %.o,%.ldo,$(OFS))
 OBJF=$(patsubst %.o,%.fo,$(OFS))
 
 all: dashing2 dashing2-ld dashing2-f32
+obh: echo $(OBJ)
 
 dashing2: $(OBJ) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
