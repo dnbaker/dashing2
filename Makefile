@@ -1,3 +1,5 @@
+.PHONY=clean
+
 CXX?=g++
 
 LIB=-lz
@@ -29,3 +31,6 @@ dashing2-f32: $(OBJF) libBigWig.a
 
 libBigWig.a: $(wildcard libBigWig/*.c) $(wildcard libBigWig/*.h)
 	cd libBigWig && $(MAKE) && cp libBigWig.a ..
+
+clean:
+	rm -f dashing2 dashing2-ld dashing2-f32 libBigWig.a $(OBJ) $(OBJLD) $(OBJF)

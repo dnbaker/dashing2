@@ -165,7 +165,6 @@ struct Collection {
 
 
 std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts);
-ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, const ParseOptions &opts);
-std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map);
+//std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map);
 
 #endif

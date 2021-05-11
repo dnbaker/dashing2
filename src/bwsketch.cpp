@@ -177,3 +177,25 @@ std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map
     }
     return std::move(*ptrs[0]);
 }
+std::vector<RegT> reduce(const ska::flat_hash_map<std::string, std::vector<RegT>> &map) {
+    std::vector<std::vector<RegT>> vals(map.size());
+    auto it = vals.begin();
+    for(auto &pair: map) *it = pair.second, ++it;
+    const size_t n = map.size();
+    const unsigned int ln = static_cast<int>(std::ceil(n));
+    auto reduce = [&](auto &lhs, auto &rhs) {
+        std::transform(lhs.begin(), lhs.end(), rhs.begin(), lhs.begin(), [](auto x, auto y) {return std::min(x, y);});
+    };
+    for(size_t i = 0; i < ln; ++i) {
+        const size_t step_size = 1 << i;
+        const size_t sweep_size = (i + 1) << 1;
+        const size_t nsweeps = (n + (sweep_size - 1)) / sweep_size;
+        OMP_PFOR
+        for(size_t j = 0; j < nsweeps; ++j) {
+            const auto lh = j * sweep_size, rh = lh + step_size;
+            if(rh < n)
+                reduce(vals[lh], vals[rh]);
+        }
+    }
+    return std::move(vals.front());
+}
