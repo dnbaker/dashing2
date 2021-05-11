@@ -117,9 +117,11 @@ FastxSketchingResult fastx2sketch(ParseOptions &opts, std::vector<std::string> &
                 auto perf_for_substrs = [&](const auto &func) {
                     for_each_substr([&](const std::string &subpath) {
                         if(opts.use128()) {
-                            opts.rh128_.for_each_hash(func, subpath.data(), ksp);
+                            auto hasher(opts.rh128_);
+                            hasher.for_each_hash(func, subpath.data(), ksp);
                         } else {
-                            opts.rh_.for_each_hash(func, subpath.data(), ksp);
+                            auto hasher(opts.rh_);
+                            hasher.for_each_hash(func, subpath.data(), ksp);
                         }
                     }, path);
                 };
