@@ -78,6 +78,7 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
                         auto iend = itpairs[i].second->intervals->end[j];
                         for(;istart < iend;sketch.update(chrom_hash ^ istart++));
                     }
+                    itpairs[i].second = bwIteratorNext(itpairs[i].second);
                 } while(itpairs[i].second->data);
                 if(rvec.empty()) rvec = sketch.to_sigs();
                 else {
@@ -95,6 +96,7 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
                         auto iend = itpairs[i].second->intervals->end[j];
                         for(;istart < iend;sketch.update(chrom_hash ^ istart++));
                     }
+                    itpairs[i].second = bwIteratorNext(itpairs[i].second);
                 } while(itpairs[i].second->data);
                 if(rvec.empty()) rvec = sketch.to_sigs();
                 else {
@@ -115,6 +117,7 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
                         auto iend = itpairs[i].second->intervals->end[j];
                         for(;istart < iend;sketch.update(chrom_hash ^ istart, vptr[j]));
                     }
+                    itpairs[i].second = bwIteratorNext(itpairs[i].second);
                 } while(itpairs[i].second->data);
                 if(rvec.empty()) rvec = sketch.to_sigs();
                 else {
@@ -133,6 +136,7 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
                         auto iend = itpairs[i].second->intervals->end[j];
                         for(;istart < iend;sketch.update(chrom_hash ^ istart, vptr[j]));
                     }
+                    itpairs[i].second = bwIteratorNext(itpairs[i].second);
                 } while(itpairs[i].second->data);
                 if(rvec.empty()) rvec = sketch.to_sigs();
                 else {
