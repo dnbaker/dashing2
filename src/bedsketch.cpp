@@ -1,5 +1,7 @@
 #include "d2.h"
 
+namespace dashing2 {
+
 std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts) {
     if(opts.sspace_ > SPACE_PSET) throw std::invalid_argument("Can't do edit distance for BED files");
     if(opts.bed_parse_normalize_intervals_ && opts.sspace_ == SPACE_SET)
@@ -69,3 +71,5 @@ std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts) {
     }
     return ret;
 }
+
+} // namespace dashing2

@@ -1,5 +1,8 @@
 #ifndef D2_H_H___
 #define D2_H_H___
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <memory>
 #include <vector>
 #include "bonsai/encoder.h"
@@ -8,98 +11,13 @@
 #include "xxHash/xxh3.h"
 #include "sketch/setsketch.h"
 #include "sketch/bmh.h"
-
-#ifndef SKETCH_FLOAT_TYPE
-#define SKETCH_FLOAT_TYPE double
-#endif
-using RegT = SKETCH_FLOAT_TYPE;
-
-enum DataType {
-    FASTX,
-    BIGWIG,
-    BED
-};
+#include "enums.h"
+#include "counter.h"
 
 
-enum SketchSpace {
-    SPACE_SET,      // MinHash/SetSketch/HLL
-    SPACE_MULTISET, // Weighted MinHash -- e.g., Bag or Tree
-    SPACE_PSET,      // ProbMinHash
-    SPACE_EDIT_DISTANCE // edit distance -- implies OMH and forces us to use strings as input instead of bags of k-mers
-};
-
-enum CountingType {
-    EXACT_COUNTING,
-    COUNTSKETCH_COUNTING
-};
-using u128_t = __uint128_t;
-
+namespace dashing2 {
 using namespace sketch;
-namespace hash = sketch::hash;
-using FastRevHash = hash::FusedReversible3<hash::InvMul, hash::RotL33, hash::MultiplyAddXoRot<16>>;
 
-struct FHasher {
-    FastRevHash rhasher_;
-    FHasher() {}
-    INLINE uint64_t operator()(u128_t x) const {
-        return rhasher_(uint64_t(x>>64)) ^ rhasher_(uint64_t(x));
-    }
-};
-
-struct Counter {
-    CountingType ct_;
-    ska::flat_hash_map<uint64_t, uint32_t> c64_;
-    ska::flat_hash_map<u128_t, uint32_t, FHasher> c128_;
-    ska::flat_hash_map<uint64_t, double> c64d_;
-    ska::flat_hash_map<u128_t, double, FHasher> c128d_;
-    std::vector<int32_t> count_sketch_;
-    schism::Schismatic<uint64_t> s64_;
-    Counter(size_t cssize=0): ct_(cssize ? COUNTSKETCH_COUNTING: EXACT_COUNTING), count_sketch_(cssize), s64_(cssize + !cssize) {}
-    static constexpr uint64_t BM64 = 0x8000000000000000ull;
-    void add(u128_t x) {
-        if(ct_ == EXACT_COUNTING) {
-            auto it = c128_.find(x);
-            if(it == c128_.end()) c128_.emplace(x, 1);
-            else ++it->second;
-        } else {
-            const auto hv = sketch::hash::WangHash::hash(uint64_t(x)) ^ sketch::hash::WangHash::hash(x >> 64);
-            count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1: -1);
-        }
-    }
-    bool empty() const {return c64_.empty() && c128_.empty() && std::find_if(count_sketch_.begin(), count_sketch_.end(), [](auto x) {return x != 0;}) == count_sketch_.end();}
-    void add(u128_t x, double inc) {
-        if(ct_ == COUNTSKETCH_COUNTING) {
-            const auto hv = sketch::hash::WangHash::hash(uint64_t(x)) ^ sketch::hash::WangHash::hash(x >> 64);
-            count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1.: -1.) * inc;
-        } else {
-            auto it = c128d_.find(x);
-            if(it == c128d_.end())
-                c128d_.emplace(x, inc);
-            else it->second += inc;
-        }
-    }
-    void add(uint64_t x, double inc) {
-        if(ct_ == COUNTSKETCH_COUNTING) {
-            const auto hv = sketch::hash::WangHash::hash(x);
-            count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1.: -1.) * inc;
-        } else {
-            auto it = c64d_.find(x);
-            if(it == c64d_.end())
-                c64d_.emplace(x, inc);
-            else it->second += inc;
-        }
-    }
-    void add(uint64_t x) {
-        if(ct_ == EXACT_COUNTING) {
-            auto it = c64_.find(x);
-            if(it == c64_.end()) c64_.emplace(x, 1);
-            else ++it->second;
-        } else {
-            const auto hv = sketch::hash::WangHash::hash(x);
-            count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1: -1);
-        }
-    }
-};
 struct ParseOptions {
 
     // K-mer options
@@ -118,26 +36,31 @@ struct ParseOptions {
     bool bed_parse_normalize_intervals_ = false;
 
     // Whether to sketch multiset, set, or discrete probability distributions
-
+ 
     SketchSpace sspace_;
     CountingType count_;
     DataType dtype_;
     size_t nthreads_;
     ParseOptions(int k, int w=-1, std::string spacing="", bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, CountingType count=EXACT_COUNTING, DataType dtype=FASTX, size_t nthreads=0):
-        k_(k), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), count_(count), dtype_(dtype), nthreads_(nthreads) {
-        if(nthreads == 0)
+        k_(k), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), count_(count), dtype_(dtype) {
+        if(nthreads <= 0) {
             if(char *s = std::getenv("OMP_NUM_THREADS"))
                 nthreads = std::max(std::atoi(s), 1);
+        } else nthreads = 1;
+        nthreads_ = nthreads;
     }
     ParseOptions &parse_by_seq() {parse_by_seq_ = true; return *this;}
     ParseOptions &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     ParseOptions &parse_bed() {dtype_ = BED; return *this;}
     ParseOptions &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
     ParseOptions &sketchsize(size_t sz) {sketchsize_ = sz; return *this;}
-    ParseOptions &nthreads(size_t nthreads) {nthreads_ = nthreads; return *this;}
+    ParseOptions &nthreads(size_t nthreads) {nthreads_ = nthreads; OMP_ONLY(omp_set_num_threads(nthreads);) return *this;}
     size_t nthreads() const {return nthreads_;}
     size_t sketchsize() const {return sketchsize_;}
 };
+
+
+
 
 using FullSetSketch = sketch::CSetSketch<RegT>;
 using OPSetSketch = sketch::setsketch::OPCSetSketch<RegT>;
@@ -165,6 +88,7 @@ struct Collection {
 
 
 std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts);
+}
 //std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map);
 
 #endif

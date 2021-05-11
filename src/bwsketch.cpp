@@ -1,5 +1,7 @@
 #include "d2.h"
+#include "bwsketch.h"
 
+namespace dashing2 {
 
 static constexpr uint32_t default_BW_READ_BUFFER = 1<<30;
 
@@ -9,21 +11,24 @@ uint32_t BW_READ_BUFFER = default_BW_READ_BUFFER;
 #define BLOCKS_PER_ITER 4000000
 #endif
 
-std::vector<std::pair<int, bwOverlapIterator_t *>> get_iterators(bigWigFile_t *fp) {
+auto get_iterators(bigWigFile_t *fp) {
     auto cp = fp->cl;
     const int nk = cp->nKeys;
-    std::vector<std::pair<int, bwOverlapIterator_t *>> ret(nk, {0, static_cast<bwOverlapIterator_t *>(nullptr)});
-#ifdef _OPENMP
-    #pragma omp parallel for
-#endif
+    std::vector<std::pair<int, bwOverlapIterator_t *>> ret;
     for(auto i = 0; i < nk; ++i) {
         if(cp->len[i] < 1) continue;
-        auto &ref = ret[i].second;
-        ref = bwOverlappingIntervalsIterator(fp, fp->cl->chrom[i], 0, fp->cl->len[i], BLOCKS_PER_ITER);
-        ret[i].first = i;
-        if(!ref->data) bwIteratorDestroy(ref), ref = nullptr;
+        auto ptr = bwOverlappingIntervalsIterator(fp, fp->cl->chrom[i], 0, fp->cl->len[i], BLOCKS_PER_ITER);
+        if(!ptr->data || (ptr->intervals && ptr->intervals->l == 0)) bwIteratorDestroy(ptr);
+        else ret.push_back({i, ptr});
     }
-    ret.erase(std::remove_if(ret.begin(), ret.end(), [](auto x) {return x.second == nullptr;}));
+    auto it = std::find_if(ret.begin(), ret.end(), [](auto x) {return x.second == nullptr;});
+    if(it != ret.end()) {
+        std::fprintf(stderr, "%d/%p\n", it->first, (void *)it->second);
+        std::exit(1);
+    }
+    const size_t npass = std::count_if(ret.begin(), ret.end(), [](auto x) {return x.second != nullptr;});
+    if(ret.size() != npass) throw 1;
+    //for(auto &p: ret) bwIteratorDestroy(p.second);
     return ret;
 }
 ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, const ParseOptions &opts) {
@@ -31,6 +36,7 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
         throw std::invalid_argument("Counting format must be exact for BigWigs. (No Count-Sketch approximation). This may change in the future.");
     }
     ska::flat_hash_map<std::string, std::vector<RegT>> ret;
+    std::fprintf(stderr, "Space: %s\n", opts.sspace_ == SPACE_SET ? "Set": opts.sspace_ == SPACE_MULTISET ? "Multist": opts.sspace_ == SPACE_PSET ? "Probdist": "Editdist");
     if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_MULTISET && opts.sspace_ != SPACE_PSET)
         throw std::invalid_argument("Can't do edit distance for BigWig files");
     if(bwInit(BW_READ_BUFFER)) {
@@ -40,114 +46,88 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
     bigWigFile_t *fp = bwOpen(path.data(), nullptr, "r");
     if(fp == nullptr) throw std::runtime_error("Could not open bigwigfile");
 
-    const size_t nthreads = opts.nthreads();
-    std::vector<std::pair<int, bwOverlapIterator_t *>> itpairs = get_iterators(fp);
-    for(const auto &p: itpairs) ret.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
-    const size_t nbuffers = std::min(nthreads, itpairs.size());
+    auto ids(get_iterators(fp));
+    for(const auto &p: ids) ret.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
     const size_t ss = opts.sketchsize_;
     std::vector<FullSetSketch> fss;
     std::vector<OPSetSketch> opss;
     std::vector<BagMinHash> bmhs;
     std::vector<ProbMinHash> pmhs;
-    if(opts.sspace_ == SPACE_SET) {
-        if(opts.one_perm_) std::generate_n(std::back_inserter(opss), nbuffers, [ss]{return OPSetSketch(ss);});
-        else std::generate_n(std::back_inserter(fss), nbuffers, [ss]{return FullSetSketch(ss);});
+
+    for(size_t i = 0; i < std::min(opts.nthreads(), ids.size()); ++i) {
+        if(opts.sspace_ == SPACE_SET) {
+            if(opts.one_perm_) opss.emplace_back(ss);
+            else fss.emplace_back(ss);
+        } else if(opts.sspace_ == SPACE_MULTISET) {
+            bmhs.emplace_back(ss);
+        } else {
+            pmhs.emplace_back(ss);
+        }
     }
-#ifdef _OPENMP
-    #pragma omp parallel for
+    OMP_PFOR_DYN
+    for(size_t i = 0; i < ids.size(); ++i) {
+#ifndef NDEBUG
+        std::fprintf(stderr, "Processing contig %zu/%zu\n", i, ids.size());
 #endif
-    for(size_t i = 0; i < itpairs.size(); ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-        const int contig_id = itpairs[i].first;
+        const int contig_id = ids[i].first;
         std::string chrom = fp->cl->chrom[contig_id];
         const uint64_t chrom_hash = std::hash<std::string>{}(chrom);
         auto &rvec = ret[chrom];
-        if(unlikely(itpairs[i].second == nullptr)) {
+        auto &ptr = ids[i].second;
+        //ptr = bwOverlappingIntervalsIterator(fp, fp->cl->chrom[contig_id], 0, fp->cl->len[contig_id], BLOCKS_PER_ITER);
+        if(ptr == nullptr) {
             std::fprintf(stderr, "bwOverlapIterator_t * is null when it should be non-null (tid = %d/contig = %d)\n", tid, contig_id);
             std::exit(1);
         }
-        if(opts.sspace_ == SPACE_SET) {
-            std::fprintf(stderr, "SPACE_SET is set -- sketching only positions, not counts. If this is unintentional, see usage.\n");
-            if(opts.one_perm_) {
-                auto &sketch = opss[tid];
-                sketch.reset();
-                do {
-                    const uint32_t numi = itpairs[i].second->intervals->l;
-                    for(uint32_t j = 0; j < numi; ++j) {
-                        auto istart = itpairs[i].second->intervals->start[j];
-                        auto iend = itpairs[i].second->intervals->end[j];
-                        for(;istart < iend;sketch.update(chrom_hash ^ istart++));
+        {
+            if(fss.size()) {fss[tid].reset();}
+            else if(opss.size()) {opss[tid].reset();}
+            else if(bmhs.size()) {bmhs[tid].reset();}
+            else if(pmhs.size()) {pmhs[tid].reset();}
+            else throw std::invalid_argument("Not supported: sketching besides PMH, BMH, SetSketch for BED files");
+            for(;ptr->data;ptr = bwIteratorNext(ptr)) {
+                const uint32_t numi = ptr->intervals->l;
+                float *vptr = ptr->intervals->value;
+                for(uint32_t j = 0; j < numi; ++j) {
+                    auto istart = ptr->intervals->start[j];
+                    auto iend = ptr->intervals->end[j];
+                    //std::fprintf(stderr, "%s:%u->%u [%u/%u]\n", chrom.data(), istart, iend, j, numi);
+                    for(;istart < iend;++istart) {
+                        auto k = chrom_hash ^ istart;
+                        auto v = vptr[j];
+                        if(fss.size()) fss[tid].update(k);
+                        else if(opss.size()) opss[tid].update(k);
+                        else if(bmhs.size()) bmhs[tid].update(k, v);
+                        else if(pmhs.size()) pmhs[tid].update(k, v);
                     }
-                    itpairs[i].second = bwIteratorNext(itpairs[i].second);
-                } while(itpairs[i].second->data);
-                if(rvec.empty()) rvec = sketch.to_sigs();
-                else {
-                    // Pair-wise minima
-                    std::transform(rvec.begin(), rvec.end(), sketch.data(), rvec.begin(),
-                                   [](auto x, auto y) {return std::min(x, y);});
                 }
+#ifndef NDEBUG
+                std::fprintf(stderr, "processed %u intervals. Now loading next batch (%s)\n", numi, chrom.data());
+#endif
+                ptr = bwIteratorNext(ptr);
+            } while(ptr->data);
+            
+            auto newvec = fss.size() ? fss[tid].to_sigs() :
+                          opss.size() ? opss[tid].to_sigs() :
+                          bmhs.size() ? bmhs[tid].to_sigs(): pmhs[tid].to_sigs();
+                        
+            if(rvec.empty()) {
+                rvec = newvec;
             } else {
-                auto &sketch = fss[tid];
-                sketch.reset();
-                do {
-                    const uint32_t numi = itpairs[i].second->intervals->l;
-                    for(uint32_t j = 0; j < numi; ++j) {
-                        auto istart = itpairs[i].second->intervals->start[j];
-                        auto iend = itpairs[i].second->intervals->end[j];
-                        for(;istart < iend;sketch.update(chrom_hash ^ istart++));
-                    }
-                    itpairs[i].second = bwIteratorNext(itpairs[i].second);
-                } while(itpairs[i].second->data);
-                if(rvec.empty()) rvec = sketch.to_sigs();
-                else {
-                    // Pair-wise minima
-                    std::transform(rvec.begin(), rvec.end(), sketch.data(), rvec.begin(),
-                                   [](auto x, auto y) {return std::min(x, y);});
+                // Pair-wise minima
+#ifdef _OPENMP
+                #pragma omp simd
+#endif
+                for(size_t i = 0; i < rvec.size(); ++i) {
+                    rvec[i] = std::min(rvec[i], newvec[i]);
                 }
+                std::transform(rvec.begin(), rvec.end(), newvec.data(), rvec.begin(),
+                               [](auto x, auto y) {return std::min(x, y);});
             }
-        } else {
-            if(bmhs.size()) {
-                auto &sketch = bmhs[tid];
-                sketch.reset();
-                do {
-                    const uint32_t numi = itpairs[i].second->intervals->l;
-                    float *vptr = itpairs[i].second->intervals->value;
-                    for(uint32_t j = 0; j < numi; ++j) {
-                        auto istart = itpairs[i].second->intervals->start[j];
-                        auto iend = itpairs[i].second->intervals->end[j];
-                        for(;istart < iend;sketch.update(chrom_hash ^ istart, vptr[j]));
-                    }
-                    itpairs[i].second = bwIteratorNext(itpairs[i].second);
-                } while(itpairs[i].second->data);
-                if(rvec.empty()) rvec = sketch.to_sigs();
-                else {
-                    // Pair-wise minima
-                    std::transform(rvec.begin(), rvec.end(), sketch.data(), rvec.begin(),
-                                   [](auto x, auto y) {return std::min(x, y);});
-                }
-            } else if(pmhs.size()) {
-                auto &sketch = pmhs[tid];
-                sketch.reset();
-                do {
-                    const uint32_t numi = itpairs[i].second->intervals->l;
-                    float *vptr = itpairs[i].second->intervals->value;
-                    for(uint32_t j = 0; j < numi; ++j) {
-                        auto istart = itpairs[i].second->intervals->start[j];
-                        auto iend = itpairs[i].second->intervals->end[j];
-                        for(;istart < iend;sketch.update(chrom_hash ^ istart, vptr[j]));
-                    }
-                    itpairs[i].second = bwIteratorNext(itpairs[i].second);
-                } while(itpairs[i].second->data);
-                if(rvec.empty()) rvec = sketch.to_sigs();
-                else {
-                    // Pair-wise minima
-                    std::transform(rvec.begin(), rvec.end(), sketch.data(), rvec.begin(),
-                                   [](auto x, auto y) {return std::min(x, y);});
-                }
-            } else throw std::invalid_argument("Not supported: sketching besides PMH, BMH, SetSketch for BED files");
         }
+        bwIteratorDestroy(ptr);
     }
-    for(auto &pair: itpairs) bwIteratorDestroy(pair.second);
 
     bwClose(fp);
 #ifndef NOCURL
@@ -155,6 +135,7 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
 #endif
     return ret;
 }
+#if 0
 std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map) {
     std::vector<std::vector<RegT> *> ptrs(map.size());
     auto it = ptrs.begin();
@@ -177,6 +158,7 @@ std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map
     }
     return std::move(*ptrs[0]);
 }
+#endif
 std::vector<RegT> reduce(const ska::flat_hash_map<std::string, std::vector<RegT>> &map) {
     std::vector<std::vector<RegT>> vals(map.size());
     auto it = vals.begin();
@@ -199,3 +181,5 @@ std::vector<RegT> reduce(const ska::flat_hash_map<std::string, std::vector<RegT>
     }
     return std::move(vals.front());
 }
+
+} // dashing2
