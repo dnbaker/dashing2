@@ -28,6 +28,13 @@ struct Counter {
             count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1: -1);
         }
     }
+    void reset() {
+        std::fill(count_sketch_.begin(), count_sketch_.end(), 0.);
+        if(!c64_.empty()) c64_.clear();
+        if(!c128_.empty()) c128_.clear();
+        if(!c64d_.empty()) c64d_.clear();
+        if(!c128d_.empty()) c128d_.clear();
+    }
     bool empty() const {return c64_.empty() && c128_.empty() && std::find_if(count_sketch_.begin(), count_sketch_.end(), [](auto x) {return x != 0;}) == count_sketch_.end();}
     void add(u128_t x, double inc) {
         if(ct_ == COUNTSKETCH_COUNTING) {
@@ -59,6 +66,27 @@ struct Counter {
         } else {
             const auto hv = sketch::hash::WangHash::hash(x);
             count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1: -1);
+        }
+    }
+    template<typename Sketch>
+    void finalize(Sketch &dst) {
+        if(ct_ == EXACT_COUNTING) {
+            auto update_if = [&](auto &src) {
+                if(!src.empty()) {
+                    for(const auto &pair: src) dst.update(pair.first, pair.second);
+                    return true;
+                }
+                return false;
+            };
+            if(update_if(c64_)) return;
+            if(update_if(c128_)) return;
+            if(update_if(c64d_)) return;
+            if(update_if(c128d_)) return;
+        } else {
+            const size_t css = count_sketch_.size();
+            for(size_t i = 0; i < css; ++i) {
+                dst.update(i, count_sketch_[i]);
+            }
         }
     }
 };

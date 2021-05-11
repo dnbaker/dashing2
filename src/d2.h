@@ -34,15 +34,19 @@ struct ParseOptions {
     bool one_perm_ = true;
     bool by_chrom_ = false;
     bool bed_parse_normalize_intervals_ = false;
+    size_t cssize_ = 0;
+    bool save_kmers_ = false;
+    bool save_kmercounts_ = false;
 
     // Whether to sketch multiset, set, or discrete probability distributions
  
     SketchSpace sspace_;
     CountingType count_;
     DataType dtype_;
+    bool use128_ = false;
     size_t nthreads_;
-    ParseOptions(int k, int w=-1, std::string spacing="", bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, CountingType count=EXACT_COUNTING, DataType dtype=FASTX, size_t nthreads=0):
-        k_(k), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), count_(count), dtype_(dtype) {
+    ParseOptions(int k, int w=-1, std::string spacing="", bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, CountingType count=EXACT_COUNTING, DataType dtype=FASTX, size_t nthreads=0, bool use128=false):
+        k_(k), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), count_(count), dtype_(dtype), use128_(use128) {
         if(nthreads <= 0) {
             if(char *s = std::getenv("OMP_NUM_THREADS"))
                 nthreads = std::max(std::atoi(s), 1);
@@ -54,9 +58,13 @@ struct ParseOptions {
     ParseOptions &parse_bed() {dtype_ = BED; return *this;}
     ParseOptions &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
     ParseOptions &sketchsize(size_t sz) {sketchsize_ = sz; return *this;}
+    ParseOptions &use128(size_t sz) {use128_ = sz; return *this;}
+    ParseOptions &cssize(size_t sz) {cssize_ = sz; return *this;}
     ParseOptions &nthreads(size_t nthreads) {nthreads_ = nthreads; OMP_ONLY(omp_set_num_threads(nthreads);) return *this;}
     size_t nthreads() const {return nthreads_;}
     size_t sketchsize() const {return sketchsize_;}
+    size_t use128() const {return use128_;}
+    size_t cssize() const {return cssize_;}
 };
 
 
@@ -66,6 +74,7 @@ using FullSetSketch = sketch::CSetSketch<RegT>;
 using OPSetSketch = sketch::setsketch::OPCSetSketch<RegT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
 using ProbMinHash = sketch::pmh2_t<RegT>;
+using OrderMinHash = sketch::omh::OMHasher<RegT>;
 
 enum OutputKind {
     SYMMETRIC_ALL_PAIRS,
