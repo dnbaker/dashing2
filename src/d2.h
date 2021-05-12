@@ -72,7 +72,7 @@ struct ParseOptions {
     DataType dtype_;
     bool use128_ = false;
     unsigned nthreads_;
-    ParseOptions(int k, int w=-1, std::string spacing="", bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, CountingType count=EXACT_COUNTING, DataType dtype=FASTX, size_t nt=0, bool use128=false):
+    ParseOptions(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, CountingType count=EXACT_COUNTING, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), count_(count), dtype_(dtype), use128_(use128) {
         if(nt <= 0) {
             if(char *s = std::getenv("OMP_NUM_THREADS"))

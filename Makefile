@@ -24,6 +24,8 @@ dashing2-f32: $(OBJF) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF) -o $@ $(LIB) $(EXTRA) libBigWig.a
 readbw: src/bwsketch.o test/readbw.o
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< test/readbw.o -o readbw $(LIB) $(EXTRA) libBigWig.a
+readfx: src/fastxsketch.o test/readfx.o
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< test/readfx.o -o readfx $(LIB) $(EXTRA) libBigWig.a
 %.o: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA)
 %.ldo: %.cpp $(wildcard src/*.h)
@@ -33,6 +35,8 @@ readbw: src/bwsketch.o test/readbw.o
 
 libBigWig.a: $(wildcard libBigWig/*.c) $(wildcard libBigWig/*.h)
 	cd libBigWig && $(MAKE) && cp libBigWig.a ..
+
+test: readfx readbw
 
 clean:
 	rm -f dashing2 dashing2-ld dashing2-f32 libBigWig.a $(OBJ) $(OBJLD) $(OBJF)

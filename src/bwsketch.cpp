@@ -54,7 +54,7 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
     std::vector<BagMinHash> bmhs;
     std::vector<ProbMinHash> pmhs;
 
-    for(size_t i = 0; i < std::min(opts.nthreads(), ids.size()); ++i) {
+    for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
         if(opts.sspace_ == SPACE_SET) {
             if(opts.one_perm_) opss.emplace_back(ss);
             else fss.emplace_back(ss);

@@ -1,25 +1,15 @@
-#include "d2.h"
-#include <optional>
+#include "fastxsketch.h"
+//#include <optional>
 namespace dashing2 {
 
-struct FastxSketchingResult {
-    std::vector<std::string> names_;
-    std::vector<std::string> destination_files_; // Contains sketches/kmer-sets,kmer-sequences etc.
-    std::vector<std::string> kmerfiles_;         // Contains file-paths for k-mers, if saved.
-    std::vector<std::string> kmercountfiles_;    // Contains k-mer counts, if saved
-    std::vector<uint32_t> nperfile_; // This is either empty (in which case each filename/row has its own sketch)
-                                     // Or, this contains a list indicating the number of sketches created for each file/line
-    std::vector<RegT> signatures_; // Signatures, packed into a single array
-    std::vector<uint64_t> kmers_;  // This contains the k-mers corresponding to signatures, if asked for
-    std::vector<uint32_t> kmercounts_; // Contains counts for k-mers, if desired
-};
-
+#if 0
 struct SequenceSketch {
     // If counts were generated, rather than final sketches
-    std::vector<Counter> ctrs;
     std::vector<RegT> sigs;
-    std::vector<std::string> names;
+    std::string name;
+    std::string seq;
 };
+#endif
 
 template<typename F>
 void for_each_substr(const F &func, const std::string &s, const int sep=' ') {
