@@ -68,12 +68,76 @@ struct Counter {
             count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1: -1);
         }
     }
-    template<typename Sketch>
-    void finalize(Sketch &dst) {
+    template<typename IT, typename Alloc, typename CountT>
+    void finalize(std::vector<IT, Alloc> &dst, std::vector<CountT> &countdst, const double threshold = 0) {
+        std::vector<std::pair<IT, uint32_t>> tmp;
         if(ct_ == EXACT_COUNTING) {
             auto update_if = [&](auto &src) {
                 if(!src.empty()) {
-                    for(const auto &pair: src) dst.update(pair.first, pair.second);
+                    tmp.resize(src.size());
+                    auto tmpit = tmp.begin();
+                    for(const auto &pair: src)
+                        if(pair.second > threshold)
+                            *tmpit++ = {pair.first, pair.second};
+                    return true;
+                }
+                return false;
+            };
+            if(!update_if(c64_) && !update_if(c128_) && !update_if(c64d_) && !update_if(c128d_)) {
+                std::fprintf(stderr, "Note: finalizing an empty vector\n");
+                dst.clear(); countdst.clear();
+                return;
+            }
+        } else {
+            const size_t css = count_sketch_.size();
+            for(size_t i = 0; i < css; ++i) {
+                if(count_sketch_[i] > threshold)
+                   tmp.push_back({i, count_sketch_[i]});
+            }
+        }
+        std::sort(tmp.begin(), tmp.end()); // Sort the hashes
+        dst.resize(tmp.size());
+        countdst.resize(tmp.size());
+        auto dstit = dst.begin();
+        auto countdstit = countdst.begin();
+        for(auto &pair: tmp) {
+            *dstit++ = pair.first;
+            *countdstit++ = pair.second;
+        }
+    }
+    template<typename IT, typename Alloc>
+    void finalize(std::vector<IT, Alloc> &dst, double threshold = 0) {
+        if(ct_ == EXACT_COUNTING) {
+            auto update_if = [&](auto &src) {
+                if(!src.empty()) {
+                    dst.reserve(src.size());
+                    for(const auto &pair: src)
+                        if(pair.second > threshold)
+                            dst.push_back(pair.first);
+                    return true;
+                }
+                return false;
+            };
+            if(update_if(c64_)) return;
+            if(update_if(c128_)) return;
+            if(update_if(c64d_)) return;
+            if(update_if(c128d_)) return;
+        } else {
+            const size_t css = count_sketch_.size();
+            for(size_t i = 0; i < css; ++i)
+                if(count_sketch_[i] > threshold)
+                   dst.push_back(i);
+        }
+        std::sort(dst.begin(), dst.end()); // Sort the hashes
+    }
+    template<typename Sketch>
+    void finalize(Sketch &dst, double threshold = 0) {
+        if(ct_ == EXACT_COUNTING) {
+            auto update_if = [&](auto &src) {
+                if(!src.empty()) {
+                    for(const auto &pair: src)
+                        if(pair.second > threshold)
+                            dst.update(pair.first, pair.second);
                     return true;
                 }
                 return false;
@@ -85,7 +149,8 @@ struct Counter {
         } else {
             const size_t css = count_sketch_.size();
             for(size_t i = 0; i < css; ++i) {
-                dst.update(i, count_sketch_[i]);
+                if(count_sketch_[i] > threshold)
+                    dst.update(i, count_sketch_[i]);
             }
         }
     }

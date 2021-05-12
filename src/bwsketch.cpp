@@ -107,11 +107,11 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
 #endif
                 ptr = bwIteratorNext(ptr);
             } while(ptr->data);
-            
+
             auto newvec = fss.size() ? fss[tid].to_sigs() :
                           opss.size() ? opss[tid].to_sigs() :
                           bmhs.size() ? bmhs[tid].to_sigs(): pmhs[tid].to_sigs();
-                        
+
             if(rvec.empty()) {
                 rvec = newvec;
             } else {

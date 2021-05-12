@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     auto s = bw2sketch(argv[1], opts);
     auto tend = gett();
     std::fprintf(stderr, "Sketching bigwig file took %gms\n", std::chrono::duration<double, std::milli>(t - tend).count());
-    for(const auto &pair: s) {  
+    for(const auto &pair: s) {
         std::fprintf(stderr, "key %s\n", pair.first.data());
     }
     return 0;
