@@ -5,7 +5,7 @@ namespace dashing2 {
 
 using BigWigSketchResult = IntervalSketchResult;
 
-BigWigSketchResult bw2sketch(std::string path, const ParseOptions &opts);
+BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts);
 
 }
 #endif

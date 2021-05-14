@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "Usage: readbw <in.bw>\n");
         return 1;
     }
-    ParseOptions opts(1, -1, bns::DNA, SPACE_PSET, BED);
+    Dashing2Options opts(1, -1, bns::DNA, SPACE_PSET, BED);
     int nt = 16;
     if(char *s = std::getenv("OMP_NUM_THREADS")) nt = std::atoi(s);
     opts.nthreads(nt);

@@ -5,7 +5,7 @@
 
 namespace dashing2 {
 
-std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts);
+std::vector<RegT> bed2sketch(std::string path, const Dashing2Options &opts);
 }
 
 #endif

@@ -21,7 +21,12 @@ LFResult LFResult::merge_results(const LFResult *start, size_t n) {
     for(size_t i = 0; i < n; ++i) {
         const size_t beg = offsets[i];
         auto &srcfn = start[i].filenames().front();
-        std::string pref = srcfn.substr(0, srcfn.find('_'));
+        size_t pos = srcfn.find("_perind");
+        if(pos == std::string::npos) {
+            if((pos = srcfn.find(".count")) == std::string::npos)
+            pos = srcfn.find("_");
+        }
+        std::string pref = srcfn.substr(0, pos);
         auto &srcnames = start[i].sample_names();
         std::transform(srcnames.begin(), srcnames.end(), &destnames[beg],
                        [pref](const auto &s) {return s + ':' + pref;});
@@ -29,7 +34,7 @@ LFResult LFResult::merge_results(const LFResult *start, size_t n) {
     }
     return ret;
 }
-LFResult lf2sketch(std::string path, const ParseOptions &opts) {
+LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     if(opts.sspace_ > SPACE_PSET) throw std::invalid_argument("Can't do edit distance for Splice junction files");
     LFResult ret;
     ret.filenames() = {path};
@@ -117,7 +122,7 @@ LFResult lf2sketch(std::string path, const ParseOptions &opts) {
     return ret;
 }
 
-LFResult lf2sketch(std::vector<std::string> paths, const ParseOptions &opts) {
+LFResult lf2sketch(std::vector<std::string> paths, const Dashing2Options &opts) {
     std::vector<LFResult> ret(paths.size());
     OMP_PFOR_DYN
     for(size_t i = 0; i < paths.size(); ++i)

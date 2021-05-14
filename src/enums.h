@@ -3,12 +3,22 @@
 
 namespace dashing2 {
 
+#ifndef SKETCH_FLOAT_TYPE
+#define SKETCH_FLOAT_TYPE double
+#endif
+using RegT = SKETCH_FLOAT_TYPE;
+#undef SKETCH_FLOAT_TYPE
 
+using u128_t = __uint128_t;
+
+
+
+// Determines the file-type being consumed
 enum DataType {
     FASTX,
-    BIGWIG,
-    BED,
-    LEAFCUTTER
+    BIGWIG, //--bigwig
+    BED,    //--bed
+    LEAFCUTTER //--leafcutter
 };
 
 
@@ -30,13 +40,6 @@ enum CountingType {
     // This reduces the sample space at some inexactness, but the biggest elements will remain the biggest
 };
 
-#ifndef SKETCH_FLOAT_TYPE
-#define SKETCH_FLOAT_TYPE double
-#endif
-using RegT = SKETCH_FLOAT_TYPE;
-#undef SKETCH_FLOAT_TYPE
-
-using u128_t = __uint128_t;
 
 enum KmerSketchResultType {
     ONE_PERM = 0,       // Faster (3-4x) than Full, comparable accuracy for both cardinality and set similarities
@@ -57,13 +60,23 @@ enum KmerSketchResultType {
         Convert into a k-mer: count dictionary.
     */
 };
-static inline std::string to_string(KmerSketchResultType t) {
-    if(t == ONE_PERM) {return "OnePermutationSetSketch";}
-    if(t == FULL_SETSKETCH) return "FullSetSketch";
-    if(t == FULL_MMER_SET) return "FullMmerSet";
-    if(t == FULL_MMER_SEQUENCE) return "FullMmerSequence";
-    return "FullMmerCountdict";
-}
+
+enum OutputKind {
+    SYMMETRIC_ALL_PAIRS,
+    ASYMMETRIC_ALL_PAIRS,
+    KNN_GRAPH, // Fixed top-k neighbors
+    NN_GRAPH_THRESHOLD, // Variable number of similarities, as given by threshold
+    DEDUP
+};
+
+enum OutputFormat {
+    MACHINE_READABLE,
+    HUMAN_READABLE,
+    BINARY = MACHINE_READABLE
+};
+
+std::string to_string(KmerSketchResultType t);
+std::string to_string(DataType dt);
 
 
 }

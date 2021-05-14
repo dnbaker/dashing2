@@ -36,6 +36,18 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
     }
 }
 
+template<typename T>
+void load_copy(const std::string &path, T *ptr) {
+    std::FILE *fp = std::fopen(path.data(), "rb");
+    if(!fp) throw std::runtime_error(std::string("Failed to open ") + path);
+    struct stat st;
+    if(::fstat(::fileno(fp), &st)) {
+        throw std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp)));
+    }
+    if(std::fread(ptr, st.st_size, 1, fp) == 1) throw std::runtime_error("Error in reading from file");
+    std::fclose(fp);
+}
+
 std::string FastxSketchingResult::str() const {
     std::string msg = "FastxSketchingResult @" + to_string(this) + ';';
     if(names_.size()) {
@@ -70,7 +82,7 @@ std::string FastxSketchingResult::str() const {
     return msg;
 }
 
-FastxSketchingResult fastx2sketch(ParseOptions &opts, std::vector<std::string> &paths) {
+FastxSketchingResult fastx2sketch(Dashing2Options &opts, std::vector<std::string> &paths) {
     if(paths.empty()) throw std::invalid_argument("Can't sketch empty path set");
     const size_t nt = opts.nthreads();
     const size_t ss = opts.sketchsize();
@@ -161,7 +173,10 @@ FastxSketchingResult fastx2sketch(ParseOptions &opts, std::vector<std::string> &
             auto makedest = [&](const std::string &path) -> std::string {
                 std::string ret(path);
                 if(opts.trim_folder_paths_) {
-                    ret = path.substr(0, path.find_last_of('/'));
+                    ret = trim_folder(path);
+                    if(opts.outprefix_) {
+                        ret = opts.outprefix_ + '/' + ret;
+                    }
                 }
                 ret = ret + std::string(".") + std::to_string(opts.k_);
                 if(opts.w_ > opts.k_) {
@@ -189,14 +204,24 @@ FastxSketchingResult fastx2sketch(ParseOptions &opts, std::vector<std::string> &
                 const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
                 std::string destkmer = destination_prefix + ".kmer.u64";
                 std::string destkmercounts = destination_prefix + ".kmercounts.f32";
+                const bool dkif = bns::isfile(destkmer);
+                const bool dkcif = bns::isfile(destkmercounts);
                 ret.destination_files_[i] = destination;
                 reset(tid);
                 if(opts.cache_sketches_ &&
                    bns::isfile(destination) &&
-                   (!opts.save_kmers_ || bns::isfile(destkmer)) &&
-                   (!opts.save_kmercounts_ || bns::isfile(destkmercounts))
+                   (!opts.save_kmers_ || dkif) &&
+                   (!opts.save_kmercounts_ || dkcif)
                 )
                 {
+                    if(opts.kmer_result_ < FULL_MMER_SET) {
+                        if(ret.signatures_.size())
+                            load_copy(destination, &ret.signatures_[ss * i]);
+                        if(ret.kmers_.size())
+                            load_copy(destkmer, &ret.kmers_[ss * i]);
+                        if(ret.kmercounts_.size())
+                            load_copy(destkmer, &ret.kmercounts_[ss * i]);
+                    }
                     std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());
                     continue;
                 }
@@ -412,9 +437,8 @@ FastxSketchingResult fastx2sketch(ParseOptions &opts, std::vector<std::string> &
                     assert(ptr);
                     if(opts.build_mmer_matrix_)
                         ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
-                    if(opts.build_count_matrix_) {
+                    if(opts.build_count_matrix_)
                         counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
-                    }
                     checked_fwrite(ofp, ptr, sizeof(RegT) * ss);
                     std::fclose(ofp);
                     if(ptr && ret.signatures_.size()) std::copy(ptr, ptr + ss, &ret.signatures_[i * ss]);

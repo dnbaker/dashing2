@@ -46,7 +46,7 @@ void for_each_substr(const F &func, const std::string &s, const int sep=' ') {
     }
 }
 
-struct ParseOptions {
+struct Dashing2Options {
 
     // K-mer options
     int k_, w_;
@@ -72,6 +72,7 @@ struct ParseOptions {
     bool build_mmer_matrix_ = false;
     bool build_count_matrix_ = false;
     bool build_sig_matrix_ = true;
+    std::string outprefix_;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
@@ -79,9 +80,9 @@ struct ParseOptions {
     DataType dtype_;
     bool use128_ = false;
     unsigned nthreads_;
-    ParseOptions(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
+    Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), dtype_(dtype), use128_(use128) {
-        std::fprintf(stderr, "ParseOtions made with k = %d, w = %d\n", k, w);
+        //std::fprintf(stderr, "Dashing2 made with k = %d, w = %d\n", k, w);
         if(nt <= 0) {
             if(char *s = std::getenv("OMP_NUM_THREADS"))
                 nt = std::max(std::atoi(s), 1);
@@ -89,20 +90,26 @@ struct ParseOptions {
         }
         nthreads(nt);
     }
+    bool trim_folder_paths() const {
+        return trim_folder_paths_ || outprefix_.size();
+    }
     auto w() const {return w_;}
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
-    ParseOptions &parse_by_seq() {parse_by_seq_ = true; return *this;}
-    ParseOptions &parse_bigwig() {dtype_ = BIGWIG; return *this;}
-    ParseOptions &parse_bed() {dtype_ = BED; return *this;}
-    ParseOptions &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
-    ParseOptions &sketchsize(size_t sz) {sketchsize_ = sz; return *this;}
-    ParseOptions &use128(size_t sz) {use128_ = sz; return *this;}
-    ParseOptions &cssize(size_t sz) {cssize_ = sz; return *this;}
-    ParseOptions &nthreads(unsigned nthreads) {nthreads_ = nthreads; OMP_ONLY(omp_set_num_threads(nthreads);) return *this;}
-    ParseOptions &kmer_result(KmerSketchResultType kmer_result) {kmer_result_ = kmer_result; return *this;}
-    ParseOptions &cache_sketches(bool v) {cache_sketches_ = v;return *this;}
-    ParseOptions &save_kmers(bool v) {save_kmers_ = v;return *this;}
-    ParseOptions &save_kmercounts(bool v) {save_kmercounts_ = v;return *this;}
+    Dashing2Options &parse_by_seq() {parse_by_seq_ = true; return *this;}
+    Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
+    Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
+    Dashing2Options &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
+    Dashing2Options &sketchsize(size_t sz) {sketchsize_ = sz; return *this;}
+    Dashing2Options &use128(size_t sz) {use128_ = sz; return *this;}
+    Dashing2Options &cssize(size_t sz) {cssize_ = sz; return *this;}
+    Dashing2Options &nthreads(unsigned nthreads) {nthreads_ = nthreads; OMP_ONLY(omp_set_num_threads(nthreads);) return *this;}
+    Dashing2Options &kmer_result(KmerSketchResultType kmer_result) {kmer_result_ = kmer_result; return *this;}
+    Dashing2Options &cache_sketches(bool v) {cache_sketches_ = v;return *this;}
+    Dashing2Options &save_kmers(bool v) {save_kmers_ = v;return *this;}
+    Dashing2Options &save_kmercounts(bool v) {save_kmercounts_ = v;return *this;}
+    Dashing2Options &outprefix(const std::string &v) {outprefix_ = v;return *this;}
+    std::string &outprefix() {return outprefix_;}
+    const std::string &outprefix() const {return outprefix_;}
     bool cache_sketches() const {return cache_sketches_;}
     unsigned nthreads() const {return nthreads_;}
     unsigned kmer_result() const {return kmer_result_;}
@@ -122,12 +129,7 @@ using BagMinHash = sketch::BagMinHash2<RegT>;
 using ProbMinHash = sketch::pmh2_t<RegT>;
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
 
-enum OutputKind {
-    SYMMETRIC_ALL_PAIRS,
-    ASYMMETRIC_ALL_PAIRS,
-    KNN_GRAPH,
-    NN_GRAPH_THRESHOLD // Variable number of similarities, as given by threshold
-};
+std::string trim_folder(const std::string &s);
 
 } // namespace dashing2
 //std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map);

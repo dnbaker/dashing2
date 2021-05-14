@@ -15,7 +15,7 @@ std::vector<std::pair<int, bwOverlapIterator_t *>> get_iterators(bigWigFile_t *f
 
 using std::to_string;
 
-BigWigSketchResult bw2sketch(std::string path, const ParseOptions &opts) {
+BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     BigWigSketchResult ret;
     std::string cache_path = path.substr(0, path.find_last_of('.'));
     if(opts.cssize_) {

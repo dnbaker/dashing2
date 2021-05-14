@@ -21,8 +21,8 @@ struct LFResult: public std::tuple<std::vector<std::string>, std::vector<std::st
 
 };
 
-LFResult lf2sketch(std::string path, const ParseOptions &opts);
-LFResult lf2sketch(std::vector<std::string> paths, const ParseOptions &opts);
+LFResult lf2sketch(std::string path, const Dashing2Options &opts);
+LFResult lf2sketch(std::vector<std::string> paths, const Dashing2Options &opts);
 }
 
 #endif

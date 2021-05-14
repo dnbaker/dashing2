@@ -8,6 +8,7 @@ int main_usage() {
 }
 
 int sketch_main(int argc, char **argv);
+int cmp_main(int argc, char **argv);
 
 int main(int argc, char **argv) {
     if(argc == 1) {
@@ -17,4 +18,9 @@ int main(int argc, char **argv) {
         return sketch_main(argc - 1, argv + 1);
     end:
     return main_usage();
+}
+std::string trim_folder(const std::string &s) {
+    auto pos = s.find_last_of("/");
+    if(pos == std::string::npos) return s;
+    return s.substr(pos + 1, std::string::npos);
 }

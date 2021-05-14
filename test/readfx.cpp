@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
             paths.push_back(l);
         }
     }
-    ParseOptions opts(k, w, bns::DNA, s);
+    Dashing2Options opts(k, w, bns::DNA, s);
     opts
         .nthreads(nt)
         .kmer_result(res)
