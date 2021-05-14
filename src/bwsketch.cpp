@@ -6,36 +6,42 @@ namespace dashing2 {
 static constexpr uint32_t default_BW_READ_BUFFER = 1<<30;
 
 uint32_t BW_READ_BUFFER = default_BW_READ_BUFFER;
+std::vector<RegT> reduce(const ska::flat_hash_map<std::string, std::vector<RegT>> &map);
+std::vector<std::pair<int, bwOverlapIterator_t *>> get_iterators(bigWigFile_t *fp);
 
 #ifndef BLOCKS_PER_ITER
 #define BLOCKS_PER_ITER 4000000
 #endif
 
-auto get_iterators(bigWigFile_t *fp) {
-    auto cp = fp->cl;
-    const int nk = cp->nKeys;
-    std::vector<std::pair<int, bwOverlapIterator_t *>> ret;
-    for(auto i = 0; i < nk; ++i) {
-        if(cp->len[i] < 1) continue;
-        auto ptr = bwOverlappingIntervalsIterator(fp, fp->cl->chrom[i], 0, fp->cl->len[i], BLOCKS_PER_ITER);
-        if(!ptr->data || (ptr->intervals && ptr->intervals->l == 0)) bwIteratorDestroy(ptr);
-        else ret.push_back({i, ptr});
+using std::to_string;
+
+BigWigSketchResult bw2sketch(std::string path, const ParseOptions &opts) {
+    BigWigSketchResult ret;
+    std::string cache_path = path.substr(0, path.find_last_of('.'));
+    if(opts.cssize_) {
+        cache_path = cache_path + "countsketch-" + to_string(opts.cssize_);
     }
-    auto it = std::find_if(ret.begin(), ret.end(), [](auto x) {return x.second == nullptr;});
-    if(it != ret.end()) {
-        std::fprintf(stderr, "%d/%p\n", it->first, (void *)it->second);
-        std::exit(1);
+    if(opts.sspace_ == SPACE_SET) cache_path += opts.one_perm_ ? ".opss": ".fss";
+    else if(opts.sspace_ == SPACE_MULTISET) cache_path += ".bmh";
+    else if(opts.sspace_ == SPACE_PSET) cache_path += ".pmh";
+    else throw std::runtime_error("Unexpected space for BigWig sketching");
+    if(opts.cache_sketches_ && !opts.by_chrom_ && bns::isfile(cache_path)) {
+        auto nb = bns::filesize(cache_path.data());
+        std::vector<RegT> save(nb / sizeof(RegT));
+        std::FILE *ifp = std::fopen(cache_path.data(), "rb");
+        if(!ifp) throw 1;
+        if(std::fread(save.data(), nb, 1, ifp) != 1) {
+            std::fprintf(stderr, "Failed to read from disk; instead, sketching from scratch (%s)\n", path.data());
+        } else {
+            ret.global_.reset(new std::vector<RegT>(std::move(save)));
+        }
+        std::fclose(ifp);
+        return ret;
     }
-    const size_t npass = std::count_if(ret.begin(), ret.end(), [](auto x) {return x.second != nullptr;});
-    if(ret.size() != npass) throw 1;
-    //for(auto &p: ret) bwIteratorDestroy(p.second);
-    return ret;
-}
-ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, const ParseOptions &opts) {
-    if(opts.count_ != EXACT_COUNTING) {
+    if(opts.count() != EXACT_COUNTING) {
         throw std::invalid_argument("Counting format must be exact for BigWigs. (No Count-Sketch approximation). This may change in the future.");
     }
-    ska::flat_hash_map<std::string, std::vector<RegT>> ret;
+    ska::flat_hash_map<std::string, std::vector<RegT>> retmap;
     std::fprintf(stderr, "Space: %s\n", opts.sspace_ == SPACE_SET ? "Set": opts.sspace_ == SPACE_MULTISET ? "Multist": opts.sspace_ == SPACE_PSET ? "Probdist": "Editdist");
     if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_MULTISET && opts.sspace_ != SPACE_PSET)
         throw std::invalid_argument("Can't do edit distance for BigWig files");
@@ -47,7 +53,7 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
     if(fp == nullptr) throw std::runtime_error("Could not open bigwigfile");
 
     auto ids(get_iterators(fp));
-    for(const auto &p: ids) ret.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
+    for(const auto &p: ids) retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
     const size_t ss = opts.sketchsize_;
     std::vector<FullSetSketch> fss;
     std::vector<OPSetSketch> opss;
@@ -73,9 +79,8 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
         const int contig_id = ids[i].first;
         std::string chrom = fp->cl->chrom[contig_id];
         const uint64_t chrom_hash = std::hash<std::string>{}(chrom);
-        auto &rvec = ret[chrom];
+        auto &rvec = retmap[chrom];
         auto &ptr = ids[i].second;
-        //ptr = bwOverlappingIntervalsIterator(fp, fp->cl->chrom[contig_id], 0, fp->cl->len[contig_id], BLOCKS_PER_ITER);
         if(ptr == nullptr) {
             std::fprintf(stderr, "bwOverlapIterator_t * is null when it should be non-null (tid = %d/contig = %d)\n", tid, contig_id);
             std::exit(1);
@@ -115,50 +120,44 @@ ska::flat_hash_map<std::string, std::vector<RegT>> bw2sketch(std::string path, c
             if(rvec.empty()) {
                 rvec = newvec;
             } else {
-                // Pair-wise minima
 #ifdef _OPENMP
                 #pragma omp simd
 #endif
                 for(size_t i = 0; i < rvec.size(); ++i) {
                     rvec[i] = std::min(rvec[i], newvec[i]);
                 }
-                std::transform(rvec.begin(), rvec.end(), newvec.data(), rvec.begin(),
-                               [](auto x, auto y) {return std::min(x, y);});
             }
         }
         bwIteratorDestroy(ptr);
     }
 
     bwClose(fp);
-#ifndef NOCURL
     bwCleanup();
-#endif
+    ret.global_.reset(new std::vector<RegT>(std::move(reduce(retmap))));
+    if(opts.by_chrom_)
+        ret.chrmap_.reset(new ska::flat_hash_map<std::string, std::vector<RegT>>(std::move(retmap)));
     return ret;
 }
-#if 0
-std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map) {
-    std::vector<std::vector<RegT> *> ptrs(map.size());
-    auto it = ptrs.begin();
-    for(auto &pair: map) *it = &pair.second, ++it;
-    const size_t n = map.size();
-    const unsigned int ln = static_cast<int>(std::ceil(n));
-    auto reduce = [&](auto &lhs, auto &rhs) {
-        std::transform(lhs.begin(), lhs.end(), rhs.begin(), lhs.begin(), [](auto x, auto y) {return std::min(x, y);});
-    };
-    for(size_t i = 0; i < ln; ++i) {
-        const size_t step_size = 1 << i;
-        const size_t sweep_size = (i + 1) << 1;
-        const size_t nsweeps = (n + (sweep_size - 1)) / sweep_size;
-        OMP_PFOR
-        for(size_t j = 0; j < nsweeps; ++j) {
-            const auto lh = j * sweep_size, rh = lh + step_size;
-            if(rh < n)
-                reduce(*ptrs[lh], *ptrs[rh]);
-        }
+std::vector<std::pair<int, bwOverlapIterator_t *>> get_iterators(bigWigFile_t *fp) {
+    auto cp = fp->cl;
+    const int nk = cp->nKeys;
+    std::vector<std::pair<int, bwOverlapIterator_t *>> ret;
+    for(auto i = 0; i < nk; ++i) {
+        if(cp->len[i] < 1) continue;
+        auto ptr = bwOverlappingIntervalsIterator(fp, fp->cl->chrom[i], 0, fp->cl->len[i], BLOCKS_PER_ITER);
+        if(!ptr->data || (ptr->intervals && ptr->intervals->l == 0)) bwIteratorDestroy(ptr);
+        else ret.push_back({i, ptr});
     }
-    return std::move(*ptrs[0]);
+    auto it = std::find_if(ret.begin(), ret.end(), [](auto x) {return x.second == nullptr;});
+    if(it != ret.end()) {
+        std::fprintf(stderr, "%d/%p\n", it->first, (void *)it->second);
+        std::exit(1);
+    }
+    const size_t npass = std::count_if(ret.begin(), ret.end(), [](auto x) {return x.second != nullptr;});
+    if(ret.size() != npass) throw 1;
+    //for(auto &p: ret) bwIteratorDestroy(p.second);
+    return ret;
 }
-#endif
 std::vector<RegT> reduce(const ska::flat_hash_map<std::string, std::vector<RegT>> &map) {
     std::vector<std::vector<RegT>> vals(map.size());
     auto it = vals.begin();

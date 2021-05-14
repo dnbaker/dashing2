@@ -3,9 +3,9 @@
 namespace dashing2 {
 
 Counter &Counter::operator+=(const Counter &o) {
-    if(ct_ != o.ct_ ||count_sketch_.size() != o.count_sketch_.size())
+    if(ct() != o.ct() ||count_sketch_.size() != o.count_sketch_.size())
         throw std::invalid_argument("Counters do not share parameters");
-    if(ct_ == EXACT_COUNTING) {
+    if(ct() == EXACT_COUNTING) {
         if(c64_.size()) {
             merge(c64_, o.c64_);
         } else if(c128_.size()) {

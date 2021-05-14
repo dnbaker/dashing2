@@ -1,4 +1,4 @@
-#include "d2.h"
+#include "bedsketch.h"
 
 namespace dashing2 {
 
@@ -9,7 +9,7 @@ std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts) {
     std::ifstream ifs(path);
     FullSetSketch ss(opts.one_perm_ ? size_t(1): opts.sketchsize_);
     OPSetSketch opss(opts.one_perm_ ? opts.sketchsize_: size_t(1));
-    Counter ctr(opts.count_);
+    Counter ctr(opts.cssize_);
     std::vector<RegT> ret(opts.sketchsize_);
     for(std::string s;std::getline(ifs, s);) {
         if(s.empty() || s.front() == '#') continue;
@@ -35,7 +35,7 @@ std::vector<RegT> bed2sketch(std::string path, const ParseOptions &opts) {
         throw std::invalid_argument("Malformed line");
     }
     if(opts.sspace_ > SPACE_SET) {
-        if(opts.count_ == EXACT_COUNTING) {
+        if(opts.ct() == EXACT_COUNTING) {
             if(opts.sspace_ == SPACE_MULTISET) {
                 BagMinHash bmh(opts.sketchsize_);
                 for(const auto &pair: ctr.c64_) {
