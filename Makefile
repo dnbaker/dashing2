@@ -16,6 +16,8 @@ OBJF=$(patsubst %.o,%.fo,$(OFS))
 all: dashing2 dashing2-ld dashing2-f
 obh: echo $(OBJ)
 
+all3d: dashing2 dashing2-f dashing2-ld
+
 dashing2: $(OBJ) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-ld: $(OBJLD) libBigWig.a

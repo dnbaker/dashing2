@@ -25,4 +25,12 @@ Counter &Counter::operator+=(const Counter &o) {
     return *this;
 }
 
+void Counter::reset() {
+    std::fill(count_sketch_.begin(), count_sketch_.end(), 0.);
+    if(!c64_.empty()) c64_.clear();
+    if(!c128_.empty()) c128_.clear();
+    if(!c64d_.empty()) c64d_.clear();
+    if(!c128d_.empty()) c128d_.clear();
+}
+
 }

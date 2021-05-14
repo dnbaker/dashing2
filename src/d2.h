@@ -129,19 +129,6 @@ enum OutputKind {
     NN_GRAPH_THRESHOLD // Variable number of similarities, as given by threshold
 };
 
-struct Collection {
-    ParseOptions opts_;
-    std::vector<std::string> names;
-    std::vector<std::vector<uint64_t>> sketch_data;
-    std::vector<std::vector<uint64_t>> full_kmers; // Optional
-    // For BigWig and BED files, full_kmers will be empty,
-    std::vector<std::string> full_strings; // For edit-distance clustering only.
-    OutputKind kind_;
-    double threshold_; // if threshold_ < 0, use -fraction to keep only items above *fraction* similarity
-                       // if threshold_ <= -1, then emit all comparisons
-};
-
-
 } // namespace dashing2
 //std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map);
 

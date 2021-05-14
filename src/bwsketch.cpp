@@ -97,7 +97,6 @@ BigWigSketchResult bw2sketch(std::string path, const ParseOptions &opts) {
                 for(uint32_t j = 0; j < numi; ++j) {
                     auto istart = ptr->intervals->start[j];
                     auto iend = ptr->intervals->end[j];
-                    //std::fprintf(stderr, "%s:%u->%u [%u/%u]\n", chrom.data(), istart, iend, j, numi);
                     for(;istart < iend;++istart) {
                         auto k = chrom_hash ^ istart;
                         auto v = vptr[j];

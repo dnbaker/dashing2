@@ -7,7 +7,8 @@ namespace dashing2 {
 enum DataType {
     FASTX,
     BIGWIG,
-    BED
+    BED,
+    LEAFCUTTER
 };
 
 

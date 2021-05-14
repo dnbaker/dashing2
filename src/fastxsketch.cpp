@@ -2,15 +2,6 @@
 //#include <optional>
 namespace dashing2 {
 
-#if 0
-struct SequenceSketch {
-    // If counts were generated, rather than final sketches
-    std::vector<RegT> sigs;
-    std::string name;
-    std::string seq;
-};
-#endif
-
 
 void checked_fwrite(std::FILE *fp, const void *ptr, size_t nb) {
     auto rc = std::fwrite(ptr, 1, nb, fp);

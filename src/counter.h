@@ -28,13 +28,7 @@ struct Counter {
             count_sketch_[s64_.mod(hv)] += ((hv & BM64) ? 1: -1);
         }
     }
-    void reset() {
-        std::fill(count_sketch_.begin(), count_sketch_.end(), 0.);
-        if(!c64_.empty()) c64_.clear();
-        if(!c128_.empty()) c128_.clear();
-        if(!c64d_.empty()) c64d_.clear();
-        if(!c128d_.empty()) c128d_.clear();
-    }
+    void reset();
     bool empty() const {return c64_.empty() && c128_.empty() && std::find_if(count_sketch_.begin(), count_sketch_.end(), [](auto x) {return x != 0;}) == count_sketch_.end();}
     void add(u128_t x, double inc) {
         if(ct() == COUNTSKETCH_COUNTING) {
