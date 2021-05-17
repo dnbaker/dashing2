@@ -1,6 +1,7 @@
 #ifndef D2_CMP_H__
 #define D2_CMP_H__
 #include "d2.h"
+#include "fastxsketch.h"
 
 namespace dashing2 {
 
@@ -28,7 +29,9 @@ struct Dashing2DistOptions: public Dashing2Options {
     // If 1 (> 0), generates b-bit signatures and truncates
     int num_neighbors_ = -1; // Only emits top-"nn" neighbors
     double min_similarity_ = -1.; // Only emit similarities which are above min_similarity_ if nonnegative
-    Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, int nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1.): Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of) {
+    std::string outfile_path_;
+    Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, int nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath=""): Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath)
+    {
         if(nbytes_for_fastdists == -1) nbytes_for_fastdists = sizeof(RegT);
         switch(nbytes_for_fastdists) {
             default: throw std::runtime_error("Can't compress sketches to non-power of 2 register size. Should be < sizeof(RegT)"); break;
@@ -45,6 +48,7 @@ struct Dashing2DistOptions: public Dashing2Options {
         }
     }
 };
+void cmp_core(Dashing2DistOptions &ddo, const SketchingResult &res);
 
 }
 

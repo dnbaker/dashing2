@@ -95,7 +95,7 @@ struct Dashing2Options {
     }
     auto w() const {return w_;}
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
-    Dashing2Options &parse_by_seq() {parse_by_seq_ = true; return *this;}
+    Dashing2Options &parse_by_seq(bool v) {parse_by_seq_ = v; return *this;}
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
     Dashing2Options &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
@@ -108,6 +108,7 @@ struct Dashing2Options {
     Dashing2Options &save_kmers(bool v) {save_kmers_ = v;return *this;}
     Dashing2Options &save_kmercounts(bool v) {save_kmercounts_ = v;return *this;}
     Dashing2Options &outprefix(const std::string &v) {outprefix_ = v;return *this;}
+    bool parse_by_seq() {return parse_by_seq_;}
     std::string &outprefix() {return outprefix_;}
     const std::string &outprefix() const {return outprefix_;}
     bool cache_sketches() const {return cache_sketches_;}

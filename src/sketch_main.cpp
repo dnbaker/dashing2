@@ -1,19 +1,9 @@
 #include "sketch_core.h"
 #include "options.h"
+#include "cmp_main.h"
 
 
 
-#define SHARED_OPTS \
-    LO_ARG("cmpout", OPTARG_CMPOUT)\
-    LO_ARG("distout", OPTARG_CMPOUT)\
-    LO_ARG("cmp-outfile", OPTARG_CMPOUT)\
-    LO_ARG("topk", 'K')\
-    LO_FLAG("similarity-threshold", 'T')\
-
-#define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
-#define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
-#define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
-#define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD
 
 #define SKETCH_OPTS \
 static option_struct sketch_long_options[] = {\
@@ -49,15 +39,9 @@ static option_struct sketch_long_options[] = {\
 };
 
 
-using namespace dashing2;
-#define SHARED_DOC_LINES \
-        "--cmpout/--distout/--cmp-outfile\tCompute distances and emit them to [arg].\n"
-        "--similarity-threshold [arg]\tMinimum fraction similarity for inclusion.\n\tIf this is enabled, only pairwise similarities over [arg] will be emitted.\n"
-        "This changes the output format from a full matrix into compressed-sparse row (CSR) notation.\n"
-        "--topk [arg]\tMaximum number of nearest neighbors to list. If [arg] is greater than N - 1, pairwise distances are instead emitted.\n"
 
-
-void usage() {
+namespace dashing2 {
+void sketch_usage() {
     std::fprintf(stderr, "dashing2 sketch <opts> [fastas... (optional)]\n"
                          "We use only m-mers; if w <= k, however, this reduces to k-mers\n"
                          "Flags:\n\n"
@@ -119,7 +103,7 @@ int sketch_main(int argc, char **argv) {
     SketchSpace s = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false;
-    double threshold = 0.;
+    double count_threshold = 0., similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
     int option_index = 0;
@@ -128,6 +112,12 @@ int sketch_main(int argc, char **argv) {
     std::string outprefix;
     OutputKind ok = SYMMETRIC_ALL_PAIRS;
     std::string cmpout; // Only used if distances are also requested
+    int topk_threshold = -1;
+    int truncate_mode = 0;
+    size_t nbytes_for_fastdists = sizeof(RegT);
+    bool parse_by_seq = false;
+    // By default, use full hash values, but allow people to enable smaller
+    OutputFormat of = OutputFormat::HUMAN_READABLE;
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {switch(c) {
         case 'k': k = std::atoi(optarg); break;
@@ -147,14 +137,14 @@ int sketch_main(int argc, char **argv) {
         //case 'J': res = FULL_MMER_COUNTDICT; break;
         //case 'G': res = FULL_MMER_SEQUENCE; break;
         //case '2': use128 = true; break;
-        case 'm': threshold = std::atof(optarg); break;
+        case 'm': count_threshold = std::atof(optarg); break;
         case 'F': ffile = optarg; break;
         case 'Q': qfile = optarg; break;
         case OPTARG_OUTPREF: {
             outprefix = optarg; break;
         }
         SHARED_FIELDS
-        case '?': case 'h': usage(); return 1;
+        case '?': case 'h': sketch_usage(); return 1;
     }}
     if(nt < 0) {
         if(char *s = std::getenv("OMP_NUM_THREADS")) nt = std::atoi(s);
@@ -185,11 +175,12 @@ int sketch_main(int argc, char **argv) {
         .sketchsize(sketchsize)
         .save_kmers(save_kmers)
         .outprefix(outprefix)
-        .save_kmercounts(save_kmercounts);
-    opts.count_threshold_ = threshold;
+        .save_kmercounts(save_kmercounts)
+        .parse_by_seq(parse_by_seq);
+    opts.count_threshold_ = count_threshold;
     if(paths.empty()) {
         std::fprintf(stderr, "No paths provided. See usage.\n");
-        usage();
+        sketch_usage();
         return 1;
     }
     SketchingResult result = sketch_core(opts, paths, outfile);
@@ -200,5 +191,11 @@ int sketch_main(int argc, char **argv) {
         }
     }
 #endif
+    if(cmpout.size()) {
+        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout);
+        cmp_core(distopts, result);
+    }
     return 0;
 }
+
+} // namespace dashing2

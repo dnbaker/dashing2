@@ -1,4 +1,6 @@
 #pragma once
+#ifndef DASHING2_FASTX_SKETCH_H__
+#define DASHING2_FASTX_SKETCH_H__
 #include "d2.h"
 
 namespace dashing2 {
@@ -16,6 +18,9 @@ struct SketchingResult {
     // kmerfiles and kmercountfiles are unset for bed files
     std::vector<uint32_t> nperfile_; // This is either empty (in which case each filename/row has its own sketch)
                                      // Or, this contains a list indicating the number of sketches created for each file/line
+    std::vector<std::string> sequences_;
+    // This is only filled if sspace is SPACE_EDIT_DISTANCE and
+    // we are using LSH only for pre-filtering but performing exact distance calculations via edit distance
     std::vector<RegT> signatures_; // Signatures, packed into a single array
     std::vector<uint64_t> kmers_;  // This contains the k-mers corresponding to signatures, if asked for
     std::vector<uint32_t> kmercounts_; // Contains counts for k-mers, if desired
@@ -26,9 +31,13 @@ struct SketchingResult {
         return nperfile_.size() ? std::accumulate(nperfile_.begin(), nperfile_.end(), size_t(0)): names_.size();
     }
     std::string str() const;
+    static SketchingResult merge(SketchingResult *start, size_t n, const std::vector<std::string> &);
     void print();
 };
 using FastxSketchingResult = SketchingResult;
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths);
+FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs=static_cast<kseq_t *>(nullptr), const size_t seqs_per_batch = 8192);
 }
+
+#endif
