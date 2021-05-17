@@ -43,7 +43,7 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     if((ifp = gzopen(path.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to open input file ") + path);
     char *line;
     if(!(line = gzgets(ifp, gzbuf.get(), 65536))) throw 1;
-    
+
     for(char *s = std::strchr(line, ' ') + 1;s;) {
         char *s2 = std::strchr(s, ' ');
         if(!s2) {
@@ -100,7 +100,7 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
                 (*pmhs)[sample_id].update(splice_hash, num);
             else if(ss)
                 (*ss)[sample_id].update(splice_hash);
-            else if(opss) 
+            else if(opss)
                 (*opss)[sample_id].update(splice_hash);
             else throw 1;
         }

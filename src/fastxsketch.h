@@ -30,5 +30,5 @@ struct SketchingResult {
 };
 using FastxSketchingResult = SketchingResult;
 
-FastxSketchingResult fastx2sketch(Dashing2Options &opts, std::vector<std::string> &paths);
+FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths);
 }

@@ -82,7 +82,7 @@ std::string FastxSketchingResult::str() const {
     return msg;
 }
 
-FastxSketchingResult fastx2sketch(Dashing2Options &opts, std::vector<std::string> &paths) {
+FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
     if(paths.empty()) throw std::invalid_argument("Can't sketch empty path set");
     const size_t nt = opts.nthreads();
     const size_t ss = opts.sketchsize();
@@ -172,9 +172,10 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, std::vector<std::string
             }
             auto makedest = [&](const std::string &path) -> std::string {
                 std::string ret(path);
+                ret = ret.substr(0, ret.find_first_of(' '));
                 if(opts.trim_folder_paths_) {
                     ret = trim_folder(path);
-                    if(opts.outprefix_) {
+                    if(opts.outprefix_.size()) {
                         ret = opts.outprefix_ + '/' + ret;
                     }
                 }

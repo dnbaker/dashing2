@@ -1,23 +1,19 @@
-#include <getopt.h>
-#include "fastxsketch.h"
-#include "bwsketch.h"
-#include "bedsketch.h"
-#include "lfsketch.h"
+#include "sketch_core.h"
+#include "options.h"
 
 
-#define LO_ARG(LONG, SHORT) {LONG, required_argument, 0, SHORT},
-#define LO_NO(LONG, SHORT) {LONG, no_argument, 0, SHORT},
-#define LO_FLAG(LONG, SHORT, VAR, VAL) {LONG, no_argument, (int *)&VAR, VAL},
 
-using option_struct = struct option;
+#define SHARED_OPTS \
+    LO_ARG("cmpout", OPTARG_CMPOUT)\
+    LO_ARG("distout", OPTARG_CMPOUT)\
+    LO_ARG("cmp-outfile", OPTARG_CMPOUT)\
+    LO_ARG("topk", 'K')\
+    LO_FLAG("similarity-threshold", 'T')\
 
-enum OptArg{
-    OPTARG1 = 1000,
-    OPTARG_BED,
-    OPTARG_BIGWIG,
-    OPTARG_LEAFCUTTER,
-    OPTARG_DUMMY
-};
+#define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
+#define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
+#define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
+#define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD
 
 #define SKETCH_OPTS \
 static option_struct sketch_long_options[] = {\
@@ -32,6 +28,7 @@ static option_struct sketch_long_options[] = {\
     LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
+    LO_FLAG("long-kmers", '2', use128, true)\
     LO_FLAG("save-kmers", 's', save_kmers, true)\
     LO_FLAG("enable-protein", OPTARG1, rht, bns::RollingHashingType::PROTEIN)\
     LO_FLAG("bed", OPTARG_BED, dt, DataType::BED)\
@@ -48,15 +45,16 @@ static option_struct sketch_long_options[] = {\
     LO_ARG("qfile", 'Q')\
     LO_ARG("count-threshold", 'm')\
     LO_ARG("outfile", 'o')\
+    SHARED_OPTS\
 };
 
 
 using namespace dashing2;
-size_t nbytes_from_line(const std::string &line) {
-    size_t ret = 0;
-    for_each_substr([&ret](const std::string &s) {ret += bns::filesize(s.data());}, line);
-    return ret;
-}
+#define SHARED_DOC_LINES \
+        "--cmpout/--distout/--cmp-outfile\tCompute distances and emit them to [arg].\n"
+        "--similarity-threshold [arg]\tMinimum fraction similarity for inclusion.\n\tIf this is enabled, only pairwise similarities over [arg] will be emitted.\n"
+        "This changes the output format from a full matrix into compressed-sparse row (CSR) notation.\n"
+        "--topk [arg]\tMaximum number of nearest neighbors to list. If [arg] is greater than N - 1, pairwise distances are instead emitted.\n"
 
 
 void usage() {
@@ -74,7 +72,7 @@ void usage() {
                          "\n\nFastx Options:\n"
                          "-k/--kmer-length: set k\n"
                          "-w/--window-size: set window size for winnowing; by default, all m-mers are used.\n"
-                         "-2: Use 128-bit k-mer hashes instead of 64-bit\n"
+                         "-2/--128bit/long-kmers: Use 128-bit k-mer hashes instead of 64-bit\n"
                          "-m/--threshold: Set a count threshold for inclusion. Default: 0.\n"
                          "--enable-protein: Switch from DNA-sequence encoding to protein encoding. This treats all characters as valid\n"
                          "\nPathsOptions\n\n"
@@ -110,8 +108,10 @@ void usage() {
                          "-s/--save-kmers: Save m-mers. This puts the m-mers saved into .kmer files to correspond with the minhash samples.\n"
                          "-N/--save-kmercounts: Save m-mer counts for sketches. This puts the m-mer counts saved into .kmercounts.f32 files to correspond with the m-mers.\n"
                          "-o/--outfile: sketches are stacked into a single file and written to [arg]\n"
+                         SHARED_DOC_LINES
     );
 }
+
 
 int sketch_main(int argc, char **argv) {
     int c;
@@ -126,6 +126,8 @@ int sketch_main(int argc, char **argv) {
     bns::RollingHashingType rht = bns::DNA;
     DataType dt = DataType::FASTX;
     std::string outprefix;
+    OutputKind ok = SYMMETRIC_ALL_PAIRS;
+    std::string cmpout; // Only used if distances are also requested
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {switch(c) {
         case 'k': k = std::atoi(optarg); break;
@@ -151,6 +153,7 @@ int sketch_main(int argc, char **argv) {
         case OPTARG_OUTPREF: {
             outprefix = optarg; break;
         }
+        SHARED_FIELDS
         case '?': case 'h': usage(); return 1;
     }}
     if(nt < 0) {
@@ -189,72 +192,7 @@ int sketch_main(int argc, char **argv) {
         usage();
         return 1;
     }
-    const size_t npaths = paths.size();
-    std::vector<std::pair<size_t, uint32_t>> filesizes(npaths);
-    OMP_PFOR
-    for(size_t i = 0; i < npaths; ++i) {
-        filesizes[i] = {nbytes_from_line(paths[i]), uint32_t(i)};
-    }
-    std::sort(filesizes.begin(), filesizes.end(), std::greater<>());
-    SketchingResult result;
-    if(opts.dtype_ == DataType::FASTX) {
-        result = fastx2sketch(opts, paths);
-    } else if(opts.dtype_ == DataType::LEAFCUTTER) {
-        auto res = lf2sketch(paths, opts);
-        result.signatures_ = std::move(res.registers());
-        result.names_ = std::move(res.sample_names());
-        result.nperfile_.resize(res.nsamples_per_file().size());
-        std::copy(res.nsamples_per_file().begin(), res.nsamples_per_file().end(), result.nperfile_.begin());
-    } else if(opts.dtype_ == DataType::BED || opts.dtype_ == DataType::BIGWIG) {
-        result.signatures_.resize(npaths * opts.sketchsize_);
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < npaths; ++i) {
-            auto myind = filesizes.size() ? filesizes[i].second: uint32_t(i);
-            std::vector<RegT> sigs;
-            if(opts.dtype_ == DataType::BED) {
-                sigs = bed2sketch(paths[myind], opts);
-                std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
-            } else if(opts.dtype_ == DataType::BIGWIG) {
-                if(opts.by_chrom_) {
-                    std::fprintf(stderr, "Warning: by_chrom is ignored for bigwig sketching. Currently, all sets are grouped together. To group by chromosome, split the BW file by chromosome.");
-                    opts.by_chrom_ = false;
-                }
-                auto res = bw2sketch(paths[myind], opts);
-                sigs = std::move(*res.global_.get());
-            }
-            std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
-        }
-    }
-    if(paths.size() == 1 && outfile.empty()) {
-        const std::string suf = 
-                opts.sspace_ == SPACE_SET ? (opts.one_perm_ ? ".opss": ".ss"):
-                opts.sspace_ == SPACE_MULTISET ? ".bmh":
-                opts.sspace_ == SPACE_PSET ? ".pmh" :
-                opts.sspace_ == SPACE_EDIT_DISTANCE ? ".omh": ".unknown_sketch";
-        outfile = paths.front() + suf;
-        if(opts.trim_folder_paths_) {
-            outfile = trim_folder(path);
-            if(opts.outprefix_)
-                outfile = opts.outprefix_ + '/' + outfile;
-        }
-    }
-    if(outfile.size()) {
-        if(result.signatures_.empty()) throw std::runtime_error("Can't write stacked sketches if signatures were not generated");
-        std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());
-        std::FILE *ofp = std::fopen(outfile.data(), "wb");
-        if(!ofp) throw std::runtime_error(std::string("Failed to open file at ") + outfile);
-        std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
-        std::fclose(ofp);
-        if(result.names_.size()) {
-            if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
-                throw std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt");
-            for(const auto &n: result.names_) {
-                if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) throw std::runtime_error("Failed to write names to file");
-                std::fputc('\n', ofp);
-            }
-            std::fclose(ofp);
-        }
-    }
+    SketchingResult result = sketch_core(opts, paths, outfile);
 #ifndef NDEBUG
     if(result.names_.size()) {
         for(size_t i = 0; i < result.names_.size(); ++i) {

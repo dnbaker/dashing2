@@ -1,5 +1,13 @@
 #include "d2.h"
 
+namespace dashing2 {
+std::string trim_folder(const std::string &s) {
+    auto pos = s.find_last_of("/");
+    if(pos == std::string::npos) return s;
+    return s.substr(pos + 1, std::string::npos);
+}
+}
+
 int main_usage() {
     std::fprintf(stderr, "dashing2 has several subcommands\n");
     std::fprintf(stderr, "Usage can be seen in those commands.\n");
@@ -18,9 +26,4 @@ int main(int argc, char **argv) {
         return sketch_main(argc - 1, argv + 1);
     end:
     return main_usage();
-}
-std::string trim_folder(const std::string &s) {
-    auto pos = s.find_last_of("/");
-    if(pos == std::string::npos) return s;
-    return s.substr(pos + 1, std::string::npos);
 }
