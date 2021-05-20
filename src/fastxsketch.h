@@ -23,7 +23,7 @@ struct SketchingResult {
     // we are using LSH only for pre-filtering but performing exact distance calculations via edit distance
     std::vector<RegT> signatures_; // Signatures, packed into a single array
     std::vector<uint64_t> kmers_;  // This contains the k-mers corresponding to signatures, if asked for
-    std::vector<uint32_t> kmercounts_; // Contains counts for k-mers, if desired
+    std::vector<double> kmercounts_; // Contains counts for k-mers, if desired
     const Dashing2Options *options_ = nullptr;
     size_t total_seqs() const {
         // Sum of nperfile if nonempty

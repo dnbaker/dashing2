@@ -74,6 +74,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         }
         if(result.kmers_.size()) {
             const size_t nb = result.kmers_.size() * sizeof(uint64_t);
+            std::fprintf(stderr, "About to write result kmers to %s of size %zu\n", outfile.data(), nb);
             if((ofp = std::fopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
                 if(std::fwrite(result.kmers_.data(), nb, 1, ofp) != size_t(1))
                     std::fprintf(stderr, "Failed to write k-mers to disk properly, silent failing\n");
@@ -83,8 +84,9 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             }
         }
         if(result.kmercounts_.size()) {
-            const size_t nb = result.kmercounts_.size() * sizeof(uint32_t);
-            if((ofp = std::fopen((outfile + ".kmercounts.u32").data(), "wb"))) {
+            static constexpr size_t kcsz = sizeof(decltype(result.kmercounts_)::value_type);
+            const size_t nb = result.kmercounts_.size() * kcsz;
+            if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {
                 if(std::fwrite(result.kmercounts_.data(), nb, 1, ofp) != size_t(1))
                     std::fprintf(stderr, "Failed to write k-mer counts to disk properly, silent failing\n");
                 std::fclose(ofp);

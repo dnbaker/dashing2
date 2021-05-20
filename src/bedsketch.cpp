@@ -11,6 +11,24 @@ std::vector<RegT> bed2sketch(std::string path, const Dashing2Options &opts) {
     OPSetSketch opss(opts.one_perm_ ? opts.sketchsize_: size_t(1));
     Counter ctr(opts.cssize_);
     std::vector<RegT> ret(opts.sketchsize_);
+    std::string cache_path = path + to_suffix(opts);
+
+    if(opts.trim_folder_paths_) {
+        cache_path = trim_folder(path);
+        if(opts.outprefix_.size())
+            cache_path = opts.outprefix_ + '/' + cache_path;
+    }
+    if(opts.cache_sketches_ && bns::isfile(cache_path)) {
+        auto nb = bns::filesize(cache_path.data());
+        ret.resize(nb / sizeof(RegT));
+        std::FILE *ifp = std::fopen(cache_path.data(), "rb");
+        if(!ifp) throw 1;
+        auto rc = std::fread(ret.data(), nb, 1, ifp);
+        std::fclose(ifp);
+        if(rc == 1u) return ret;
+        else
+            std::fprintf(stderr, "Failed to read from disk; instead, sketching from scratch (%s)\n", path.data());
+    }
     for(std::string s;std::getline(ifs, s);) {
         if(s.empty() || s.front() == '#') continue;
         char *p = &s[0], *p2 = std::strchr(p, '\t');
@@ -19,7 +37,7 @@ std::vector<RegT> bed2sketch(std::string path, const Dashing2Options &opts) {
             p += 3;
         const uint64_t chrhash = XXH3_64bits(p, p2 - p);
         p = p2 + 1;
-        unsigned long start = std::strtoul(p, &p, 10), stop =  std::strtoul(p, &p, 10);
+        const unsigned long start = std::strtoul(p, &p, 10), stop =  std::strtoul(p, &p, 10);
         const float inc = opts.bed_parse_normalize_intervals_ ? 1. / (stop - start): 1.f;
         // If set space, sketch directly.
         if(opts.sspace_ == SPACE_SET) {
@@ -34,20 +52,19 @@ std::vector<RegT> bed2sketch(std::string path, const Dashing2Options &opts) {
         err:
         throw std::invalid_argument("Malformed line");
     }
+    std::FILE *ofp = std::fopen(cache_path.data(), "w");
     if(opts.sspace_ > SPACE_SET) {
         if(opts.ct() == EXACT_COUNTING) {
             if(opts.sspace_ == SPACE_MULTISET) {
                 BagMinHash bmh(opts.sketchsize_);
-                for(const auto &pair: ctr.c64_) {
-                    bmh.update(pair.first, pair.second);
-                }
+                ctr.finalize(bmh);
                 std::copy(bmh.data(), bmh.data() + opts.sketchsize_, ret.data());
+                std::fwrite(bmh.data(), opts.sketchsize_, sizeof(RegT), ofp);
             } else {
                 sketch::pmh2_t pmh(opts.sketchsize_);
-                for(const auto &pair: ctr.c64_) {
-                    pmh.update(pair.first, pair.second);
-                }
+                ctr.finalize(pmh);
                 std::copy(pmh.data(), pmh.data() + opts.sketchsize_, ret.data());
+                std::fwrite(pmh.data(), opts.sketchsize_, sizeof(RegT), ofp);
             }
         } else {
             const size_t csz = ctr.count_sketch_.size();
@@ -57,18 +74,22 @@ std::vector<RegT> bed2sketch(std::string path, const Dashing2Options &opts) {
                     bmh.update(i, ctr.count_sketch_[i]);
                 }
                 std::copy(bmh.data(), bmh.data() + opts.sketchsize_, ret.data());
+                std::fwrite(bmh.data(), opts.sketchsize_, sizeof(RegT), ofp);
             } else {
                 sketch::pmh2_t pmh(opts.sketchsize_);
                 for(size_t i = 0; i < csz; ++i) {
                     pmh.update(i, ctr.count_sketch_[i]);
                 }
                 std::copy(pmh.data(), pmh.data() + opts.sketchsize_, ret.data());
+                std::fwrite(pmh.data(), opts.sketchsize_, sizeof(RegT), ofp);
             }
         }
     } else {
         RegT *sptr = opts.one_perm_ ? opss.data(): ss.data();
         std::copy(sptr, sptr + opts.sketchsize_, ret.data());
+        std::fwrite(sptr, opts.sketchsize_, sizeof(RegT), ofp);
     }
+    std::fclose(ofp);
     return ret;
 }
 

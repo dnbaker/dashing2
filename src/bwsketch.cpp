@@ -15,16 +15,17 @@ std::vector<std::pair<int, bwOverlapIterator_t *>> get_iterators(bigWigFile_t *f
 
 using std::to_string;
 
+
 BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     BigWigSketchResult ret;
     std::string cache_path = path.substr(0, path.find_last_of('.'));
-    if(opts.cssize_) {
-        cache_path = cache_path + "countsketch-" + to_string(opts.cssize_);
+    cache_path += to_suffix(opts);
+    if(opts.trim_folder_paths_) {
+        cache_path = trim_folder(path);
+        if(opts.outprefix_.size()) {
+            cache_path = opts.outprefix_ + '/' + cache_path;
+        }
     }
-    if(opts.sspace_ == SPACE_SET) cache_path += opts.one_perm_ ? ".opss": ".fss";
-    else if(opts.sspace_ == SPACE_MULTISET) cache_path += ".bmh";
-    else if(opts.sspace_ == SPACE_PSET) cache_path += ".pmh";
-    else throw std::runtime_error("Unexpected space for BigWig sketching");
     if(opts.cache_sketches_ && !opts.by_chrom_ && bns::isfile(cache_path)) {
         auto nb = bns::filesize(cache_path.data());
         std::vector<RegT> save(nb / sizeof(RegT));

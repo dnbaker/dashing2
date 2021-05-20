@@ -26,7 +26,7 @@ void usage() {
                          "-c: Use Count-Sketch counting instead of exact counting, using [arg] as the size.\n    "
                          "This accelerates weighted sketching at the cost of some approximation.\n"
                          "-s: Save m-mers. This puts the m-mers saved into .kmer files to correspond with the minhash samples.\n"
-                         "-N: Save m-mer counts for sketches. This puts the m-mer counts saved into .kmercounts.f32 files to correspond with the m-mers.\n"
+                         "-N: Save m-mer counts for sketches. This puts the m-mer counts saved into .kmercounts.f64 files to correspond with the m-mers.\n"
                          "-p: Set number of threads [1]\n"
                          "-Z: Full setsketch (not stochastically-averaged)\n"
                          "-H: Full m-mer set. This generates a sorted hash set for m-mers in the data. If the parser is windowed (-w is set), this may be rather small.\n"

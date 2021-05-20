@@ -3,6 +3,7 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include "enums.h"
 #include <memory>
 #include <vector>
 #include "bonsai/encoder.h"
@@ -11,7 +12,6 @@
 #include "xxHash/xxh3.h"
 #include "sketch/setsketch.h"
 #include "sketch/bmh.h"
-#include "enums.h"
 #include "counter.h"
 
 
@@ -129,8 +129,6 @@ using OPSetSketch = sketch::setsketch::OPCSetSketch<RegT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
 using ProbMinHash = sketch::pmh2_t<RegT>;
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
-
-std::string trim_folder(const std::string &s);
 
 } // namespace dashing2
 //std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map);

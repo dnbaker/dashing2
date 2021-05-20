@@ -76,7 +76,11 @@ enum OutputFormat {
 };
 
 std::string to_string(KmerSketchResultType t);
+std::string to_string(SketchSpace ss);
 std::string to_string(DataType dt);
+std::string trim_folder(const std::string &s);
+struct Dashing2Options;
 
+std::string to_suffix(const Dashing2Options &opts);
 
 }
