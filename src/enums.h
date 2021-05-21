@@ -45,19 +45,19 @@ enum KmerSketchResultType {
     ONE_PERM = 0,       // Faster (3-4x) than Full, comparable accuracy for both cardinality and set similarities
     // This is a stochastically-averaged generalized HyperLogLog
     // Constant-time updates,
-    FULL_SETSKETCH = 1, // Not stochastically-averaged; potentially better LSH properties
+    FULL_SETSKETCH, // Not stochastically-averaged; potentially better LSH properties
     // This is a generalized HyperLogLog
-    FULL_MMER_SET = 2,
+    FULL_MMER_SET,
     /*
-     * Convert the genome into a k-mer set; uses a hash table
+     * Convert the genome into a k-mer set; uses a hash table, which is then converted into a sorted hash list
     */
-    FULL_MMER_SEQUENCE = 3,
-    /*
-    Convert the genome into a list of k-mers/minimizers; could be used for minimizer index generation
-    */
-    FULL_MMER_COUNTDICT = 4
+    FULL_MMER_COUNTDICT,
     /*
         Convert into a k-mer: count dictionary.
+    */
+    FULL_MMER_SEQUENCE,
+    /*
+    Convert the genome into a list of k-mers/minimizers; could be used for minimizer index generation
     */
 };
 

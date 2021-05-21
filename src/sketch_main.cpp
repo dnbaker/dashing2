@@ -123,13 +123,13 @@ int sketch_main(int argc, char **argv) {
         switch(c) {
         case 'k': k = std::atoi(optarg); break;
         case 'w': w = std::atoi(optarg); break;
-        //case 'W': cache = true; break;
+        case 'W': cache = true; break;
         case 'B': s = SPACE_MULTISET; res = FULL_SETSKETCH; break;
         case 'P': s = SPACE_PSET; res = FULL_SETSKETCH; break;
-        //case 'Z': res = FULL_SETSKETCH; break;
+        case 'Z': res = FULL_SETSKETCH; break;
         case 'o': outfile = optarg; break;
         case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;
-        //case 'C': canon = true; break;
+        case 'C': canon = true; break;
         case 'p': nt = std::atoi(optarg); break;
         case 'S': sketchsize = std::atoi(optarg); break;
         case 'N': save_kmers = save_kmercounts = true; break;

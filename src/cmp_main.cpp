@@ -24,6 +24,7 @@ static option_struct name[] = {\
     LO_FLAG("bigwig", OPTARG_BIGWIG, dt, DataType::BIGWIG)\
     LO_FLAG("leafcutter", OPTARG_LEAFCUTTER, dt, DataType::LEAFCUTTER)\
     LO_FLAG("presketched", OPTARG_PRESKETCHED, presketched, true)\
+    LO_ARG("regbytes", OPTARG_REGBYTES)\
     LO_ARG("outprefix", OPTARG_OUTPREF)\
     LO_ARG("kmer-length", 'k')\
     LO_ARG("window-size", 'w')\
@@ -52,13 +53,13 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             for(std::ifstream ifs(namesf);std::getline(ifs, l);) {
                 result.names_.emplace_back(l);
             }
-        }
+        } else throw std::runtime_error("cmp expects a packed sketch matrix or multiple paths");
         assert(result.names_.size());
         //size_t nregs = st.st_size / result.names_.size() / sizeof(RegT);
         std::FILE *fp = std::fopen(pf.data(), "w");
-        if(!fp) throw 1;
+        if(!fp) throw std::runtime_error(std::string("Failed to open ") + pf);
         result.signatures_.resize(st.st_size / sizeof(RegT));
-        if(std::fread(result.signatures_.data(), st.st_size, 1, fp) != 1u) throw 2;
+        if(std::fread(result.signatures_.data(), st.st_size, 1, fp) != 1u) throw std::runtime_error(std::string("Failed to write block of size ") + std::to_string(st.st_size));
         std::fclose(fp);
     } else { // Else, we have to load sketches from each file
         result.nperfile_.resize(paths.size());
@@ -92,7 +93,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             }
             std::fclose(ifp);
             if(std::string p(path + ".kmerhashes.u64"); bns::isfile(p)) {
-                if((ifp = std::fopen(p.data(), "rb")) == nullptr) throw 2;
+                if((ifp = std::fopen(p.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Could not open path ") + p);
                 if(std::fread(&result.kmers_[csizes[i]], sizeof(uint64_t), fsizes[i], ifp) != fsizes[i]) {
                     std::fprintf(stderr, "Failed to read at path %s\n", p.data());
                     std::fclose(ifp);
@@ -142,7 +143,7 @@ int cmp_main(int argc, char **argv) {
     std::string cmpout; // Only used if distances are also requested
     int topk_threshold = -1;
     int truncate_mode = 0;
-    size_t nbytes_for_fastdists = sizeof(RegT);
+    double nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -168,6 +169,7 @@ int cmp_main(int argc, char **argv) {
         case 'm': count_threshold = std::atof(optarg); break;
         case 'F': ffile = optarg; break;
         case 'Q': qfile = optarg; break;
+        case OPTARG_REGBYTES: nbytes_for_fastdists = std::atof(optarg); break;
         case OPTARG_OUTPREF: {
             outprefix = optarg; break;
         }
@@ -194,6 +196,10 @@ int cmp_main(int argc, char **argv) {
     }
     size_t nq = paths.size() - nref;
     Dashing2Options opts(k, w, rht, s, dt);
+    if(nbytes_for_fastdists == 0.5 && (opts.sketchsize_ % 2)) {
+        std::fprintf(stderr, "Increasing sketch size to a multiple of 2 to avoid cutting in half\n");
+        ++opts.sketchsize_;
+    }
     opts.nthreads(nt)
         .kmer_result(res)
         .cache_sketches(cache)
@@ -259,18 +265,5 @@ int cmp_main(int argc, char **argv) {
     return 0;
 }
 
-void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
-    std::fprintf(stderr, "Beginning cmp_core with options: \n");
-    if(opts.sspace_ == SPACE_SET) {
-        std::fprintf(stderr, "Comparing sets\n");
-    } else if(opts.sspace_ == SPACE_MULTISET) {
-        std::fprintf(stderr, "Comparing multisets\n");
-    } else if(opts.sspace_ == SPACE_PSET) {
-        std::fprintf(stderr, "Comparing discrete probability distributions\n");
-    } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
-        std::fprintf(stderr, "Comparing items in edit distance space\n");
-    }
-    std::fprintf(stderr, "Result type: %s\n", to_string(opts.kmer_result_).data());
-}
 
 }
