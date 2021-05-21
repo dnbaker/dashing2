@@ -82,17 +82,12 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
                  return std::max(int(0), std::min(int(q) + 1, static_cast<int>((1. - std::log(x / a) * logbinv))));
             });
         } else if(fd == 0.5) {
-            uint8_t maxreg = 0, minreg = 15;
             uint8_t *ptr = (uint8_t *)compressed_reps;
             for(size_t i = 0; i < nsigs / 2; ++i) {
                 uint8_t lower_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i] / a) * logbinv))));
                 uint8_t upper_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i + 1] / a) * logbinv)))) << 4;
-                maxreg = std::max(lower_half, std::max(uint8_t(upper_half >> 4), maxreg));
-                minreg = std::min(lower_half, std::min(uint8_t(upper_half >> 4), minreg));
                 ptr[i] = lower_half | upper_half;
-                std::fprintf(stderr, "lower half: %d. upper half: %d. combined: %d\n", lower_half, upper_half, ptr[i]);
             }
-            std::fprintf(stderr, "Smallest register %d, max %d\n", maxreg, minreg);
         }
     }
     return ret;
