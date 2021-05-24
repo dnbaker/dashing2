@@ -5,7 +5,6 @@
 
 namespace dashing2 {
 
-
 #if 0
 enum OutputKind {
     SYMMETRIC_ALL_PAIRS,
@@ -36,6 +35,7 @@ static inline std::string to_string(Measure m) {
     if(m == INTERSECTION) return "INTERSECTION";
     return "UNKNOWN";
 }
+
 template<Measure measure>
 struct is_symmetric: public std::true_type {};
 template<> struct is_symmetric<CONTAINMENT>: public std::false_type {};
@@ -43,12 +43,19 @@ template<> struct is_symmetric<CONTAINMENT>: public std::false_type {};
 template<Measure measure>
 static constexpr bool is_symmetric_v = is_symmetric<measure>::value;
 #endif
-static inline bool symmetric(Measure msr) {
+static constexpr inline bool symmetric(Measure msr) {
     switch(msr) {
         case CONTAINMENT: return false;
         default: return true;
     }
 }
+static constexpr inline bool distance(Measure msr) {
+    switch(msr) {
+        case INTERSECTION: case SIMILARITY: case CONTAINMENT: return false;
+        default: return true;
+    }
+}
+
 
 struct Dashing2DistOptions: public Dashing2Options {
     OutputKind output_kind_;
@@ -87,6 +94,7 @@ struct Dashing2DistOptions: public Dashing2Options {
     }
 };
 void cmp_core(Dashing2DistOptions &ddo, const SketchingResult &res);
+LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
 
 }
 

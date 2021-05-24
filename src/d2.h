@@ -18,6 +18,20 @@
 namespace dashing2 {
 using namespace sketch;
 
+// To allow for 64-bit set identifiers, compile with -DLSHIDTYPE=uint64_t
+#ifndef LSHIDTYPE
+#define LSHIDTYPE uint32_t
+#endif
+using LSHIDType = LSHIDTYPE;
+#undef LSHIDTYPE
+
+#ifndef DASHING2_INDEX_FLOAT_TYPE
+#define DASHING2_INDEX_FLOAT_TYPE float
+#endif
+using LSHDistType = DASHING2_INDEX_FLOAT_TYPE;
+#undef DASHING2_INDEX_FLOAT_TYPE
+
+
 struct IntervalSketchResult {
     using Map = ska::flat_hash_map<std::string, std::vector<RegT>>;
     std::unique_ptr<Map> chrmap_;
