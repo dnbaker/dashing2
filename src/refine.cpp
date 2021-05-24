@@ -12,7 +12,9 @@ void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
         auto &l = lists[i];
         const size_t lsz = lists[i].size();
         if(opts.num_neighbors_ > 0 && size_t(opts.num_neighbors_) < lsz) {
-            std::transform(beg, e, beg, [&](const std::pair<LSHDistType, LSHIDType> &x) {return PairT{mult * compare(opts, result, lhid, x.second), x.second};});
+            for(size_t j = 0; j < lsz; ++j) {
+                l[j].first = mult * compare(opts, result, lhid, x.second);
+            }
             std::sort(beg, e);
             l.resize(opts.num_neighbors_);
         } else if(opts.min_similarity_ > 0.) {
@@ -24,8 +26,9 @@ void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
                 if(!pass) {
                     l[j] = {std::numeric_limits<LSHDistType>::max(), LSHIDType(0)};
                     if(++failures == 5) {
-                        l.resize(j);
-                        break;
+                            l.resize(j);
+                            break;
+                        }
                     }
                 } else {
                     l[j].second = v * mult;
