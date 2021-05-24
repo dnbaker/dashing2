@@ -2,6 +2,7 @@
 #include "sketch/count_eq.h"
 //#include "sketch/ssi.h"
 #include "index_build.h"
+#include "refine.h"
 
 
 namespace dashing2 {
@@ -265,6 +266,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
         emit_all_pairs(opts, result);
     } else {
+        // Step 1: Build LSH Index
         std::vector<uint64_t> nperhashes{1, 2, 3, 4, 6, 8, 16};
         std::vector<uint64_t> nperrows(nperhashes.size());
         for(size_t i = 0; i < nperhashes.size(); ++i) {
@@ -281,9 +283,14 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
         auto idx = opts.kmer_result_ > FULL_MMER_SET
         ? SetSketchIndex<uint64_t, LSHIDType>()
         : SetSketchIndex<uint64_t, LSHIDType>(opts.sketchsize_, nperhashes, nperrows);
+
+        // Step 2: Build nearest-neighbor candidate table
         std::vector<std::vector<PairT>> neighbor_lists = build_index(idx, opts, result);
-        // Build LSH index, then generate values
-        // 1.
+        if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {
+            refine_results(neighbor_lists, opts, result);
+        } else if(opts.output_kind_ == DEDUP) {
+            std::fprintf(stderr, "Not yet implemented: de-deduplication via LSH index\n");
+        }
         // KNN_GRAPH simply generate top-k
         // 2.
         // NN_GRAPH_THRESHOLD generates all similarities above a threshold

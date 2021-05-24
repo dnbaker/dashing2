@@ -1,6 +1,7 @@
 #include "cmp_main.h"
 #include "sketch_core.h"
 #include "options.h"
+#include "refine.h"
 
 namespace dashing2 {
 
