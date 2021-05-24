@@ -265,7 +265,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_);
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
         emit_all_pairs(opts, result);
-    } else {
+    } else if(opts.output_kind_ != DEDUP) {
         // Step 1: Build LSH Index
         std::vector<uint64_t> nperhashes{1, 2, 3, 4, 6, 8, 16};
         std::vector<uint64_t> nperrows(nperhashes.size());
@@ -280,22 +280,21 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
                 np = opts.sketchsize_ / nh * 6;
             } else np = opts.sketchsize_ / nh * 4;
         }
-        auto idx = opts.kmer_result_ > FULL_MMER_SET
+        auto idx = opts.kmer_result_ >= FULL_MMER_SET
         ? SetSketchIndex<uint64_t, LSHIDType>()
         : SetSketchIndex<uint64_t, LSHIDType>(opts.sketchsize_, nperhashes, nperrows);
 
         // Step 2: Build nearest-neighbor candidate table
         std::vector<std::vector<PairT>> neighbor_lists = build_index(idx, opts, result);
-        if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {
-            refine_results(neighbor_lists, opts, result);
-        } else if(opts.output_kind_ == DEDUP) {
-            std::fprintf(stderr, "Not yet implemented: de-deduplication via LSH index\n");
-        }
+        refine_results(neighbor_lists, opts, result);
         // KNN_GRAPH simply generate top-k
         // 2.
         // NN_GRAPH_THRESHOLD generates all similarities above a threshold
         // 3.
         // DEDUP uses the LSH table to generate only a list of items
+    } else {
+        std::fprintf(stderr, "Not yet implemented: de-deduplication via LSH index\n");
+        std::exit(1);
     }
 }
 
