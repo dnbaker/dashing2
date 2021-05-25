@@ -3,6 +3,7 @@
 //#include "sketch/ssi.h"
 #include "index_build.h"
 #include "refine.h"
+#include "emitnn.h"
 
 
 namespace dashing2 {
@@ -53,12 +54,11 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
     } else {
         std::fprintf(stderr, "Performing logarithmic %d-bit compression\n", int(fd * 8.));
         RegT minreg = std::numeric_limits<RegT>::max(), maxreg = std::numeric_limits<RegT>::min();
-        #pragma omp simd
+        #pragma omp parallel for simd
         for(size_t i = 0; i < nsigs; ++i) {
             minreg = std::min(minreg, sigs[i]);
             maxreg = std::max(maxreg, sigs[i]);
         }
-        //std::fprintf(stderr, "fd: %g\n", fd);
         double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
         if(q < 0) throw 2;
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
@@ -75,7 +75,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
             std::transform(sigs.begin(), sigs.end(), (uint64_t *)compressed_reps,
                            [q,a,logbinv](RegT x)
             {
-                 return std::max(int64_t(0), std::min(int64_t(q) + 1, static_cast<int64_t>((1. - std::log(x / a) * logbinv))));
+                 return std::min(uint64_t(q) + 1, static_cast<uint64_t>((1. - std::log(x / a) * logbinv)));
             });
         } else if(fd == 2) {
             std::transform(sigs.begin(), sigs.end(), (uint16_t *)compressed_reps,
@@ -224,28 +224,40 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     if(!ofp) throw std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_);
     std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
-    std::thread sub;
+    std::deque<std::pair<std::unique_ptr<float[]>, size_t>> datq;
+    volatile int loopint = 0;
+    // TODO: support non-binary output by changing the daemon functio
+    std::thread sub = std::thread([&](){
+        while(loopint == 0 || datq.size()) {
+            if(datq.empty()) {
+                std::this_thread::sleep_for(std::chrono::duration<size_t, std::nano>(2000));
+            } else {
+                const size_t nwritten = asym ? ns: ns - datq.front().second - 1;
+                if(std::fwrite(datq.front().first.get(), sizeof(float), nwritten, ofp) != nwritten)
+                    throw std::runtime_error(std::string("Failed to write row ") + std::to_string(datq.front().second) + " to disk");
+                OMP_CRITICAL {
+                    datq.pop_front();
+                }
+            }
+        }
+    });
     for(size_t i = 0; i < ns; ++i) {
         // TODO: batch queries together for cache efficiency (distmat::parallel_fill for an example)
         size_t nelem = asym ? ns: ns - i - 1;
         std::unique_ptr<float[]> dat(new float[nelem]);
-        const size_t diff = asym ? 0: i + 1;
-        const size_t nwritten = asym ? ns: ns - i - 1;
+        auto datp = dat.get() - (asym ? 0: i + 1);
         OMP_PFOR_DYN
         for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
-            auto v = compare(opts, result, i, start);
-            //std::fprintf(stderr, "Calling %zu, %zu (i < ns = %zu)\n", i, start, ns);
-            dat[start - diff] = v;
+            datp[start] = compare(opts, result, i, start);
+            std::fprintf(stderr, "Calling %zu, %zu (i < ns = %zu)\n", i, start, ns);
         }
-        if(sub.joinable()) sub.join();
-        // TODO: turn the unique pointer to an output queue
-        sub = std::thread([dat=std::move(dat),nwritten,ofp,i]() {
-            if(std::fwrite(dat.get(), sizeof(float), nwritten, ofp) != nwritten)
-                throw std::runtime_error(std::string("Failed to write row ") + std::to_string(i) + " to disk");
-        }); 
+        OMP_CRITICAL {
+            datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
+        }
     }
+    loopint = 1;
+    if(sub.joinable()) sub.join();
     if(ofp != stdout) std::fclose(ofp);
-    sub.join();
 }
 void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::fprintf(stderr, "Beginning cmp_core with options: \n");
@@ -266,6 +278,9 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
         emit_all_pairs(opts, result);
     } else if(opts.output_kind_ != DEDUP) {
+        // This is LSH-index assisted KNN graphs +
+        // thresholded nn graphs
+
         // Step 1: Build LSH Index
         std::vector<uint64_t> nperhashes{1, 2, 3, 4, 6, 8, 16};
         std::vector<uint64_t> nperrows(nperhashes.size());
@@ -287,11 +302,9 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
         // Step 2: Build nearest-neighbor candidate table
         std::vector<std::vector<PairT>> neighbor_lists = build_index(idx, opts, result);
         refine_results(neighbor_lists, opts, result);
+        emit_neighbors(neighbor_lists, opts, result);
         // KNN_GRAPH simply generate top-k
-        // 2.
         // NN_GRAPH_THRESHOLD generates all similarities above a threshold
-        // 3.
-        // DEDUP uses the LSH table to generate only a list of items
     } else {
         std::fprintf(stderr, "Not yet implemented: de-deduplication via LSH index\n");
         std::exit(1);

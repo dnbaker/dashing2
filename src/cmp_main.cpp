@@ -52,7 +52,11 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         if(bns::isfile(namesf)) {
             std::string l;
             for(std::ifstream ifs(namesf);std::getline(ifs, l);) {
-                result.names_.emplace_back(l);
+                if(l.empty() || l.front() == '#') continue;
+                const typename std::string::size_type it = l.find_first_of('\t');
+                result.names_.emplace_back(l.substr(0, it));
+                if(it != std::string::npos)
+                    result.cardinalities_.emplace_back(std::strtod(&l[it + 1], nullptr));
             }
         } else throw std::runtime_error("cmp expects a packed sketch matrix or multiple paths");
         assert(result.names_.size());

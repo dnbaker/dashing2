@@ -45,7 +45,7 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float"
 
 libBigWig.a: $(wildcard libBigWig/*.c) $(wildcard libBigWig/*.h)
-	cd libBigWig && sed -i 's/HAVE_CURL:/#/' Makefile && $(MAKE) && cp libBigWig.a ..
+	cd libBigWig && sed -i '' 's/HAVE_CURL:/#/' Makefile && $(MAKE) && cp libBigWig.a ..
 
 test: readfx readbw
 
