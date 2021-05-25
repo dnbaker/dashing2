@@ -5,7 +5,7 @@ void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
     //LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     // 1. Perform full distance computations over the LSH-selected candidates
-    //OMP_PFOR_DYN
+    OMP_PFOR_DYN
     for(size_t i = 0; i < lists.size(); ++i) {
         const size_t lhid = i;
         auto beg = lists[i].begin(), e = lists[i].end();
