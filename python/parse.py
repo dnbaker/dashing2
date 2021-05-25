@@ -12,6 +12,7 @@ def parse_knn(path, idsize=4, dstsize=4):
            dstsize=4 
                Size of distance floating-point values. Defaults to 4 (floats), can be changed with -DDASHING2_INDEX_FLOAT_TYPE=TYPE
                For instance, if compiled with -DDASHING2_INDEX_FLOAT_TYPE="double", you would need to use 8
+    Output: scipy.sparse.csr_matrix
 
 
     Dashing2's sparse notation is emitted in CSR (compressed-sparse row) notation.
