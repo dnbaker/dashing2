@@ -5,23 +5,27 @@ void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
     //LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     // 1. Perform full distance computations over the LSH-selected candidates
-    OMP_PFOR_DYN
+    //OMP_PFOR_DYN
     for(size_t i = 0; i < lists.size(); ++i) {
         const size_t lhid = i;
         auto beg = lists[i].begin(), e = lists[i].end();
         auto &l = lists[i];
         const size_t lsz = lists[i].size();
+        std::fprintf(stderr, "Processing seqset %zu/%s\n", i, result.names_[i].data());
         // Skip self for nn graph, we'll add self-connections later
         if(opts.num_neighbors_ > 0 && size_t(opts.num_neighbors_) < lsz) {
+            std::fprintf(stderr, "lsz: %zu. nn: %u\n", lsz, opts.num_neighbors_);
             std::fprintf(stderr, "Filtering for top-%d neighbors\n", opts.num_neighbors_);
             for(size_t j = 0; j < lsz; ++j) {
                 // -- as above, for the KNN-format
-                l[j].first = (l[j].second == lhid)
+                auto &[dist, id] = l[j];
+                dist = (id == lhid)
                 ? std::numeric_limits<LSHDistType>::max()
-                : mult * compare(opts, result, lhid, l[j].second);
+                : mult * compare(opts, result, lhid, id);
             }
             std::sort(beg, e);
-            l.resize(opts.num_neighbors_);
+            if(opts.num_neighbors_ < l.size())
+                l.resize(opts.num_neighbors_);
         } else if(opts.min_similarity_ > 0.) {
             std::fprintf(stderr, "Filtering for minimum similarity\n");
             // -- as above, for the NN_GRAPH_THRESHOLD format
@@ -29,6 +33,7 @@ void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
             for(size_t j = 0; j < lsz; ++j) {
                 auto &[dist, id] = l[j];
                 if(id == i) {
+                    std::fprintf(stderr, "Placing self but with infinite distance\n");
                     dist = std::numeric_limits<LSHDistType>::max();
                     continue;
                 }

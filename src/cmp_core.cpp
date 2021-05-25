@@ -99,10 +99,12 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
     return ret;
 }
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
+    //std::fprintf(stderr, "Comparing: %zu/%zu\n", i, j);
     LSHDistType ret = std::numeric_limits<LSHDistType>::max();
     const LSHDistType b2pow = -std::ldexp(1., -static_cast<int>(opts.fd_level_ * 8.));
     const LSHDistType ib2pow = 1. / (1. + b2pow);
     const LSHDistType invdenom = 1. / opts.sketchsize_;
+    //std::fprintf(stderr, "cardinalities size: %zu. i: %zu. j: %zu\n", result.cardinalities_.size(), i, j);
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const LSHDistType poisson_mult = 1. / std::max(1, opts.k_);
     if(opts.compressed_ptr_) {
@@ -248,8 +250,8 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
         auto datp = dat.get() - (asym ? 0: i + 1);
         OMP_PFOR_DYN
         for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
+            //std::fprintf(stderr, "Calling %zu, %zu (i < ns = %zu)\n", i, start, ns);
             datp[start] = compare(opts, result, i, start);
-            std::fprintf(stderr, "Calling %zu, %zu (i < ns = %zu)\n", i, start, ns);
         }
         OMP_CRITICAL {
             datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
@@ -295,6 +297,10 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
                 np = opts.sketchsize_ / nh * 6;
             } else np = opts.sketchsize_ / nh * 4;
         }
+#if 0
+        for(size_t i = 0; i < nperhashes.size(); ++i)
+            std::fprintf(stderr, "Layer %zu has %zu/%zu\n", i, size_t(nperhashes[i]), size_t(nperrows[i]));
+#endif
         auto idx = opts.kmer_result_ >= FULL_MMER_SET
         ? SetSketchIndex<uint64_t, LSHIDType>()
         : SetSketchIndex<uint64_t, LSHIDType>(opts.sketchsize_, nperhashes, nperrows);

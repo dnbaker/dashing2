@@ -96,7 +96,7 @@ struct Dashing2Options {
     unsigned nthreads_;
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), dtype_(dtype), use128_(use128) {
-        //std::fprintf(stderr, "Dashing2 made with k = %d, w = %d\n", k, w);
+        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, space = %s, datatype = %s\n", k, w, to_string(sspace_).data(), to_string(dtype_).data());
         if(nt <= 0) {
             if(char *s = std::getenv("OMP_NUM_THREADS"))
                 nt = std::max(std::atoi(s), 1);

@@ -117,7 +117,7 @@ int sketch_main(int argc, char **argv) {
     size_t nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
     // By default, use full hash values, but allow people to enable smaller
-    OutputFormat of = OutputFormat::HUMAN_READABLE;
+    OutputFormat of = OutputFormat::MACHINE_READABLE;
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
