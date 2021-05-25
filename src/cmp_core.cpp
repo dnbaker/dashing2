@@ -10,10 +10,10 @@ namespace dashing2 {
 static INLINE uint64_t reg2sig(RegT x) {
     uint64_t seed = 0;
     CONST_IF(sizeof(RegT) <= 8) {
-        std::memcpy(&seed, &x, sizeof(seed));
+        std::memcpy(&seed, &x, sizeof(x));
         return wy::wyhash64_stateless(&seed);
     } else {
-        std::memcpy(&seed, &x, sizeof(seed));
+        std::memcpy(&seed, &x, sizeof(x));
         uint64_t nextseed = wy::wyhash64_stateless(&seed);
         nextseed ^= ((uint64_t *)&x)[1];
         return wy::wyhash64_stateless(&nextseed);
