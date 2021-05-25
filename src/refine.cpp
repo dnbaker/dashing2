@@ -13,7 +13,7 @@ void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
         const size_t lsz = lists[i].size();
         if(opts.num_neighbors_ > 0 && size_t(opts.num_neighbors_) < lsz) {
             for(size_t j = 0; j < lsz; ++j) {
-                l[j].first = mult * compare(opts, result, lhid, x.second);
+                l[j].first = mult * compare(opts, result, lhid, l[j].second);
             }
             std::sort(beg, e);
             l.resize(opts.num_neighbors_);
@@ -28,7 +28,6 @@ void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
                     if(++failures == 5) {
                             l.resize(j);
                             break;
-                        }
                     }
                 } else {
                     l[j].second = v * mult;
