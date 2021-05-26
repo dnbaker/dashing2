@@ -222,22 +222,41 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
         std::fprintf(stderr, "name %s for index %zu\n", result.names_[i].data(), i);
     }
 #endif
-    std::FILE *ofp = opts.outfile_path_.empty() ? stdout: std::fopen(opts.outfile_path_.data(), "wb");
+    std::FILE *ofp = opts.outfile_path_.empty() ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) throw std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_);
     std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
     std::deque<std::pair<std::unique_ptr<float[]>, size_t>> datq;
     volatile int loopint = 0;
+    std::mutex datq_lock;
     // TODO: support non-binary output by changing the daemon functio
     std::thread sub = std::thread([&](){
         while(loopint == 0 || datq.size()) {
             if(datq.empty()) {
                 std::this_thread::sleep_for(std::chrono::duration<size_t, std::nano>(2000));
             } else {
-                const size_t nwritten = asym ? ns: ns - datq.front().second - 1;
-                if(std::fwrite(datq.front().first.get(), sizeof(float), nwritten, ofp) != nwritten)
-                    throw std::runtime_error(std::string("Failed to write row ") + std::to_string(datq.front().second) + " to disk");
-                OMP_CRITICAL {
+                auto &f = datq.front();
+                const size_t nwritten = asym ? ns: ns - f.second - 1;
+                if(opts.output_format_ == HUMAN_READABLE) {
+                    auto datp = f.first.get();
+                    auto &seqn = result.names_[f.second];
+                    std::string fn(seqn);
+                    if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
+                    std::fwrite(fn.data(), 1, fn.size(), ofp);
+                    const size_t nw4 = (nwritten / 4) * 4;
+                    size_t i;
+                    for(i = 0; i < nw4; i += 4) {
+                        std::fprintf(ofp, "\t%0.7g\t%0.7g\t%0.7g\t%0.7g", datp[i], datp[i + 1], datp[i + 2], datp[i + 3]);
+                    }
+                    for(; i < nwritten; ++i)
+                        std::fprintf(ofp, "\t%0.7g", datp[i]);
+                    std::fputc('\n', ofp);
+                } else if(opts.output_format_ == MACHINE_READABLE) {
+                    if(std::fwrite(datq.front().first.get(), sizeof(float), nwritten, ofp) != nwritten)
+                        throw std::runtime_error(std::string("Failed to write row ") + std::to_string(datq.front().second) + " to disk");
+                } else throw std::runtime_error("This should never happen");
+                {
+                    std::lock_guard<std::mutex> guard(datq_lock);
                     datq.pop_front();
                 }
             }
@@ -253,7 +272,8 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
             //std::fprintf(stderr, "Calling %zu, %zu (i < ns = %zu)\n", i, start, ns);
             datp[start] = compare(opts, result, i, start);
         }
-        OMP_CRITICAL {
+        {
+            std::lock_guard<std::mutex> guard(datq_lock);
             datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
         }
     }

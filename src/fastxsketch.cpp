@@ -71,7 +71,12 @@ void load_copy(const std::string &path, T *ptr) {
     if(::fstat(::fileno(fp), &st)) {
         throw std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp)));
     }
-    if(std::fread(ptr, st.st_size, 1, fp) == 1) throw std::runtime_error("Error in reading from file");
+    std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), st.st_size);
+    size_t nb = std::fread(ptr, 1, st.st_size, fp);
+    if(nb != st.st_size) {
+        std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, st.st_size, nb);
+        throw std::runtime_error("Error in reading from file");
+    }
     std::fclose(fp);
 }
 
@@ -206,6 +211,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             res[i] = fastx2sketch_byseq(opts, paths[i], kseqs.kseqs_);
             std::fprintf(stderr, "Sketched %zu/%zu (%s)\n", i + 1, paths.size(), paths[i].data());
         }
+        std::fprintf(stderr, "Merging files\n");
         ret = FastxSketchingResult::merge(res.data(), res.size(), paths);
     } else {
         if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
@@ -501,6 +507,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     size_t total_seqs = 0, total_sig_size = 0;
     std::vector<size_t> offsets(n + 1);
     std::vector<size_t> sig_offsets(n + 1);
+    std::fprintf(stderr, "Computing offset arrays\n");
     for(size_t i = 0; i < n; ++i) {
         const size_t nseqsi = start[i].names_.size();
         const size_t nregs = start[i].signatures_.size();
@@ -529,6 +536,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
                regsz = !start->signatures_.empty(),
                kmersz = !start->kmers_.empty(),
                kmercountsz = !start->kmercounts_.empty();
+    std::fprintf(stderr, "Copying into merged thing with %zu total sequences\n", ret.names_.size());
     OMP_PFOR
     for(size_t i = 0; i < n; ++i) {
         auto &src = start[i];
@@ -737,11 +745,8 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
         if((ifp = gzopen(x.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to read from ") + x);
         bns::kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
-            char *seqstr;
-            if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
-                ret.sequences_.emplace_back(myseq->seq.s);
-                seqstr = ret.sequences_.back().data();
-            } else seqstr = strndup(myseq->seq.s, myseq->seq.l);
+            ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);
+            char *seqstr = ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l).data();
             seqpairs[batch_index] = {seqstr, myseq->seq.l};
             ret.names_.emplace_back(myseq->name.s + (myseq->name.s[0] == '>'));
             if(++batch_index == seqs_per_batch) {

@@ -5,7 +5,7 @@ CXX?=g++
 LIB=-lz
 INCLUDE+=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
 OPT+=-std=c++17 -O3 -march=native -fopenmp
-WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts
+WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic
 EXTRA+=-DNOCURL
 
 OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp))

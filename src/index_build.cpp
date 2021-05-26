@@ -79,30 +79,32 @@ std::vector<std::vector<PairT>> build_index(SetSketchIndex<uint64_t, LSHIDType> 
     }
     for(size_t id = 0; id < ns; ++id) {
         std::fprintf(stderr, "%zu\t%zu\n", id, ns);
-        //OMP_PFOR_DYN
         minispan<RegT> mspan(&result.signatures_[opts.sketchsize_ * id], opts.sketchsize_);
         auto [ids, counts, npr] = idx.query_candidates(mspan, ntoquery);
         const size_t idn = ids.size();
+        OMP_PFOR_DYN
         for(size_t j = 0; j < idn; ++j) {
             const LSHIDType oid = ids[j];
             if(id == oid) continue; // Don't track one's self
-            const PairT item{-LSHDistType(counts[j]), oid};
-            update(neighbor_lists[ids[j]], neighbor_sets[ids[j]], item, topk, ntoquery, mutexes[ids[j]]);
-            update(neighbor_lists[id], neighbor_sets[id], item, topk, ntoquery, mutexes[id]);
+            const LSHDistType cd(counts[j]);
+            update(neighbor_lists[oid], neighbor_sets[oid], PairT{cd, id}, topk, ntoquery, mutexes[oid]);
+            update(neighbor_lists[id], neighbor_sets[id], PairT{cd, oid}, topk, ntoquery, mutexes[id]);
         }
     }
     
+VERBOSE_ONLY(
     for(size_t id = 0; id < ns; ++id) {
-        std::fprintf(stderr, "ID %zu/%zu has a list of %zu long\n", id + 1, ns, neighbor_lists[id].size());
+        std::fprintf(stderr, "ID %s/%zu/%zu has a list of %zu long\n", result.names_[id].data(), id + 1, ns, neighbor_lists[id].size());
         for(size_t i = 0; i < neighbor_lists[id].size(); ++i) {
             size_t my_id = neighbor_lists[id][i].second;
             if(my_id > ns) {
-                std::fprintf(stderr, "How do I have this id (%d)? d = %g, id = %zu\n", int(i), neighbor_lists[id][i].first, my_id);
-                continue;
+                std::fprintf(stderr, "Impossible id (%d)? d = %g, id = %zu\n", int(i), neighbor_lists[id][i].first, my_id);
+                std::exit(1);
             }
             std::fprintf(stderr, "First sequence list: %s/%zu\n", result.names_.at(neighbor_lists[id][i].second).data(), my_id);
         }
     }
+)
     return neighbor_lists;
 }
 

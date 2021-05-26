@@ -20,7 +20,6 @@ void emit_neighbors(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
     if(outname.size() && (ofp = std::fopen(outname.data(), "wb")) == nullptr)
         throw std::runtime_error(std::string("Failed to open file ") + outname + " for writing");
     if(opts.output_format_ == HUMAN_READABLE) {
-        throw std::runtime_error("Not implemented: human-readable sparsified reporting\n");
         std::fprintf(stderr, "#Collection\tNeighbor lists -- name:distance, separated by tabs");
         for(size_t i = 0; i < lists.size(); ++i) {
             auto &l = lists[i];
