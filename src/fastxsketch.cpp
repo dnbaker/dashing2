@@ -71,10 +71,10 @@ void load_copy(const std::string &path, T *ptr) {
     if(::fstat(::fileno(fp), &st)) {
         throw std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp)));
     }
-    std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), st.st_size);
+    std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), size_t(st.st_size));
     size_t nb = std::fread(ptr, 1, st.st_size, fp);
-    if(nb != st.st_size) {
-        std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, st.st_size, nb);
+    if(nb != size_t(st.st_size)) {
+        std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, size_t(st.st_size), nb);
         throw std::runtime_error("Error in reading from file");
     }
     std::fclose(fp);
@@ -591,6 +591,7 @@ struct OptSketcher {
 
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<std::pair<char *, size_t>> &seqpairs, OptSketcher &sketchers) {
     const size_t oldsz = ret.names_.size();
+    std::fprintf(stderr, "oldsize %zu, increment %zu\n", oldsz, newsz);
     newsz = oldsz + newsz;
     if(opts.build_sig_matrix_) {
         ret.signatures_.resize(newsz * opts.sketchsize_);
@@ -605,13 +606,20 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     }
     std::fprintf(stderr, "About to go through list, %zu sigsize, %zu mmer size %zu mmer count size\n", ret.signatures_.size(), ret.kmers_.size(), ret.kmercounts_.size());
     for(size_t i = oldsz; i < newsz; ++i) {
+        std::fprintf(stderr, "%zu/%zu\n", i, newsz);
         auto seqp = seqpairs[i - oldsz];
         //std::fprintf(stderr, "Seq %zu/%s\n", seqp.second, seqp.first);
         sketchers.reset();
         if(sketchers.omh) {
-            auto res = sketchers.omh->hash(seqp.first, seqp.second);
-            auto destp = &ret.signatures_[i * opts.sketchsize_];
+            std::vector<uint64_t> res = sketchers.omh->hash(seqp.first, seqp.second);
+#if 0
+            for(size_t i = 0; i < std::min(res.size(), size_t(10)); ++i) {
+                std::fprintf(stderr, "%p:%zu:%zu\n", (void *)seqp.first, i, res[i]);
+            }
+#endif
+            auto destp = &ret.signatures_[(i - oldsz) * opts.sketchsize_];
             if(sizeof(RegT) == sizeof(uint64_t)) { // double
+                std::fprintf(stderr, "copying out 8-byte registers for i = %zu\n", i);
                 // Copy as-is
                 std::memcpy(destp, res.data(), res.size() * sizeof(uint64_t));
             } else if(sizeof(RegT) > sizeof(uint64_t)) { // long double

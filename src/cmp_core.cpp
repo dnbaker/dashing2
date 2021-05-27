@@ -202,7 +202,9 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
                 : opts.measure_ == POISSON_LLR ? -std::log(sim) * poisson_mult: -1.;
             assert(ret >= 0.);
         } else {
-            ret = invdenom * sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
+            auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
+            ret = invdenom * neq;
+            //std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%g\n", i, j, size_t(neq), ret);
             if(opts.measure_ == INTERSECTION) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
             else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / lhcard;
@@ -229,6 +231,16 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::deque<std::pair<std::unique_ptr<float[]>, size_t>> datq;
     volatile int loopint = 0;
     std::mutex datq_lock;
+    // Emit Header
+    if(opts.output_format_ == HUMAN_READABLE) {
+        std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": "PHYLIP pairwise");
+        std::fprintf(ofp, "#Sources");
+        for(size_t i = 0; i < result.names_.size(); ++i) {
+            std::fprintf(ofp, "\t%s", result.names_[i].data());
+        }
+        std::fputc('\n', ofp);
+        std::fprintf(ofp, "%zu\n", ns);
+    }
     // TODO: support non-binary output by changing the daemon functio
     std::thread sub = std::thread([&](){
         while(loopint == 0 || datq.size()) {
