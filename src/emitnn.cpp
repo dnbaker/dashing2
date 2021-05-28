@@ -14,13 +14,13 @@ namespace dashing2 {
 // (nids + 1) * 8 bytes: indptr in uint64_t
 // nnz * sizeof(LSHIDType): indices in LSHIDType (default uint32_t)
 // nnz * sizeof(LSHDistType): data in LSHDistType (default float)
-void emit_neighbors(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions &opts, const SketchingResult &result) {
+void emit_neighbors(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const SketchingResult &result) {
     std::string &outname = opts.outfile_path_;
     std::FILE *ofp = stdout;
     if(outname.size() && (ofp = std::fopen(outname.data(), "wb")) == nullptr)
         throw std::runtime_error(std::string("Failed to open file ") + outname + " for writing");
     if(opts.output_format_ == HUMAN_READABLE) {
-        std::fprintf(stderr, "#Collection\tNeighbor lists -- name:distance, separated by tabs");
+        std::fprintf(ofp, "#Collection\tNeighbor lists -- name:distance, separated by tabs");
         for(size_t i = 0; i < lists.size(); ++i) {
             auto &l = lists[i];
             std::fprintf(ofp, "%s", result.names_[i].data());

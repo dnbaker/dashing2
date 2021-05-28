@@ -1,7 +1,7 @@
 #include "refine.h"
 namespace dashing2 {
 
-void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions &opts, const SketchingResult &result) {
+void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const SketchingResult &result) {
     //LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     // 1. Perform full distance computations over the LSH-selected candidates
@@ -27,7 +27,7 @@ void refine_results(std::vector<std::vector<PairT>> &lists, Dashing2DistOptions 
                 dist = mult * compare(opts, result, lhid, id);
             }
             std::sort(beg, e);
-            if(opts.num_neighbors_ < l.size() - 1)
+            if(size_t(opts.num_neighbors_) < l.size() - 1)
                 l.resize(opts.num_neighbors_);
         } else if(opts.min_similarity_ > 0.) {
             // -- as above, for the NN_GRAPH_THRESHOLD format

@@ -338,7 +338,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
         : SetSketchIndex<uint64_t, LSHIDType>(opts.sketchsize_, nperhashes, nperrows);
 
         // Step 2: Build nearest-neighbor candidate table
-        std::vector<std::vector<PairT>> neighbor_lists = build_index(idx, opts, result);
+        std::vector<pqueue> neighbor_lists = build_index(idx, opts, result);
         refine_results(neighbor_lists, opts, result);
         emit_neighbors(neighbor_lists, opts, result);
         // KNN_GRAPH simply generate top-k

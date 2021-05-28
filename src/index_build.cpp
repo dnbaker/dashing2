@@ -12,54 +12,58 @@ namespace dashing2 {
 // if std::less<void>{}(vector.back(), newitem), then pop heap, add item and push heap
 // We store similarities as -x in our nearest neighbor lists so that
 // we only compile one heap update step -- for smallest distances
+void pqueue::erase(typename std::priority_queue<PairT>::container_type::iterator it, typename std::priority_queue<PairT>::container_type::iterator oit) {
+    this->c.erase(it, oit);
+}
 
-void update(std::vector<PairT> &x, ska::flat_hash_set<LSHIDType> &xset, const PairT &item, const int topk, size_t k, std::mutex &mut) {
+
+void update(pqueue &x, ska::flat_hash_set<LSHIDType> &xset, const PairT &item, const int topk, size_t k, std::mutex &mut) {
     const auto [dist, id] = item;
     if(xset.find(id) != xset.end()) {
         std::fprintf(stderr, "id %u is already present\n", int(id));
         return;
     }
     if(topk <= 0 || x.size() < k) {
-        std::fprintf(stderr, "Increasing size until it includes the k = %zu\n", k);
         std::lock_guard<std::mutex> lock(mut);
         xset.insert(id);
-        x.emplace_back(item);
-        std::push_heap(x.begin(), x.end());
-        for(size_t i = 0; i < x.size(); ++i) {
-            std::fprintf(stderr, "%g:", x[i].first);
-        }
-        std::fprintf(stderr, "New top: %g. Size: %zu\n", x.front().first, x.size());
-        std::fprintf(stderr, "New bottom: %g. Size: %zu\n", x.front().first, x.size());
+        x.push(item);
 
-        assert(*std::max_element(x.begin(), x.end()) == x.front());
         //assert(*std::min_element(x.begin(), x.end()) == x.front());
-    } else if(x.front() < item) {
+    } else if(x.top() < item) {
         std::fprintf(stderr, "New top before update: %g/Size %zu\n", x.front().first, x.size());
         std::lock_guard<std::mutex> lock(mut);
-        std::pop_heap(x.begin(), x.end());
-        xset.erase(x.front().second);
-        xset.insert(id);
-        x.back() = item;
-        std::push_heap(x.begin(), x.end());
+        auto old = x.top();
+        // If the rank is the same as k - 1, save both
+        // otherwise, discard the old one, since it's not good enough
+        if(old.first != item.first) {
+            xset.erase(old.second);
+            x.pop();
+        }
+        x.push(item);
         std::fprintf(stderr, "New top after update: %g/Size %zu\n", x.front().first, x.size());
     }
 }
 
-std::vector<std::vector<PairT>> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed) {
+
+std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed) {
     // Builds the LSH index and populates nearest-neighbor lists in parallel
     const size_t ns = result.names_.size();
     const int topk = opts.min_similarity_ > 0. ? -1: opts.num_neighbors_ > 0 ? 1: 0;
     const LSHDistType INFLATE_FACTOR = 3.5;
     // Make the similarities negative so that the smallest items are the ones with the highest similarities
     size_t ntoquery = opts.num_neighbors_ <= 0 ? ns - 1: std::min(ns - 1, size_t(opts.num_neighbors_ * INFLATE_FACTOR));
-    std::vector<std::vector<PairT>> neighbor_lists(ns);
+    std::vector<pqueue> neighbor_lists(ns);
+    if(opts.output_kind_ == KNN_GRAPH && opts.num_neighbors_ > 0)
+        for(auto &n: neighbor_lists)
+            n.reserve(opts.num_neighbors_);
     std::vector<ska::flat_hash_set<LSHIDType>> neighbor_sets(ns);
     std::unique_ptr<std::mutex[]> mutexes(new std::mutex[ns]);
     std::fprintf(stderr, "About to build index\n");
+    // Build the index
     for(size_t i  = 0; i < ns; ++i) {
         if(index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
             switch(int(opts.fd_level_)) {
-#define CASE_N(i, TYPE) case i: {minispan<TYPE> mspan((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * i, opts.sketchsize_);\
+#define CASE_N(digit, TYPE) case digit: {minispan<TYPE> mspan((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * i, opts.sketchsize_);\
     idx.update(mspan);} break
                CASE_N(8, uint64_t);
                CASE_N(4, uint32_t);
@@ -77,12 +81,30 @@ std::vector<std::vector<PairT>> build_index(SetSketchIndex<uint64_t, LSHIDType> 
         // Build a candidate list and the index at the same time
         // When this is complete, we'll have a list of IDs to do comparisons with
     }
+    // Build neighbor lists
+    // Currently parallelizing the outer loop,
+    // but the inner might be worth trying
+    OMP_PFOR_DYN
     for(size_t id = 0; id < ns; ++id) {
         std::fprintf(stderr, "%zu\t%zu\n", id, ns);
-        minispan<RegT> mspan(&result.signatures_[opts.sketchsize_ * id], opts.sketchsize_);
-        auto [ids, counts, npr] = idx.query_candidates(mspan, ntoquery);
+        std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
+        if(index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
+            switch(int(opts.fd_level_)) {
+#define CASE_N(i, TYPE) case i: {minispan<TYPE> mspan((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * id, opts.sketchsize_);\
+    query_res = idx.query_candidates(mspan, ntoquery);} break
+               CASE_N(8, uint64_t);
+               CASE_N(4, uint32_t);
+               CASE_N(2, uint16_t);
+               CASE_N(1, uint8_t);
+                default: __builtin_unreachable();
+#undef CASE_N
+            }
+        } else {
+            minispan<RegT> mspan(&result.signatures_[opts.sketchsize_ * id], opts.sketchsize_);
+            query_res = idx.query_candidates(mspan, ntoquery);
+        }
+        auto &[ids, counts, npr] = query_res;
         const size_t idn = ids.size();
-        OMP_PFOR_DYN
         for(size_t j = 0; j < idn; ++j) {
             const LSHIDType oid = ids[j];
             if(id == oid) continue; // Don't track one's self
@@ -91,7 +113,7 @@ std::vector<std::vector<PairT>> build_index(SetSketchIndex<uint64_t, LSHIDType> 
             update(neighbor_lists[id], neighbor_sets[id], PairT{cd, oid}, topk, ntoquery, mutexes[id]);
         }
     }
-    
+
 VERBOSE_ONLY(
     for(size_t id = 0; id < ns; ++id) {
         std::fprintf(stderr, "ID %s/%zu/%zu has a list of %zu long\n", result.names_[id].data(), id + 1, ns, neighbor_lists[id].size());
