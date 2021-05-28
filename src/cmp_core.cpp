@@ -311,41 +311,51 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_);
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
         emit_all_pairs(opts, result);
-    } else if(opts.output_kind_ != DEDUP) {
-        // This is LSH-index assisted KNN graphs +
-        // thresholded nn graphs
+        return;
+    }
+    // This is LSH-index assisted KNN graphs +
+    // thresholded nn graphs
 
-        // Step 1: Build LSH Index
-        std::vector<uint64_t> nperhashes{1, 2, 3, 4, 6, 8, 16};
-        std::vector<uint64_t> nperrows(nperhashes.size());
-        for(size_t i = 0; i < nperhashes.size(); ++i) {
-            const auto nh = nperhashes[i];
-            auto &np = nperrows[i];
-            if(nh < 3) {
-                np = opts.sketchsize_ / nh;
-            } else if(nh < 5) {
-                np = opts.sketchsize_ / nh * 8;
-            } else if(nh < 6) {
-                np = opts.sketchsize_ / nh * 6;
-            } else np = opts.sketchsize_ / nh * 4;
-        }
+    // Step 1: Build LSH Index
+    std::vector<uint64_t> nperhashes{1, 2, 3, 4, 6, 8, 16};
+    std::vector<uint64_t> nperrows(nperhashes.size());
+    for(size_t i = 0; i < nperhashes.size(); ++i) {
+        const auto nh = nperhashes[i];
+        auto &np = nperrows[i];
+        if(nh < 3) {
+            np = opts.sketchsize_ / nh;
+        } else if(nh < 5) {
+            np = opts.sketchsize_ / nh * 8;
+        } else if(nh < 6) {
+            np = opts.sketchsize_ / nh * 6;
+        } else np = opts.sketchsize_ / nh * 4;
+    }
 #if 0
-        for(size_t i = 0; i < nperhashes.size(); ++i)
-            std::fprintf(stderr, "Layer %zu has %zu/%zu\n", i, size_t(nperhashes[i]), size_t(nperrows[i]));
+    for(size_t i = 0; i < nperhashes.size(); ++i)
+        std::fprintf(stderr, "Layer %zu has %zu/%zu\n", i, size_t(nperhashes[i]), size_t(nperrows[i]));
 #endif
-        auto idx = opts.kmer_result_ >= FULL_MMER_SET
+    auto make_idx = [&]() {return opts.kmer_result_ >= FULL_MMER_SET
         ? SetSketchIndex<uint64_t, LSHIDType>()
         : SetSketchIndex<uint64_t, LSHIDType>(opts.sketchsize_, nperhashes, nperrows);
+    };
+    SetSketchIndex<uint64_t, LSHIDType> idx = make_idx();
 
-        // Step 2: Build nearest-neighbor candidate table
+    // Step 2: Build nearest-neighbor candidate table
+    if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {
         std::vector<pqueue> neighbor_lists = build_index(idx, opts, result);
         refine_results(neighbor_lists, opts, result);
         emit_neighbors(neighbor_lists, opts, result);
-        // KNN_GRAPH simply generate top-k
-        // NN_GRAPH_THRESHOLD generates all similarities above a threshold
-    } else {
-        std::fprintf(stderr, "Not yet implemented: de-deduplication via LSH index\n");
-        std::exit(1);
+    } else if(opts.output_kind_ == DEDUP) {
+        std::vector<size_t> ids;
+        std::vector<std::vector<size_t>> constituents;
+        const double simthres = 0.9; // This will be changed in the future, but for now, this is hard-coded and dumb
+        std::vector<size_t> order(result.names_.size());
+        std::iota(order.begin(), order.end(), size_t(0));
+        std::sort(order.begin(), order.end(), [&result](auto x, auto y) {return result.cardinalities_[x] < result.cardinalities_[y];});
+        for(size_t idx = 0; idx < order.size(); ++idx) {
+            auto oid = order[idx];
+        }
+        throw std::runtime_error("Not implemented: Deduplication");
     }
 }
 
