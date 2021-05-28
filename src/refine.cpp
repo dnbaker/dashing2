@@ -62,6 +62,7 @@ void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
         // Now that we've selected the top-k/bottom-k (similarity/distance), multiply
         if(!distance(opts.measure_)) {
             std::transform(beg, e, beg, [&](PairT x) {return PairT{-x.first, x.second};});
+            //std::reverse(beg, e);
         }
     }
 }

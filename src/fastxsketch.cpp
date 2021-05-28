@@ -3,37 +3,11 @@
 namespace dashing2 {
 
 
-#if 0
-void checked_fwrite(std::FILE *fp, const void *ptr, size_t nb) {
-    for(size_t rc;;){
-        rc = std::fwrite(ptr, 1, nb, fp);
-        std::fprintf(stderr, "Wrote %zu bytes out of expected %zu\n", rc, nb);
-        if(rc == nb) return;
-        ptr = (const void *)((const uint8_t *)ptr + rc);
-        nb -= rc;
-    }
-#if 0
-    auto rc = std::fwrite(ptr, 1, nb, fp);
-    char buf[256];
-    std::sprintf(buf, "[%s] Failed to buffer-write %zu, instead writing %zu", __func__, nb, rc);
-    if(rc != nb) {
-        nb -= rc;
-        std::fprintf(stderr, "%zu bytes left, trying to add the rest\n", nb);
-        rc = std::fwrite(ptr, 1, nb, fp);
-        nb -= rc;
-        if(nb == 0) return;
-        std::fprintf(stderr, "%zu bytes left)\n", nb);
-        throw std::runtime_error(std::string(buf, std::sprintf(buf, "[%s] Failed to buffer-write %zu, instead writing %zu", __func__, nb, rc)));
-    }
-#endif
-}
-#else
 #define checked_fwrite(fp, ptr, nb) \
     do {\
         if(unsigned long long lrc = std::fwrite(static_cast<const void *>(ptr), 1, nb, fp); lrc != static_cast<size_t>(nb)) \
             throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered write of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead writing " + std::to_string(lrc) + " bytes");\
     } while(0)
-#endif
 
 void FastxSketchingResult::print() {
     std::fprintf(stderr, "%s\n", str().data());
@@ -298,12 +272,13 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             reset(tid);
             auto perf_for_substrs = [&](const auto &func) {
                 for_each_substr([&](const std::string &subpath) {
+                    auto lfunc = [&](auto x) {if(!opts.fs_ || !opts.fs_->in_set(x)) func(x);};
                     if(opts.use128()) {
                         auto hasher(opts.rh128_);
-                        hasher.for_each_hash(func, subpath.data(), kseqp + tid);
+                        hasher.for_each_hash(lfunc, subpath.data(), kseqp + tid);
                     } else {
                         auto hasher(opts.rh_);
-                        hasher.for_each_hash(func, subpath.data(), kseqp + tid);
+                        hasher.for_each_hash(lfunc, subpath.data(), kseqp + tid);
                     }
                 }, path);
             };
@@ -612,14 +587,8 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         sketchers.reset();
         if(sketchers.omh) {
             std::vector<uint64_t> res = sketchers.omh->hash(seqp.first, seqp.second);
-#if 0
-            for(size_t i = 0; i < std::min(res.size(), size_t(10)); ++i) {
-                std::fprintf(stderr, "%p:%zu:%zu\n", (void *)seqp.first, i, res[i]);
-            }
-#endif
             auto destp = &ret.signatures_[(i - oldsz) * opts.sketchsize_];
             if(sizeof(RegT) == sizeof(uint64_t)) { // double
-                std::fprintf(stderr, "copying out 8-byte registers for i = %zu\n", i);
                 // Copy as-is
                 std::memcpy(destp, res.data(), res.size() * sizeof(uint64_t));
             } else if(sizeof(RegT) > sizeof(uint64_t)) { // long double
@@ -637,6 +606,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         } else {
             {
                 auto func = [&](auto x) {
+                    if(opts.fs_ && opts.fs_->in_set(x)) return;
                     if(sketchers.ctr) {
                         sketchers.ctr->add(x);
                     } else if(sketchers.opss) {

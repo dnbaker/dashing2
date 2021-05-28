@@ -13,6 +13,7 @@
 #include "sketch/setsketch.h"
 #include "sketch/bmh.h"
 #include "counter.h"
+#include "filterset.h"
 
 
 namespace dashing2 {
@@ -94,6 +95,9 @@ struct Dashing2Options {
     DataType dtype_;
     bool use128_ = false;
     unsigned nthreads_;
+
+    std::unique_ptr<FilterSet> fs_;
+    
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), dtype_(dtype), use128_(use128) {
         std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, space = %s, datatype = %s\n", k, w, to_string(sspace_).data(), to_string(dtype_).data());

@@ -7,6 +7,7 @@ INCLUDE+=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include
 OPT+=-std=c++17 -O3 -march=native -fopenmp
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic
 EXTRA+=-DNOCURL
+CXXFLAGS+=-std=c++17
 
 OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp))
 OBJ=$(OFS)
