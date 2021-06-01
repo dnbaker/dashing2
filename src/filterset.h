@@ -32,7 +32,7 @@ static constexpr int ceilog2(size_t n) {
 class FilterSet {
     using T = uint64_t;
     aligned::vector<T> data_;
-    const double bfexp_;
+    double bfexp_;
     int k_ = 0;
     //  Table size is
 #ifndef M_LN2
@@ -44,6 +44,13 @@ public:
     template<typename IT>
     void reset(IT beg, IT end, double bfexp=-1., int ktouse=-1) {
         *this = FilterSet(beg, end, bfexp, ktouse);
+    }
+    FilterSet &operator=(const FilterSet &o) = default;
+    FilterSet &operator=(FilterSet &&o){
+        data_ = std::move(o.data_);
+        bfexp_ = o.bfexp_;
+        k_ = o.k_;
+        return *this;
     }
     template<typename IT>
     FilterSet(IT beg, IT end, double bfexp=-1., int ktouse=-1): bfexp_(bfexp) {
@@ -57,7 +64,7 @@ public:
             mem = std::max((mem + mem % bits_per_reg) / bits_per_reg, size_t(1));
             k_ = k;
             std::fprintf(stderr, "nreg: %zu. k: %d. nbits: %zu\n", mem, k_, mem * 64);
-            std::fprintf(stderr, "False positive rate %g using %zu bits per el\n", bfexp_, k_);
+            std::fprintf(stderr, "False positive rate %g using %d bits per el\n", bfexp_, k_);
             data_.resize(mem);
             std::fprintf(stderr, "data size: %zu. total mem: %zu\n", data_.size(), size_t(nelem * dbits_per_el));
             schism::Schismatic<uint64_t> mod_(mem * 64);
@@ -88,8 +95,7 @@ public:
         if(is_bf()) {
             // TODO: batch to sort for efficiency
             RNG rng(x);
-            const size_t tsz = tablesize(), nb = nbits();
-            schism::Schismatic<uint64_t> mod_(nb);
+            schism::Schismatic<uint64_t> mod_(nbits());
             // Maybe this can even be SIMDIfied?
             for(int i = 0; i < k_; ++i) {
                 const size_t v = rng();
