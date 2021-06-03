@@ -15,7 +15,7 @@ static INLINE uint64_t reg2sig(RegT x) {
         std::memcpy(&seed, &x, sizeof(x));
         return wy::wyhash64_stateless(&seed);
     } else {
-        std::memcpy(&seed, &x, sizeof(x));
+        std::memcpy(&seed, &x, std::min(sizeof(x), sizeof(seed)));
         uint64_t nextseed = wy::wyhash64_stateless(&seed);
         nextseed ^= ((uint64_t *)&x)[1];
         return wy::wyhash64_stateless(&nextseed);
@@ -293,11 +293,6 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
 }
 void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t ns = result.names_.size();
-#ifndef NDEBUG
-    for(size_t i = 0; i < ns; ++i) {
-        std::fprintf(stderr, "name %s for index %zu\n", result.names_[i].data(), i);
-    }
-#endif
     std::FILE *ofp = opts.outfile_path_.empty() ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) throw std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_);
     std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
