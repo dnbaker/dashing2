@@ -88,6 +88,7 @@ struct Dashing2Options {
     bool build_count_matrix_ = false;
     bool build_sig_matrix_ = true;
     std::string outprefix_;
+    std::string spacing;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
@@ -99,8 +100,8 @@ struct Dashing2Options {
     std::unique_ptr<FilterSet> fs_;
     
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
-        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), sspace_(space), dtype_(dtype), use128_(use128) {
-        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, space = %s, datatype = %s\n", k, w, to_string(sspace_).data(), to_string(dtype_).data());
+        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), spacing(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
+        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, space = %s, datatype = %s\n", k, w, ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
         if(nt <= 0) {
             if(char *s = std::getenv("OMP_NUM_THREADS"))
                 nt = std::max(std::atoi(s), 1);
@@ -112,7 +113,52 @@ struct Dashing2Options {
         return trim_folder_paths_ || outprefix_.size();
     }
     auto w() const {return w_;}
+    bool canonicalize() const {return enc_.canonicalize();}
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
+    std::string to_string() const {
+        size_t m = 4096;
+        std::string ret(m, '\0');
+        char *s = ret.data();
+        auto pos = std::sprintf(s, "Dashing2Options;k:%d", k_);
+        if(w_ > 0) pos += std::sprintf(&ret[pos], ";w:%d", w_);
+        pos += std::sprintf(&ret[pos], ";%s", parse_by_seq_ ? "parsebyseq": "parsebyfile");
+        if(trim_chr_) pos += std::sprintf(&ret[pos], ";trimchr");
+        pos += std::sprintf(&ret[pos], ";sketchsize:%zu", sketchsize_);
+        if(count_threshold_ > 0)
+            pos += std::sprintf(&ret[pos], ";%0.8g", count_threshold_);
+        if(kmer_result_ == ONE_PERM) {
+            pos += std::sprintf(&ret[pos], ";sketchtype:onepermsetsketch");
+        } else if(kmer_result_ == FULL_SETSKETCH) {
+            if(sspace_ == SPACE_SET)
+                pos += std::sprintf(&ret[pos], ";sketchtype:fullsetsketch");
+            else if(sspace_ == SPACE_MULTISET)
+                pos += std::sprintf(&ret[pos], ";sketchtype:bagminhash");
+            else if(sspace_ == SPACE_PSET)
+                pos += std::sprintf(&ret[pos], ";sketchtype:probminhash");
+            else
+                pos += std::sprintf(&ret[pos], ";sketchtype:orderminhash");
+        } else if(kmer_result_ == FULL_MMER_SEQUENCE) {
+            pos += std::sprintf(&ret[pos], ";sketchtype:mmerseq%d", use128() ? 128: 64);
+        } else if(kmer_result_ == FULL_MMER_SET || kmer_result_ == FULL_MMER_COUNTDICT) {
+            pos += std::sprintf(&ret[pos], ";sketchtype:mmerset%d", use128() ? 128: 64);
+            if(kmer_result_ == FULL_MMER_COUNTDICT) pos += std::sprintf(&ret[pos], ",kmercountsf64");
+        }
+        pos += std::sprintf(&ret[pos], ";%s", ::dashing2::to_string(dtype_).data());
+        if(spacing.size()) {
+            pos += std::sprintf(&ret[pos], ";spacing:%s", spacing.data());
+        }
+        if(outprefix_.size()) pos += std::sprintf(&ret[pos], ";outprefix:%s", outprefix_.data());
+        if(cssize_) pos += std::sprintf(&ret[pos], ";counting=countsketch%zu\n", cssize_);
+        if(bed_parse_normalize_intervals_) pos += std::sprintf(&ret[pos], ";normalize_intervals");
+        if(by_chrom_) pos += std::sprintf(&ret[pos], ";sketchbychrom");
+        if(homopolymer_compress_minimizers_) pos += std::sprintf(&ret[pos], ";hp-compress-minimizers");
+        if(canonicalize()) pos += std::sprintf(&ret[pos], ";canon");
+        if(fs_) {
+            pos += std::sprintf(&ret[pos], ";%s", fs_->to_string().data());
+        }
+        ret.resize(pos);
+        return ret;
+    }
     Dashing2Options &parse_by_seq(bool v) {parse_by_seq_ = v; return *this;}
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}

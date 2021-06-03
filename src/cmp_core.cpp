@@ -4,6 +4,7 @@
 #include "index_build.h"
 #include "refine.h"
 #include "emitnn.h"
+#include "mio.hpp"
 
 
 namespace dashing2 {
@@ -20,6 +21,14 @@ static INLINE uint64_t reg2sig(RegT x) {
         return wy::wyhash64_stateless(&nextseed);
     }
 }
+
+struct PushBackCounter
+{
+  struct value_type { template<typename T> value_type(const T&) { } };
+  void push_back(const value_type &){++count;}
+  PushBackCounter(): count(0) {}
+  size_t count;
+};
 
 std::tuple<void *, double, double>
 make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs) {
@@ -192,6 +201,7 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
             LSHDistType eq = (1. - alpha - beta);
             LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
             LSHDistType ucard = alpha + beta >= 1. ? lhcard + rhcard: std::max((lhcard + rhcard) / (2. - alpha - beta), 0.);
+            DBG_ONLY(std::fprintf(stderr, "for %zu/%zu, lhcard %g, rhcard %g\n", i, j, lhcard, rhcard);)
             //std::fprintf(stderr, "alpha %g, beta %g, eq = %g, lhcard %g, rhcard %g, ucard %g\n", alpha, beta, eq, lhcard, rhcard, ucard);
             //std::fprintf(stderr, "gtlt %zu/%zu\n", gtlt.first, gtlt.second);
             LSHDistType isz = ucard * eq;
@@ -200,7 +210,7 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
                 : opts.measure_ == INTERSECTION ? isz
                 : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
                 : opts.measure_ == POISSON_LLR ? -std::log(sim) * poisson_mult: -1.;
-            assert(ret >= 0.);
+            assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
             auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
@@ -210,8 +220,72 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / lhcard;
             else if(opts.measure_ == POISSON_LLR) ret = -std::log(ret) * poisson_mult;
         }
-    } else {
-        throw std::runtime_error("Not yet implemented: pairwise distances for full hash sets or count dictionaries; only sketching comparisons is allowed currently");
+    } else if(opts.exact_kmer_dist_) {
+        const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
+        if(lpath.empty() || rpath.empty()) throw std::runtime_error("Destination files for k-mers empty -- cannot load from disk");
+        mio::mmap_source lhs(lpath), rhs(rpath);
+        std::unique_ptr<mio::mmap_source> lhn, rhn;
+        if(result.kmercountfiles_.size()) {
+            //if(!bns::isfile(result.kmercountfiles_.at(i))) throw std::runtime_error(std::string("Missing ") + result.kmercountfiles_[i]);
+            //if(!bns::isfile(result.kmercountfiles_.at(j))) throw std::runtime_error(std::string("Missing ") + result.kmercountfiles_[j]);
+            lhn.reset(new mio::mmap_source(result.kmercountfiles_[i]));
+            rhn.reset(new mio::mmap_source(result.kmercountfiles_[j]));
+        }
+        if(opts.use128()) throw std::runtime_error("Not yet implemented: 128-bit exact k-mer comparisons");
+        const uint64_t *lptr = (const uint64_t *)lhs.data(), *rptr = (const uint64_t *)rhs.data();
+        const size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
+        if(lhn && rhn) {
+            const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
+            double union_size = 0, isz_size = 0; // maybe Kahan update?
+            for(size_t lhi = 0, rhi = 0; lhi < lhl || rhi < rhl;) {
+                if(lhi < lhl) {
+                    if(rhi < rhl) {
+                        if(lptr[lhi] == rptr[rhi]) {
+                            double mnv = std::min(lnptr[lhi], rnptr[rhi]);
+                            double mxv = std::max(lnptr[lhi], rnptr[rhi]);
+                            isz_size += mnv;
+                            union_size += mxv;
+                            ++lhi; ++rhi;
+                            continue;
+                        } else if(lptr[lhi] < rptr[rhi]) {
+                            union_size += lnptr[lhi++];
+                        } else {
+                            union_size += rnptr[rhi++];
+                        }
+                    } else union_size += lnptr[lhi++];
+                } else if(rhi < rhl) {
+                    union_size += rnptr[rhi++];
+                }
+            }
+            double res = isz_size;
+            double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
+            if(opts.measure_ == INTERSECTION) {
+                // do nothing
+            } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) {
+                res = res / std::min(lhc, rhc);
+            } else if(opts.measure_ == POISSON_LLR || opts.measure_ == SIMILARITY) {
+                res = res / (lhc + rhc - res);
+            } else if(opts.measure_ == CONTAINMENT) {
+                res /= lhc;
+            } else
+                throw 1;
+            ret = res;
+        } else {
+            PushBackCounter c;
+            std::set_intersection(lptr, lptr + lhl, rptr, rptr + rhl, std::back_inserter(c));
+            double res = c.count; // res = isz
+            if(opts.measure_ == INTERSECTION) {
+                // do nothing
+            } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) {
+                res = res / std::min(lhl, rhl);
+            } else if(opts.measure_ == POISSON_LLR || opts.measure_ == SIMILARITY) {
+                res = res / (lhl + rhl - res);
+            } else if(opts.measure_ == CONTAINMENT) {
+                res /= lhl;
+            } else
+                throw 1;
+            ret = res;
+        }
         // Compare exact representations, not compressed shrunk
     }
     if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<double>::max();
@@ -234,6 +308,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     // Emit Header
     if(opts.output_format_ == HUMAN_READABLE) {
         std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": "PHYLIP pairwise");
+        std::fprintf(ofp, "#Dashing2Options: %s\n", opts.to_string().data());
         std::fprintf(ofp, "#Sources");
         for(size_t i = 0; i < result.names_.size(); ++i) {
             std::fprintf(ofp, "\t%s", result.names_[i].data());
@@ -352,6 +427,9 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
         std::vector<size_t> order(result.names_.size());
         std::iota(order.begin(), order.end(), size_t(0));
         std::sort(order.begin(), order.end(), [&result](auto x, auto y) {return result.cardinalities_[x] < result.cardinalities_[y];});
+        // General strategy:
+        // Use a given similarity threshold to then group items into the cluster
+        // to which they are most similar if they are > than
         for(size_t idx = 0; idx < order.size(); ++idx) {
             auto oid = order[idx];
         }

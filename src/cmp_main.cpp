@@ -10,11 +10,6 @@ static option_struct name[] = {\
     LO_FLAG("canon", 'C', canon, true)\
     LO_FLAG("cache", 'W', cache, true)\
     LO_FLAG("multiset", OPTARG_DUMMY, s, SPACE_MULTISET)\
-    LO_FLAG("bagminhash", OPTARG_DUMMY, s, SPACE_MULTISET)\
-    LO_FLAG("prob", 'P', s, SPACE_PSET)\
-    LO_FLAG("edit-distance", 'E', s, SPACE_EDIT_DISTANCE)\
-    LO_FLAG("set", 'H', res, FULL_MMER_SET)\
-    LO_FLAG("full-setsketch", 'Z', res, FULL_SETSKETCH)\
     LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
@@ -52,11 +47,18 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         if(bns::isfile(namesf)) {
             std::string l;
             for(std::ifstream ifs(namesf);std::getline(ifs, l);) {
+                std::cerr << "Line: " << l << '\n';
                 if(l.empty() || l.front() == '#') continue;
                 const typename std::string::size_type it = l.find_first_of('\t');
                 result.names_.emplace_back(l.substr(0, it));
-                if(it != std::string::npos)
-                    result.cardinalities_.emplace_back(std::strtod(&l[it + 1], nullptr));
+                if(it != std::string::npos) {
+                    char *s = &l[it + 1];
+                    result.cardinalities_.emplace_back(std::strtod(s, &s));
+                    if(*s) {
+                        std::fprintf(stderr, "Saving kmer count file %s\n", s + 1);
+                        result.kmercountfiles_.push_back(s + 1);
+                    }
+                }
             }
         } else throw std::runtime_error("cmp expects a packed sketch matrix or multiple paths");
         assert(result.names_.size());
@@ -137,6 +139,7 @@ int cmp_main(int argc, char **argv) {
     SketchSpace s = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false, presketched = false;
+    bool exact_kmer_dist = false;
     double count_threshold = 0., similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
@@ -216,7 +219,7 @@ int cmp_main(int argc, char **argv) {
         .save_kmercounts(save_kmercounts)
         .parse_by_seq(parse_by_seq);
     opts.count_threshold_ = count_threshold;
-    Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout);
+    Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
     SketchingResult result;
     if(presketched) {
         std::set<std::string> suffixset;

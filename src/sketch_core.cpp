@@ -67,11 +67,14 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
                 throw std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt");
             for(size_t i = 0; i < result.names_.size(); ++i) {
-                const auto &n(result.names_);
+                const auto &n(result.names_[i]);
                 if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) throw std::runtime_error("Failed to write names to file");
                 if(result.cardinalities_.size()) {
-                    std::fprintf(ofp, "\t%g\n", result.cardinalities_[i]);
-                } else std::fputc('\n', ofp);
+                    std::fprintf(ofp, "\t%g", result.cardinalities_[i]);
+                }
+                if(result.kmercountfiles_.size()) 
+                    std::fprintf(ofp, "\t%s", result.kmercountfiles_[i].data());
+                std::fputc('\n', ofp);
             }
             std::fclose(ofp);
         }

@@ -71,7 +71,8 @@ struct Dashing2DistOptions: public Dashing2Options {
     double compressed_a_ = -1.;
     Measure measure_ = SIMILARITY;
     std::string outfile_path_;
-    Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath=""): Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath)
+    bool exact_kmer_dist_ = false;
+    Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false): Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist)
     {
         if(nbytes_for_fastdists < 0) nbytes_for_fastdists = sizeof(RegT);
         if(std::fmod(nbytes_for_fastdists, 1.)) {

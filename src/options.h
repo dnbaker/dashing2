@@ -21,6 +21,7 @@ enum OptArg{
     OPTARG_FASTCMP,
     OPTARG_REGBYTES,
     OPTARG_BBIT_SIGS,
+    OPTARG_EXACT_KMER_DIST,
     OPTARG_DUMMY
 };
 
@@ -33,7 +34,13 @@ enum OptArg{
     LO_ARG("fastcmp", OPTARG_FASTCMP)\
     LO_FLAG("bbit-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
     LO_FLAG("binary-output", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
-    LO_FLAG("parse-by-seq", OPTARG_PARSEBYSEQ, parse_by_seq, true)
+    LO_FLAG("parse-by-seq", OPTARG_PARSEBYSEQ, parse_by_seq, true)\
+    LO_FLAG("bagminhash", OPTARG_DUMMY, s, SPACE_MULTISET)\
+    LO_FLAG("prob", 'P', s, SPACE_PSET)\
+    LO_FLAG("edit-distance", 'E', s, SPACE_EDIT_DISTANCE)\
+    LO_FLAG("set", 'H', res, FULL_MMER_SET)\
+    LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)\
+    LO_FLAG("full-setsketch", 'Z', res, FULL_SETSKETCH)\
 
 
 #define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}

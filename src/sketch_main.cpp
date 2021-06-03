@@ -4,17 +4,11 @@
 
 
 
-
 #define SKETCH_OPTS \
 static option_struct sketch_long_options[] = {\
     LO_FLAG("canon", 'C', canon, true)\
     LO_FLAG("cache", 'W', cache, true)\
     LO_FLAG("multiset", OPTARG_DUMMY, s, SPACE_MULTISET)\
-    LO_FLAG("bagminhash", OPTARG_DUMMY, s, SPACE_MULTISET)\
-    LO_FLAG("prob", 'P', s, SPACE_PSET)\
-    LO_FLAG("edit-distance", 'E', s, SPACE_EDIT_DISTANCE)\
-    LO_FLAG("set", 'H', res, FULL_MMER_SET)\
-    LO_FLAG("full-setsketch", 'Z', res, FULL_SETSKETCH)\
     LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
@@ -31,6 +25,7 @@ static option_struct sketch_long_options[] = {\
     LO_ARG("threads", 'p')\
     LO_ARG("sketchsize", 'S')\
     LO_ARG("save-kmercounts", 'N')\
+    LO_ARG("save-kmers", 's')\
     LO_ARG("ffile", 'F')\
     LO_ARG("qfile", 'Q')\
     LO_ARG("count-threshold", 'm')\
@@ -103,6 +98,7 @@ int sketch_main(int argc, char **argv) {
     SketchSpace s = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false;
+    bool exact_kmer_dist = false;
     double count_threshold = 0., similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
@@ -181,21 +177,15 @@ int sketch_main(int argc, char **argv) {
         .parse_by_seq(parse_by_seq);
     std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);
     opts.count_threshold_ = count_threshold;
+    if(opts.sspace_ == SPACE_PSET && opts.kmer_result_ == ONE_PERM) opts.kmer_result_ = FULL_SETSKETCH;
     if(paths.empty()) {
         std::fprintf(stderr, "No paths provided. See usage.\n");
         sketch_usage();
         return 1;
     }
     SketchingResult result = sketch_core(opts, paths, outfile);
-#ifndef NDEBUG
-    if(result.names_.size()) {
-        for(size_t i = 0; i < result.names_.size(); ++i) {
-            std::fprintf(stderr, "%zu/%zu: %s\n", i + 1, result.names_.size(), result.names_[i].data());
-        }
-    }
-#endif
     if(cmpout.size()) {
-        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout);
+        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
         cmp_core(distopts, result);
     }
     return 0;

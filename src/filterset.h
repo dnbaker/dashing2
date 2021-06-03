@@ -41,6 +41,12 @@ class FilterSet {
     using RNG = wy::WyRand<uint64_t, 2>;
     static constexpr size_t bits_per_reg = sizeof(T) * CHAR_BIT;
 public:
+    std::string to_string() const {
+        if(is_bf()) {
+            return std::string("FilterSetBloomFilter-size=") + std::to_string(data_.size()) + ",k=" + std::to_string(k_) + ",err=" + std::to_string(bfexp_);
+        }
+        return std::string("FilterSetSortedHashSet-size=") + std::to_string(data_.size());
+    }
     template<typename IT>
     void reset(IT beg, IT end, double bfexp=-1., int ktouse=-1) {
         *this = FilterSet(beg, end, bfexp, ktouse);
@@ -112,11 +118,7 @@ public:
         // Replace with interpolation search in the future
         const T *p = data_.data(),
                 *e = p + data_.size(),
-#if 0
                 *it = std::lower_bound(p, e, x);
-#else
-                *it = interp::find(p, e, x);
-#endif
         // Equivalent, but no logging
         return it != e && *it == x;
     }
