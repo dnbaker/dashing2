@@ -416,27 +416,23 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 std::fprintf(stderr, "Full mmer sequence\n");
                 std::FILE * ofp;
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr) throw std::runtime_error("Failed to open file for writing minimizer sequence");
-                // For faster build, we compile one loop.
                 void *dptr = nullptr;
                 size_t m = 1 << 20;
                 size_t l = 0;
-                if(posix_memalign((void **)&dptr, 16, (1 + opts.use128()) * m * sizeof(uint64_t))) throw std::bad_alloc();
+                if(posix_memalign(&dptr, 16, (1 + opts.use128()) * m * sizeof(uint64_t))) throw std::bad_alloc();
 
                 perf_for_substrs([&](auto x) {
                     using DT = decltype(x);
-                    auto ptr = (DT *)dptr;
+                    DT *ptr = (DT *)dptr;
                     if(l == m) {
                         size_t newm = m << 1;
                         void *newptr = nullptr;
                         if(posix_memalign((void **)&newptr, 16, newm * sizeof(DT))) throw std::bad_alloc();
-                        assert(newptr);
-                        std::copy((DT *)dptr, (DT *)dptr + m, (DT *)newptr);
+                        std::copy(ptr, ptr + m, (DT *)newptr);
                         dptr = newptr;ptr = (DT *)dptr;
                         m = newm;
                     }
-                    if(opts.homopolymer_compress_minimizers_) {
-                        if(l > 0 && ptr[l - 1] == x) return;
-                    }
+                    if(opts.homopolymer_compress_minimizers_ && l > 0 && ptr[l - 1] == x) return;
                     ptr[l++] = x;
                 });
                 assert(dptr);
@@ -453,10 +449,11 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr) throw std::runtime_error("Failed to open file for writing minimizer sequence");
                 if(opss.empty() && fss.empty()) throw std::runtime_error("Both opss and fss are empty\n");
                 const size_t opsssz = opss.size();
-                perf_for_substrs([&](auto hv) {
-                    if(opsssz) opss.operator[](tid).update(hv);
-                    else fss.operator[](tid).update(hv);
-                });
+                if(opsssz) {
+                    perf_for_substrs([p=&opss[tid]](auto hv) {p->update(hv);});
+                } else {
+                    perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
+                }
                 const uint64_t *ids = nullptr;
                 const uint32_t *counts = nullptr;
                 const RegT *ptr = opsssz ? opss[tid].data(): fss[tid].data();
