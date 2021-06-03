@@ -237,7 +237,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         OMP_PFOR_DYN
         for(size_t i = 0; i < paths.size(); ++i) {
             const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-            std::fprintf(stderr, "Sketching from tid %d at index %zu\n", tid, i);
             const auto starttime = std::chrono::high_resolution_clock::now();
             auto &path = paths[i];
             const std::string destination = makedest(path); // Unused right now, but soon won't be (?)
@@ -337,14 +336,10 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     //std::fprintf(stderr, "If we gathered full k-mers, and we asked for signatures, let's store bottom-k hashes in the signature space\n");
                     if(ret.signatures_.size()) {
                         std::vector<BKRegT> keys(ss);
-                        if(kmerveccounts.size()) {
-                            auto kvp = kmerveccounts.data();
-                            if(kmervec128.size()) bottomk(kmervec128, keys, opts.count_threshold_, kvp);
-                            else bottomk(kmervec64, keys, opts.count_threshold_, kvp);
-                        } else {
-                            if(kmervec128.size()) bottomk(kmervec128, keys);
-                            else bottomk(kmervec64, keys);
-                        }
+                        auto kvcp = kmerveccounts.data();
+                        if(kmerveccounts.empty()) kvcp = nullptr;
+                        if(kmervec128.size()) bottomk(kmervec128, keys, opts.count_threshold_, kvcp);
+                        else bottomk(kmervec64, keys, opts.count_threshold_, kvcp);
                         std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[i * ss]);
                     }
                 }
@@ -382,19 +377,17 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if((opts.save_kmers_ || opts.build_mmer_matrix_) && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
                     assert(ret.kmerfiles_.size());
                     ret.kmerfiles_[i] = destkmer;
-                    std::fprintf(stderr, "About to save kmers to %s\n", destkmer.data());
                     const uint64_t *ptr = opts.sspace_ == SPACE_PSET ? pmhs[tid].ids().data():
                                       opts.sspace_ == SPACE_MULTISET ? bmhs[tid].ids().data():
                                       opts.kmer_result_ == ONE_PERM ? opss[tid].ids().data() :
                                       opts.kmer_result_ == FULL_SETSKETCH ? fss[tid].ids().data():
                                           static_cast<uint64_t *>(nullptr);
                     if(!ptr) throw 2;
-                    std::cerr << "Destkmer: " << destkmer << '\n';
                     if((ofp = std::fopen(destkmer.data(), "wb")) == nullptr) throw std::runtime_error("Failed to write k-mer file");
                     std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 
                     checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
-                    std::fprintf(stderr, "About to copy to kmers of size %zu\n", ret.kmers_.size());
+                    DBG_ONLY(std::fprintf(stderr, "About to copy to kmers of size %zu\n", ret.kmers_.size());)
                     if(ret.kmers_.size())
                         std::copy(ptr, ptr + ss, &ret.kmers_[i * ss]);
                     if(ofp) std::fclose(ofp);
