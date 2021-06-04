@@ -64,9 +64,10 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     std::unique_ptr<std::vector<BagMinHash>> bmhs;
     std::unique_ptr<std::vector<ProbMinHash>> pmhs;
     if(opts.sspace_ == SPACE_SET) {
-        if(opts.one_perm_)
-            opss.reset(new std::vector<OPSetSketch>(nsamples, OPSetSketch(opts.sketchsize_)));
-        else
+        if(opts.one_perm_) {
+            opss.reset(new std::vector<OPSetSketch>());
+            while(opss->size() < nsamples) opss->emplace_back(opts.sketchsize_);
+        } else
             ss.reset(new std::vector<FullSetSketch>(nsamples, FullSetSketch(opts.sketchsize_)));
     } else if(opts.sspace_ == SPACE_MULTISET) {
         bmhs.reset(new std::vector<BagMinHash>(nsamples, BagMinHash(opts.sketchsize_)));

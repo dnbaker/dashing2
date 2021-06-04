@@ -146,8 +146,10 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             x.emplace_back(ss, opts.save_kmers_ || opts.build_mmer_matrix_, opts.save_kmercounts_ || opts.build_count_matrix_);
     };
     if(opts.sspace_ == SPACE_SET) {
-        if(opts.kmer_result_ == ONE_PERM) make_save(opss);
-        else if(opts.kmer_result_ == FULL_SETSKETCH) {
+        if(opts.kmer_result_ == ONE_PERM) {
+            make(opss);
+            for(auto &x: opss) x.set_mincount(opts.count_threshold_);
+        } else if(opts.kmer_result_ == FULL_SETSKETCH) {
             make_save(fss);
         }
     } else if(opts.sspace_ == SPACE_MULTISET) {
@@ -298,7 +300,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
 #undef FUNC_FE
                 }, path);
             };
-            const bool setsketch_with_counts = (opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) && (opts.save_kmercounts_ || opts.count_threshold_ > 0);
+            const bool setsketch_with_counts = (opts.kmer_result_ == FULL_SETSKETCH) && (opts.save_kmercounts_ || opts.count_threshold_ > 0);
             if(
                 (opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET || opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_COUNTDICT)
                  || setsketch_with_counts
@@ -325,11 +327,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     std::copy(pmhs[tid].data(), pmhs[tid].data() + ss, &ret.signatures_[i * ss]);
                     ret.cardinalities_[i] = pmhs[tid].total_weight();
                 } else if(setsketch_with_counts) {
-                    if(opss.size())
-                        ctr.finalize(opss[tid], opts.count_threshold_);
-                    else
-                        ctr.finalize(fss[tid], opts.count_threshold_);
-                    ret.cardinalities_[i] = opss.size() ? opss[tid].getcard(): fss[tid].getcard();
+                    assert(fss.size());
+                    ctr.finalize(fss[tid], opts.count_threshold_);
+                    ret.cardinalities_[i] = fss[tid].getcard();
                 } else throw std::runtime_error("Unexpected space for counter-based m-mer encoding");
                     // Make bottom-k if we generated full k-mer sets or k-mer count dictionaries, and copy then over
                 if(kmervec64.size() || kmervec128.size()) {
@@ -363,11 +363,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     nb = ss * sizeof(RegT);
                     srcptr = pmhs[tid].data();
                 } else if((opts.kmer_result_ ==  ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH)) {
-                    if(opss.size()) buf = (const void *)opss[tid].data();
-                    else if(fss.size()) buf = (const void *)fss[tid].data();
-                    else throw std::runtime_error("OPSS and FSS are both empty\n");
+                    buf = (const void *)fss[tid].data();
                     nb = ss * sizeof(RegT);
-                    srcptr = opss.size() ? opss[tid].data(): fss[tid].data();
+                    srcptr = fss[tid].data();
                 } else nb = 0, srcptr = nullptr;
                 if(srcptr && ret.signatures_.size())
                     std::copy(srcptr, srcptr + ss, &ret.signatures_[i * ss]);
@@ -621,13 +619,14 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         } else {
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
-                if(sketchers.ctr) {
+                if(sketchers.opss) sketchers.opss->update(x);
+                else if(sketchers.ctr)
                     sketchers.ctr->add(x);
-                } else if(sketchers.opss) {
-                    sketchers.opss->update(x);
-                } else if(sketchers.fss) {
+                else if(sketchers.fss)
                     sketchers.fss->update(x);
-                } else throw std::runtime_error("Expected ctr or opss or fss and none are non-null");
+                else {
+                    __builtin_unreachable();
+                }
             }, seqp.first, seqp.second);
             RegT *ptr = nullptr;
             const uint64_t *kmer_ptr = nullptr;
@@ -648,12 +647,10 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 } else if(sketchers.opss) {
                     ptr = sketchers.opss->data();
                     ret.cardinalities_[i] = sketchers.opss->getcard();
-                    if(sketchers.opss->ids().size())
-                        kmer_ptr = sketchers.opss->ids().data();
-                    if(sketchers.opss->idcounts().size()) {
-                        kmercounts.resize(opts.sketchsize_);
-                        std::copy(sketchers.opss->idcounts().begin(), sketchers.opss->idcounts().end(), kmercounts.begin());
-                    }
+                    kmer_ptr = sketchers.opss->ids().data();
+                    kmercounts.resize(opts.sketchsize_);
+                    auto &idc = sketchers.opss->idcounts();
+                    std::copy(idc.begin(), idc.end(), kmercounts.begin());
                 } else {
                     assert(sketchers.fss);
                     ptr = sketchers.fss->data();
@@ -714,8 +711,10 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     const bool save_idcounts = opts.save_kmercounts_ || opts.build_count_matrix_;
     //std::fprintf(stderr, "save ids: %d, save counts %d\n", save_ids, save_idcounts);
     if(opts.sspace_ == SPACE_SET) {
-        if(opts.one_perm_) sketching_data.opss.reset(new OPSetSketch(opts.sketchsize_, save_ids, save_idcounts));
-        else sketching_data.fss.reset(new FullSetSketch(opts.sketchsize_, save_ids, save_idcounts));
+        if(opts.one_perm_) {
+            sketching_data.opss.reset(new OPSetSketch(opts.sketchsize_));
+            if(opts.count_threshold_ > 0) sketching_data.opss->set_mincount(opts.count_threshold_);
+        } else sketching_data.fss.reset(new FullSetSketch(opts.sketchsize_, save_ids, save_idcounts));
     } else if(opts.sspace_ == SPACE_MULTISET) {
         sketching_data.bmh.reset(new BagMinHash(opts.sketchsize_, save_ids, save_idcounts));
     } else if(opts.sspace_ == SPACE_PSET) {
@@ -723,7 +722,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         sketching_data.omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
     }
-    if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET || opts.count_threshold_ > 0.) {
+    if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET || (opts.sspace_ == SPACE_SET && opts.kmer_result_ == FULL_SETSKETCH && opts.count_threshold_ > 0.)) {
         sketching_data.ctr.reset(new Counter(opts.cssize()));
     }
 

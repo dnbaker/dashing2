@@ -13,6 +13,7 @@
 #include "sketch/setsketch.h"
 #include "sketch/bmh.h"
 #include "counter.h"
+#include "oph.h"
 #include "filterset.h"
 
 
@@ -188,8 +189,9 @@ struct Dashing2Options {
 
 
 
+using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
 using FullSetSketch = sketch::CSetSketch<RegT>;
-using OPSetSketch = sketch::setsketch::OPCSetSketch<RegT>;
+using OPSetSketch = LazyOnePermSetSketch<KmerSigT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
 using ProbMinHash = sketch::pmh2_t<RegT>;
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
