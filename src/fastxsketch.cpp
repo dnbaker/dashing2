@@ -222,6 +222,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             if(opts.w_ > opts.k_) {
                 ret = ret + std::string(".") + std::to_string(opts.w_);
             }
+            if(opts.count_threshold_ > 0) {
+                ret = ret + std::string(".") + std::to_string(opts.count_threshold_)
+            }
             ret = ret + "." + bns::to_string(opts.rht_);
             ret = ret + suffix;
             return ret;
