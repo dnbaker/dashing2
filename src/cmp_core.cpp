@@ -33,15 +33,13 @@ struct PushBackCounter
 std::tuple<void *, double, double>
 make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs) {
     std::tuple<void *, double, double> ret = {nullptr, 0., 0.};
-    auto &compressed_reps = std::get<0>(ret);
     if(fd >= sizeof(RegT)) return ret;
     size_t mem = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) throw std::runtime_error("Can't do nibble registers without an even number of signatures");
+    auto &compressed_reps = std::get<0>(ret);
     if(posix_memalign((void **)&compressed_reps, 64, mem)) throw std::bad_alloc();
     const size_t nsigs = sigs.size();
-    if(fd == 0.5) {
-        assert(sigs.size() % 2 == 0);
-    }
+    assert(fd != 0.5 || sigs.size() % 2 == 0);
     if(truncation_method > 0) {
         std::fprintf(stderr, "Performing %d-bit compression\n", int(fd * 8.));
         if(fd == 8) {
@@ -368,19 +366,21 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
 }
 void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::fprintf(stderr, "Beginning cmp_core with options: \n");
-    if(opts.sspace_ == SPACE_SET) {
-        std::fprintf(stderr, "Comparing sets\n");
-    } else if(opts.sspace_ == SPACE_MULTISET) {
-        std::fprintf(stderr, "Comparing multisets\n");
-    } else if(opts.sspace_ == SPACE_PSET) {
-        std::fprintf(stderr, "Comparing discrete probability distributions\n");
-    } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
-        std::fprintf(stderr, "Comparing items in edit distance space\n");
-    }
+    DBG_ONLY(
+        if(opts.sspace_ == SPACE_SET) {
+            std::fprintf(stderr, "Comparing sets\n");
+        } else if(opts.sspace_ == SPACE_MULTISET) {
+            std::fprintf(stderr, "Comparing multisets\n");
+        } else if(opts.sspace_ == SPACE_PSET) {
+            std::fprintf(stderr, "Comparing discrete probability distributions\n");
+        } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
+            std::fprintf(stderr, "Comparing items in edit distance space\n");
+        }
+        std::fprintf(stderr, "Result type: %s\n", to_string(opts.kmer_result_).data());
+    )
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
         if(result.signatures_.empty()) throw std::runtime_error("Empty signatures; trying to compress registers but don't have any");
     }
-    std::fprintf(stderr, "Result type: %s\n", to_string(opts.kmer_result_).data());
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_);
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
         emit_all_pairs(opts, result);
