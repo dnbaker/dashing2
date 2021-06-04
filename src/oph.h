@@ -21,6 +21,7 @@ struct LazyOnePermSetSketch {
     std::unique_ptr<std::vector<uint64_t>> original_ids_;
     std::unique_ptr<std::vector<uint32_t>> idcounts_;
     size_t mask_;
+    int shift_;
     double count_threshold_;
     using Hasher = hash::FusedReversible3<hash::XorMultiply, hash::RotL33, hash::MultiplyAddXoRot<31>>;
     Hasher hasher_;
@@ -35,11 +36,13 @@ struct LazyOnePermSetSketch {
     LazyOnePermSetSketch(size_t m, uint64_t seed=0x321b919a61cb41f7ul): hasher_(seed), div_(m) {
         if(pow2)
             m = sketch::integral::roundup(m);
+        else if(m & 1) ++m;
         m_ = m;
-        registers_.resize(m_);
+        registers_.resize(m_, T(0));
         counts_.resize(m_);
         div_ = schism::Schismatic<uint64_t>(m_);
         mask_ = m_ - 1;
+        shift_ = sketch::integral::ilog2(m_);
     }
     void set_mincount(double v) {
         if(v > 0.) {
@@ -49,13 +52,27 @@ struct LazyOnePermSetSketch {
     }
     template<typename O>
     INLINE void update(T id,  O) {update(id);}
-    INLINE void update(T id) {
-        id = hasher_(id);
+    size_t threshold(size_t idx) {
+        auto mul = std::numeric_limits<T>::max() / 2 + 1;
+        assert(mul * 2 == 0);
+        //std::fprintf(stderr, "Expected %zu, found %zu. returning %zu\n", size_t(mul), 2 * mul, mul / (size() >> 1));
+        return idx * (mul / (size() / 2));
+    }
+    INLINE void update(const T oid) {
+        const T id = hasher_(oid);
         size_t idx;
-        if constexpr(pow2)
+        if constexpr(pow2) {
             idx = id & mask_;
-        else
-            idx = div_.mod(id);
+            id >>= shift_;
+        } else {
+            auto di = div_.div(id);
+            auto mo = id - m_ * di;
+            assert(di == (id / m_));
+            assert(mo == (id % m_));
+            assert(di < id);
+            idx = mo;
+            //std::fprintf(stderr, "di = %zu, mo = %zu, idx = %zu, id = %zu\n", size_t(di), size_t(mo), size_t(idx), size_t(id));
+        }
         assert(idx < size());
         auto &cref = counts_[idx];
         auto &rref = registers_[idx];
@@ -68,24 +85,18 @@ struct LazyOnePermSetSketch {
                 else ++it->second;
                 if(it->second >= mincount_) {
                     rref = id;
-                    cref = 1.;
+                    cref = it->second;
+                    pos.erase(it);
                     for(auto pit = pos.begin(); pit != pos.end();) {
                         if(pit->first <= id) pit = pos.erase(pit);
                         else ++pit;
                     }
                     return;
                 }
-            } else if(rref == id) {
-                ++cref;
-            }
-        } else {
-            if(rref < id) {
-                rref = id;
-                cref = 1.;
-            } else if(rref == id) {
-                ++cref;
-            }
-        }
+            } else if(rref == id) ++cref;
+        } else if(rref < id) {
+            rref = id; cref = 1.;
+        } else if(rref == id) ++cref;
     }
     std::vector<uint32_t> &idcounts() {
         auto p = new std::vector<uint32_t>(size());
@@ -101,9 +112,18 @@ struct LazyOnePermSetSketch {
     }
     SigT *data() {
         as_sigs_.reset(new std::vector<SigT>(registers_.size()));
-        const auto modv = std::numeric_limits<T>::max() / size();
-        const SigT mul = SigT(1) / modv;
-        std::transform(registers_.begin(), registers_.end(), as_sigs_->begin(), [mul,modv](T x) {return -std::log(mul * (x % modv));});
+        const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
+        size_t idx = 0;
+        const SigT mul = -SigT(1) / size();
+        const SigT omul = SigT(1) / modv;
+        for(size_t i = 0; i < size(); ++i) {
+            SigT v;
+            const auto lv = registers_[i] / m_;
+            if(lv) {
+                v = mul * std::log(omul * lv);
+            } else v = 0.;
+            as_sigs_->operator[](i) = v;
+        }
         return as_sigs_->data();
     }
     void reset() {
@@ -112,8 +132,12 @@ struct LazyOnePermSetSketch {
     }
     double getcard() {
         if(card_ > 0.) return card_;
-        long double inv = 1. / size();
-        auto sum = std::accumulate(registers_.begin(), registers_.end(), 0.L, [inv](auto x, auto y) {return x + y * inv;});
+        const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
+        long double inv = 1. / modv;
+        long double sum = std::accumulate(registers_.begin(), registers_.end(), 0.L,
+                    [modv,inv,m=m_](auto x, auto y) {
+            return x + (modv - (y / m) % modv) * inv;
+        });
         if(sum == 0.) return std::numeric_limits<double>::infinity();
         card_ = std::pow(size(), 2) / sum;
         return card_;
@@ -124,7 +148,7 @@ struct LazyOnePermSetSketch {
         std::vector<T2> ret(size());
         std::transform(registers_.begin(), registers_.end(), ret.begin(), [](auto x) -> T2 {
             if(std::is_integral_v<T2>) {
-                return ~x; // save as truncation/min hash value by twiddling
+                return x; // save as truncation/min hash value by twiddling
             } else {
                 return -std::log(SigT(x) / static_cast<SigT>(std::numeric_limits<T>::max()));
             }

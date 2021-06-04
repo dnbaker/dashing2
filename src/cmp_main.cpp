@@ -153,6 +153,7 @@ int cmp_main(int argc, char **argv) {
     int truncate_mode = 0;
     double nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
+    Measure measure = SIMILARITY;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::MACHINE_READABLE;
     CMP_OPTS(cmp_long_options);
@@ -177,6 +178,7 @@ int cmp_main(int argc, char **argv) {
         case 'm': count_threshold = std::atof(optarg); break;
         case 'F': ffile = optarg; break;
         case 'Q': qfile = optarg; break;
+        case OPTARG_ISZ: measure = INTERSECTION; break;
         case OPTARG_REGBYTES: nbytes_for_fastdists = std::atof(optarg); break;
         case OPTARG_OUTPREF: {
             outprefix = optarg; break;
@@ -220,6 +222,7 @@ int cmp_main(int argc, char **argv) {
         .parse_by_seq(parse_by_seq);
     opts.count_threshold_ = count_threshold;
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
+    distopts.measure_ = measure;
     SketchingResult result;
     if(presketched) {
         std::set<std::string> suffixset;

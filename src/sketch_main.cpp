@@ -112,6 +112,7 @@ int sketch_main(int argc, char **argv) {
     int truncate_mode = 0;
     size_t nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
+    Measure measure = SIMILARITY;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     SKETCH_OPTS
@@ -137,6 +138,7 @@ int sketch_main(int argc, char **argv) {
         case 'm': count_threshold = std::atof(optarg); break;
         case 'F': ffile = optarg; break;
         case 'Q': qfile = optarg; break;
+        case OPTARG_ISZ: measure = INTERSECTION; break;
         case OPTARG_OUTPREF: {
             outprefix = optarg; break;
         }
@@ -186,6 +188,7 @@ int sketch_main(int argc, char **argv) {
     SketchingResult result = sketch_core(opts, paths, outfile);
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
+        distopts.measure_ = measure;
         cmp_core(distopts, result);
     }
     return 0;

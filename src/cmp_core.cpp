@@ -201,11 +201,12 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
             LSHDistType eq = (1. - alpha - beta);
             LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
             LSHDistType ucard = alpha + beta >= 1. ? lhcard + rhcard: std::max((lhcard + rhcard) / (2. - alpha - beta), 0.);
-            DBG_ONLY(std::fprintf(stderr, "for %zu/%zu, lhcard %g, rhcard %g\n", i, j, lhcard, rhcard);)
+            //std::fprintf(stderr, "for %zu/%zu, lhcard %g, rhcard %g, ucard %g\n", i, j, lhcard, rhcard, ucard);
             //std::fprintf(stderr, "alpha %g, beta %g, eq = %g, lhcard %g, rhcard %g, ucard %g\n", alpha, beta, eq, lhcard, rhcard, ucard);
             //std::fprintf(stderr, "gtlt %zu/%zu\n", gtlt.first, gtlt.second);
             LSHDistType isz = ucard * eq;
-            LSHDistType sim = isz / ucard;
+            LSHDistType sim = eq;
+            //std::fprintf(stderr, "isz %g. sim %g\n", isz, sim);
             ret = opts.measure_ == SIMILARITY ? sim
                 : opts.measure_ == INTERSECTION ? isz
                 : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
@@ -215,8 +216,10 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
             auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
             //std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%g\n", i, j, size_t(neq), ret);
-            if(opts.measure_ == INTERSECTION) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
-            else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);
+            if(opts.measure_ == INTERSECTION) {
+                //std::fprintf(stderr, "cards: %g, %g, yielding %g isz\n", lhcard, rhcard, (lhcard + rhcard) / (1. + ret), (lhcard + rhcard) / (1. + ret) * ret);
+                ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
+            } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / lhcard;
             else if(opts.measure_ == POISSON_LLR) ret = -std::log(ret) * poisson_mult;
         }
