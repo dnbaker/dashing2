@@ -37,6 +37,7 @@ struct LazyOnePermSetSketch {
             m = sketch::integral::roundup(m);
         m_ = m;
         registers_.resize(m_);
+        counts_.resize(m_);
         div_ = schism::Schismatic<uint64_t>(m_);
         mask_ = m_ - 1;
     }
@@ -55,6 +56,7 @@ struct LazyOnePermSetSketch {
             idx = id & mask_;
         else
             idx = div_.mod(id);
+        assert(idx < size());
         auto &cref = counts_[idx];
         auto &rref = registers_[idx];
         if(mincount_ > 0.) {
