@@ -19,17 +19,27 @@ unit: readfx readbw readbed
 obh: echo $(OBJ)
 
 all3d: dashing2 dashing2-f dashing2-ld
+SEDSTR=
+ifeq ($(shell uname -s ),Darwin)
+    SEDSTR = " '' "
+endif
 
 
 OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp
 LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))
+DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS))
+GLIBOBJ=$(patsubst %.cpp,%.go,$(OBJFS))
 FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
 LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 
 dashing2: $(OBJ) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
+dashing2-d: $(DLIBOBJ) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
+dashing2-g: $(GLIBOBJ) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-ld: $(OBJLD) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
 dashing2-f: $(OBJF) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF) -o $@ $(LIB) $(EXTRA) libBigWig.a
 read%: test/read%.o $(LIBOBJ)
@@ -39,14 +49,20 @@ read%-ld: test/read%.ldo $(LDLIBOBJ)
 read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(FLIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
 %.o: %.cpp $(wildcard src/*.h)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG
+%.do: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA)
+%.go: %.cpp $(wildcard src/*.h)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -pg
 %.ldo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double"
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG
 %.fo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float"
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
+
+
 
 libBigWig.a: $(wildcard libBigWig/*.c) $(wildcard libBigWig/*.h)
-	cd libBigWig && sed -i '' 's/HAVE_CURL:/#/' Makefile && $(MAKE) && cp libBigWig.a ..
+	cd libBigWig && sed -i $(SEDSTR) 's/HAVE_CURL:/#/' Makefile && $(MAKE) && cp libBigWig.a ..
 
 test: readfx readbw
 

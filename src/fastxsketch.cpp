@@ -232,7 +232,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         if(opts.build_mmer_matrix_ || opts.save_kmers_) {
             ret.kmers_.resize(ss * paths.size());
         }
-        std::fprintf(stderr, "ret kmer size %zu\n", ret.kmers_.size());
         if(opts.build_count_matrix_) {
             ret.kmercounts_.resize(ss * paths.size());
         }
@@ -241,13 +240,13 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             const int tid = OMP_ELSE(omp_get_thread_num(), 0);
             const auto starttime = std::chrono::high_resolution_clock::now();
             auto &path = paths[i];
-            const std::string destination = makedest(path); // Unused right now, but soon won't be (?)
+            ret.destination_files_[i] = makedest(path);
+            auto &destination = ret.destination_files_[i];
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
-            std::string destkmer = destination_prefix + ".kmer.u64";
+            const std::string destkmer = destination_prefix + ".kmer.u64";
             const std::string destkmercounts = destination_prefix + ".kmercounts.f64";
             const bool dkif = bns::isfile(destkmer);
             const bool dkcif = bns::isfile(destkmercounts);
-            ret.destination_files_[i] = destination;
             if(ret.kmercountfiles_.size() > i) ret.kmercountfiles_[i] = destkmercounts;
             if(opts.cache_sketches_ &&
                bns::isfile(destination) &&
@@ -291,11 +290,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                             FUNC_FE(encoder.for_each);
                         }
                     } else if(opts.use128()) {
-                        auto hasher(opts.rh128_);
-                        FUNC_FE(hasher.for_each_hash);
+                        FUNC_FE(opts.rh128_.for_each_hash);
                     } else {
-                        auto hasher(opts.rh_);
-                        FUNC_FE(hasher.for_each_hash);
+                        FUNC_FE(opts.rh_.for_each_hash);
                     }
 #undef FUNC_FE
                 }, path);
@@ -461,7 +458,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
                 if(opts.build_count_matrix_)
                     counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
-                checked_fwrite(ofp, ptr, sizeof(RegT) * ss);
+                ::write(::fileno(ofp), ptr, sizeof(RegT) * ss);
+                //checked_fwrite(ofp, ptr, sizeof(RegT) * ss);
                 std::fclose(ofp);
                 if(ptr && ret.signatures_.size()) std::copy(ptr, ptr + ss, &ret.signatures_[i * ss]);
                 if(ids && ret.kmers_.size())
@@ -728,6 +726,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
 
     for_each_substr([&](const auto &x) {
         if((ifp = gzopen(x.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to read from ") + x);
+        gzbuffer(ifp, 1u << 17);
         bns::kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
             ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);

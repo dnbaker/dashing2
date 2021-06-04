@@ -1,5 +1,9 @@
 #include "d2.h"
 #include "bwsketch.h"
+#ifndef NOCURL
+#define NOCURL 1
+#endif
+#include "bigWig.h"
 
 namespace dashing2 {
 

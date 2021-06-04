@@ -7,7 +7,6 @@
 #include <memory>
 #include <vector>
 #include "bonsai/encoder.h"
-#include "bigWig.h"
 #include "flat_hash_map/flat_hash_map.hpp"
 #include "xxHash/xxh3.h"
 #include "sketch/setsketch.h"
