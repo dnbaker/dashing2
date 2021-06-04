@@ -44,6 +44,14 @@ std::string to_string(SketchSpace ss) {
     if(ss == SPACE_EDIT_DISTANCE) return "EditDistanceSpace";
     return "UNKNOWN SPACE";
 }
+std::string to_string(CountingType ct) {
+    if(ct == EXACT_COUNTING) return "ExactCounting";
+    if(ct == COUNTMIN_COUNTING) return "CountMinCounting";
+    if(ct == COUNTSKETCH_COUNTING)
+        return "CountSketchCounting";
+    if(ct == CQF_COUNTING) return "CQFCounting";
+    return "UNKNOWN COUNTING";
+}
 
 
 }

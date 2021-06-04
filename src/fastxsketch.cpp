@@ -223,8 +223,12 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 ret = ret + std::string(".") + std::to_string(opts.w_);
             }
             if(opts.count_threshold_ > 0) {
-                ret = ret + std::string(".") + std::to_string(opts.count_threshold_)
+                ret = ret + std::string(".") + std::to_string(opts.count_threshold_);
             }
+            if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_EDIT_DISTANCE) {
+                ret = ret + "." + to_string(opts.ct());
+            }
+            ret = ret + "." + to_string(opts.sspace_);
             ret = ret + "." + bns::to_string(opts.rht_);
             ret = ret + suffix;
             return ret;

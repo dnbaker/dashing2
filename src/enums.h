@@ -31,13 +31,17 @@ enum SketchSpace {
 
 enum CountingType {
     EXACT_COUNTING,
-    COUNTSKETCH_COUNTING
+    COUNTSKETCH_COUNTING,
     // Add or substract each item to its assigned bucket using a random variable seeded by the key
     // Usually estimates higher-hitter featuers well
     // Pseudocode:
     // data[hash(key) % len(data)] += hash(key) & 1 ? inc: -inc;
     // Then use std::abs(data[i]) for each element after counting
     // This reduces the sample space at some inexactness, but the biggest elements will remain the biggest
+
+    //Not implemented, but we may expand this:
+    COUNTMIN_COUNTING,
+    CQF_COUNTING // Not implemen
 };
 
 
@@ -78,6 +82,7 @@ enum OutputFormat {
 std::string to_string(KmerSketchResultType t);
 std::string to_string(SketchSpace ss);
 std::string to_string(DataType dt);
+std::string to_string(CountingType ct);
 std::string trim_folder(const std::string &s);
 struct Dashing2Options;
 
