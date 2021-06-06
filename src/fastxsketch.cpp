@@ -271,14 +271,13 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     if(ret.kmercounts_.size())
                         load_copy(destkmercounts, &ret.kmercounts_[ss * i]);
                 } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
-                    assert(bns::isfile(destkmercounts));
+                    if(!bns::isfile(destkmercounts))
+                        throw std::runtime_error(std::string("Expected destkmercounts (") + destkmercounts + ") to be a file. Run again?");
                     mio::mmap_sink ms(destkmercounts);
-                    const size_t nd = ms.size() / 8;
-                    const double *p = (const double *)ms.data();
-                    ret.cardinalities_[i] = std::accumulate(p, p + nd, 0.);
-                    std::fprintf(stderr, "Setting card to %g from sum on disk from array of size %zu\n", ret.cardinalities_[i], nd);
+                    if(ms.size() % sizeof(double)) throw std::runtime_error(std::string("Wrong size file ") + destkmercounts);
+                    ret.cardinalities_[i] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
                 } else if(opts.kmer_result_ == FULL_MMER_SET) {
-                    ret.cardinalities_[i] = bns::filesize(path.data());
+                    ret.cardinalities_[i] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
                 }
                 std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());
                 continue;

@@ -14,7 +14,7 @@ struct LazyOnePermSetSketch {
     // Solution: hash reversibly, track the maximum IDs
     
     std::vector<T> registers_;
-    static_assert(std::is_integral_v<T> || std::is_same_v<T, u128_t>, "Sanity");
+    static_assert(std::is_integral_v<T> || std::is_same_v<T, u128_t>, "LazyOnePermSetSketch is to be used with integral types");
     std::vector<double> counts_;
     using SigT = std::conditional_t<(sizeof(T) == 4), float, std::conditional_t<(sizeof(T) == 8), double, long double>>;
     std::unique_ptr<std::vector<SigT>> as_sigs_;
@@ -23,7 +23,14 @@ struct LazyOnePermSetSketch {
     size_t mask_;
     int shift_;
     double count_threshold_;
-    using Hasher = hash::FusedReversible3<hash::XorMultiply, hash::RotL33, hash::MultiplyAddXoRot<31>>;
+    // MultiplyAddXoRot
+    // is already enough to pass Rabbit/SmallCrush
+    using Hasher =
+#if 0
+        hash::FusedReversible3<hash::XorMultiply, hash::RotL33, hash::MultiplyAddXoRot<31>>;
+#else
+        hash::MultiplyAddXoRot<31>;
+#endif
     Hasher hasher_;
     schism::Schismatic<uint64_t> div_;
     double mincount_ = 0.;
@@ -146,11 +153,13 @@ struct LazyOnePermSetSketch {
     template<typename T2=SigT>
     std::vector<T2> to_sigs() const {
         std::vector<T2> ret(size());
-        std::transform(registers_.begin(), registers_.end(), ret.begin(), [](auto x) -> T2 {
+        std::transform(registers_.begin(), registers_.end(), ret.begin(), [sz2=size()/2](auto x) -> T2 {
             if(std::is_integral_v<T2>) {
                 return x; // save as truncation/min hash value by twiddling
             } else {
-                return -std::log(SigT(x) / static_cast<SigT>(std::numeric_limits<T>::max()));
+                const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / sz2;
+                long double inv = 1. / modv;
+                return -std::log((modv - (x / m) % modv) * inv);
             }
         });
         return ret;
