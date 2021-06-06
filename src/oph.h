@@ -159,7 +159,7 @@ struct LazyOnePermSetSketch {
             } else {
                 const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / sz2;
                 long double inv = 1. / modv;
-                return -std::log((modv - (x / m) % modv) * inv);
+                return -std::log((modv - (x / (sz2 * 2)) % modv) * inv);
             }
         });
         return ret;
