@@ -172,6 +172,7 @@ struct Dashing2Options {
     Dashing2Options &save_kmers(bool v) {save_kmers_ = v;return *this;}
     Dashing2Options &save_kmercounts(bool v) {save_kmercounts_ = v;return *this;}
     Dashing2Options &outprefix(const std::string &v) {outprefix_ = v;return *this;}
+    Dashing2Options &count_threshold(double ct) {count_threshold_ = ct; return *this;}
     bool parse_by_seq() {return parse_by_seq_;}
     std::string &outprefix() {return outprefix_;}
     const std::string &outprefix() const {return outprefix_;}
@@ -184,6 +185,7 @@ struct Dashing2Options {
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool one_perm() const {return kmer_result_ == ONE_PERM && sspace_ == SPACE_SET;}
+    double count_threshold() const {return count_threshold_;}
 };
 
 

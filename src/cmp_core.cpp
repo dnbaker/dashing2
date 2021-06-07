@@ -67,7 +67,9 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
         }
     } else {
         RegT minreg = std::numeric_limits<RegT>::max(), maxreg = std::numeric_limits<RegT>::min();
+        OMP_ONLY(
         #pragma omp parallel for simd reduction(min:minreg) reduction(max:maxreg)
+        )
         for(size_t i = 0; i < nsigs; ++i) {
             minreg = std::min(minreg, sigs[i]);
             maxreg = std::max(maxreg, sigs[i]);
@@ -88,18 +90,16 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
             }
         } else {
             OMP_STATIC_SCHED32
-            for(size_t i = 0, e = sigs.size(); i < e; ++i) {
+            for(size_t i = 0; i < nsigs; ++i) {
                 RegT x = sigs[i];
                 const RegT sub = 1. - std::log(x / a) * logbinv;
-                if(fd == 8)
-                    ((uint64_t *)compressed_reps)[i] == std::min(uint64_t(q) + 1, static_cast<uint64_t>(sub));
-                else {
+                if(fd == 8) {
+                    ((uint64_t *)compressed_reps)[i] = std::min(uint64_t(q + 1), uint64_t(sub));
+                } else {
                     const int64_t isub = std::max(int64_t(0), std::min(int64_t(q + 1), static_cast<int64_t>(sub)));
-                    if(fd == 4) ((uint32_t *)compressed_reps)[i] = isub;
+                    if(fd == 4)      ((uint32_t *)compressed_reps)[i] = isub;
                     else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
-                    else {
-                        assert(fd == 1); ((uint8_t *)compressed_reps)[i] = isub;
-                    }
+                    else             ((uint8_t *)compressed_reps)[i] = isub;
                 }
             }
         }
@@ -107,12 +107,10 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
     return ret;
 }
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
-    //std::fprintf(stderr, "Comparing: %zu/%zu\n", i, j);
     LSHDistType ret = std::numeric_limits<LSHDistType>::max();
     const LSHDistType b2pow = -std::ldexp(1., -static_cast<int>(opts.fd_level_ * 8.));
     const LSHDistType ib2pow = 1. / (1. + b2pow);
     const LSHDistType invdenom = 1. / opts.sketchsize_;
-    //std::fprintf(stderr, "cardinalities size: %zu. i: %zu. j: %zu\n", result.cardinalities_.size(), i, j);
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const LSHDistType poisson_mult = 1. / std::max(1, opts.k_);
     if(opts.compressed_ptr_) {
@@ -363,8 +361,6 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
         auto datp = dat.get() - (asym ? 0: i + 1);
         OMP_PFOR_DYN
         for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
-            std::fprintf(stderr, "%zu is start, ns = %zu\n", start, ns);
-            //std::fprintf(stderr, "Calling %zu, %zu (i < ns = %zu)\n", i, start, ns);
             datp[start] = compare(opts, result, i, start);
         }
         {

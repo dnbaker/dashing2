@@ -150,6 +150,7 @@ int cmp_main(int argc, char **argv) {
     std::string outprefix;
     OutputKind ok = SYMMETRIC_ALL_PAIRS;
     std::string cmpout; // Only used if distances are also requested
+    bool normalize_bed = false;
     int topk_threshold = -1;
     int truncate_mode = 0;
     double nbytes_for_fastdists = sizeof(RegT);
@@ -179,6 +180,7 @@ int cmp_main(int argc, char **argv) {
         case 'm': count_threshold = std::atof(optarg); break;
         case 'F': ffile = optarg; break;
         case 'Q': qfile = optarg; break;
+        case OPTARG_BED_NORMALIZE: normalize_bed = true; break;
         case OPTARG_ISZ: measure = INTERSECTION; break;
         case OPTARG_REGBYTES: nbytes_for_fastdists = std::atof(optarg); break;
         case OPTARG_OUTPREF: {
@@ -220,8 +222,8 @@ int cmp_main(int argc, char **argv) {
         .save_kmers(save_kmers)
         .outprefix(outprefix)
         .save_kmercounts(save_kmercounts)
-        .parse_by_seq(parse_by_seq);
-    opts.count_threshold_ = count_threshold;
+        .parse_by_seq(parse_by_seq).count_threshold(count_threshold);
+    opts.bed_parse_normalize_intervals_ = normalize_bed;
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
     distopts.measure_ = measure;
     SketchingResult result;

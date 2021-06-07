@@ -114,6 +114,7 @@ int sketch_main(int argc, char **argv) {
     bool parse_by_seq = false;
     Measure measure = SIMILARITY;
     // By default, use full hash values, but allow people to enable smaller
+    bool normalize_bed = false;
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
@@ -134,6 +135,7 @@ int sketch_main(int argc, char **argv) {
         case 'H': res = FULL_MMER_SET; break;
         case 'J': res = FULL_MMER_COUNTDICT; break;
         case 'G': res = FULL_MMER_SEQUENCE; break;
+        case OPTARG_BED_NORMALIZE: normalize_bed = true; break;
         case '2': use128 = true; break;
         case 'm': count_threshold = std::atof(optarg); break;
         case 'F': ffile = optarg; break;
@@ -176,9 +178,10 @@ int sketch_main(int argc, char **argv) {
         .save_kmers(save_kmers)
         .outprefix(outprefix)
         .save_kmercounts(save_kmercounts)
-        .parse_by_seq(parse_by_seq);
+        .parse_by_seq(parse_by_seq)
+        .count_threshold(count_threshold);
+    opts.bed_parse_normalize_intervals_ = normalize_bed;
     std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);
-    opts.count_threshold_ = count_threshold;
     if(opts.sspace_ == SPACE_PSET && opts.kmer_result_ == ONE_PERM) opts.kmer_result_ = FULL_SETSKETCH;
     if(paths.empty()) {
         std::fprintf(stderr, "No paths provided. See usage.\n");
