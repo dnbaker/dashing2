@@ -7,6 +7,7 @@ We support fastx files (fastq and fasta), several k-mer/m-mer encoding schemes, 
 For those, we do set-based sketching (default) unless counting is enabled.
 
 For counting, we either use a (single-row) CountSketch to approximate weighted set comparisons or we compute exact counts using a hash table.
+
 ### Completed
 #### BigWig sketching
 BigWigs done.
@@ -45,20 +46,3 @@ When handling multiplicities, you can use exact counting, which may be slower, o
 by setting opts.cssize_ > 0.
 
 ProbMinHash is usually significantly (20x++) faster than BagMinHash, although multiset jaccard may be more appropriate for some problems.
-
-### On deck
-
-#### Build LSH table
-Depending on whether signatures have been generated for sketches, or whether full k-mer/m-mer sets have been generated, build an LSH index over the data.
-
-If items have been sketched, this is a very simple LSH table which works quite well.
-If items have been converted into an k-mer/m-mer set, the register table has been filled with the "bottom-k" hashes, over which a simple LSH table is built, but it is weak due to the dependence between the hash registers.
-
-#### Set up distance queries
-Provide the all-pairs distance estimation code
-
-Provide top-k/threshold-based nearest neighbor list code, augmented by LSH
-    -- Can feed this in to spectral clusterers; the easier/faster I can make that, the more easily the tool will run end-to-end.
-
-Provide de-dup/landmark selection code.
-    This is going to be based on importance sampling, Varadarajan-Xu style
