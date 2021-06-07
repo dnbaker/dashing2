@@ -21,28 +21,36 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         result.nperfile_.resize(res.nsamples_per_file().size());
         std::copy(res.nsamples_per_file().begin(), res.nsamples_per_file().end(), result.nperfile_.begin());
     } else if(opts.dtype_ == DataType::BED || opts.dtype_ == DataType::BIGWIG) {
+        //std::fprintf(stderr, "Sketching from %s\n", to_string(opts.dtype_).data());
         result.signatures_.resize(npaths * opts.sketchsize_);
+        result.names_.resize(npaths);
+        result.cardinalities_.resize(npaths);
         OMP_PFOR_DYN
         for(size_t i = 0; i < npaths; ++i) {
             auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
+            auto &p(paths[myind]);
+            //std::fprintf(stderr, "Sketching from %zu/%zu\n", i, size_t(myind));
+            result.names_[i] = p;
             std::vector<RegT> sigs;
             if(opts.dtype_ == DataType::BED) {
-                sigs = bed2sketch(paths[myind], opts);
-                std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
+                auto [sig, card] = bed2sketch(p, opts);
+                result.cardinalities_[myind] = card;
+                sigs = std::move(sig);
             } else if(opts.dtype_ == DataType::BIGWIG) {
                 if(opts.by_chrom_) {
                     std::fprintf(stderr, "Warning: by_chrom is ignored for bigwig sketching. Currently, all sets are grouped together. To group by chromosome, split the BW file by chromosome.");
                     opts.by_chrom_ = false;
                 }
-                auto res = bw2sketch(paths[myind], opts);
+                auto res = bw2sketch(p, opts);
                 sigs = std::move(*res.global_.get());
+                result.cardinalities_[myind] = res.card_;
             }
             std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
         }
     }
     if(paths.size() == 1 && outfile.empty()) {
         const std::string suf =
-                opts.sspace_ == SPACE_SET ? (opts.one_perm_ ? ".opss": ".ss"):
+                opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
                 opts.sspace_ == SPACE_MULTISET ? ".bmh":
                 opts.sspace_ == SPACE_PSET ? ".pmh" :
                 opts.sspace_ == SPACE_EDIT_DISTANCE ? ".omh": ".unknown_sketch";
@@ -72,7 +80,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 if(result.cardinalities_.size()) {
                     std::fprintf(ofp, "\t%g", result.cardinalities_[i]);
                 }
-                if(result.kmercountfiles_.size()) 
+                if(result.kmercountfiles_.size())
                     std::fprintf(ofp, "\t%s", result.kmercountfiles_[i].data());
                 std::fputc('\n', ofp);
             }

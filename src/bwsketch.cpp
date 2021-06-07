@@ -67,7 +67,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
 
     for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
         if(opts.sspace_ == SPACE_SET) {
-            if(opts.one_perm_) opss.emplace_back(ss);
+            if(opts.one_perm()) opss.emplace_back(ss);
             else fss.emplace_back(ss);
         } else if(opts.sspace_ == SPACE_MULTISET) {
             bmhs.emplace_back(ss);
@@ -75,7 +75,11 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
             pmhs.emplace_back(ss);
         }
     }
-    OMP_PFOR_DYN
+    long double total_weight = 0.;
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(dynamic) reduction(+:total_weight)
+#endif
+
     for(size_t i = 0; i < ids.size(); ++i) {
 #ifndef NDEBUG
         std::fprintf(stderr, "Processing contig %zu/%zu\n", i, ids.size());
@@ -120,6 +124,13 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
             auto newvec = fss.size() ? fss[tid].to_sigs() :
                           opss.size() ? opss[tid].to_sigs() :
                           bmhs.size() ? bmhs[tid].to_sigs(): pmhs[tid].to_sigs();
+            long double inc;
+            if(fss.size()) inc = fss[tid].getcard();
+            else if(opss.size()) inc = opss[tid].getcard();
+            else if(bmhs.size()) inc = bmhs[tid].total_weight();
+            else if(pmhs.size()) inc = pmhs[tid].total_weight();
+            else throw std::runtime_error("Unexpected sketching method");
+            total_weight += inc;
 
             if(rvec.empty()) {
                 rvec = newvec;
@@ -134,6 +145,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
         }
         bwIteratorDestroy(ptr);
     }
+    ret.card_ = total_weight;
 
     bwClose(fp);
     bwCleanup();

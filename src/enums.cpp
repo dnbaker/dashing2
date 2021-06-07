@@ -26,7 +26,7 @@ std::string trim_folder(const std::string &s) {
 
 std::string to_suffix(const Dashing2Options &opts) {
     std::string ret = (opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) ?
-        (opts.sspace_ == SPACE_SET ? (opts.one_perm_ ? ".opss": ".fss"):  opts.sspace_ == SPACE_MULTISET ? ".bmh": opts.sspace_ == SPACE_PSET ? ".pmh": ".unknown")
+        (opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".fss"):  opts.sspace_ == SPACE_MULTISET ? ".bmh": opts.sspace_ == SPACE_PSET ? ".pmh": ".unknown")
         : (opts.kmer_result_ == FULL_MMER_SET ? ".kmerset" : (opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT) ? ".mmerseq": ".unknown_kmer");
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_SET) {
         if(opts.use128())

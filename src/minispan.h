@@ -8,7 +8,7 @@ using std::size_t;
 template<typename T>
 struct minispan {
     T *ptr_;
-    size_t n_; 
+    size_t n_;
     minispan(T *ptr, size_t n): ptr_(ptr), n_(n) {}
     minispan(const T *ptr, size_t n): ptr_(const_cast<T *>(ptr)), n_(n) {}
     size_t size() const {return n_;}

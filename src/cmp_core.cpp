@@ -138,7 +138,7 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = ske
         } else {
             switch(int(2. * opts.fd_level_)) {
 #define CASE_ENTRY(v, TYPE)\
-case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
+case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\n", i, j, int(2. * opts.fd_level_)); TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
                 CASE_ENTRY(16, uint64_t)
                 CASE_ENTRY(8, uint32_t)
                 CASE_ENTRY(4, uint16_t)
@@ -193,15 +193,25 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET) {
+            std::fprintf(stderr, "Comparing setsketches at %zu/%zu, size = %zu\n", i, j, opts.sketchsize_);
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
-            LSHDistType alpha = gtlt.first * invdenom;
-            LSHDistType beta = gtlt.second * invdenom;
-            LSHDistType eq = (1. - alpha - beta);
-            LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
-            LSHDistType ucard = alpha + beta >= 1. ? lhcard + rhcard: std::max((lhcard + rhcard) / (2. - alpha - beta), 0.);
-            //std::fprintf(stderr, "for %zu/%zu, lhcard %g, rhcard %g, ucard %g\n", i, j, lhcard, rhcard, ucard);
-            //std::fprintf(stderr, "alpha %g, beta %g, eq = %g, lhcard %g, rhcard %g, ucard %g\n", alpha, beta, eq, lhcard, rhcard, ucard);
-            //std::fprintf(stderr, "gtlt %zu/%zu\n", gtlt.first, gtlt.second);
+            for(size_t m = 0; m < opts.sketchsize_; ++m) std::fprintf(stderr, "%zu/%g/%g\n", m, lhsrc[m], rhsrc[m]);
+            LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
+            alpha = gtlt.first * invdenom;
+            beta = gtlt.second * invdenom;
+            eq = (1. - alpha - beta);
+            lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
+            if(alpha + beta >= 1.) {
+                //std::fprintf(stderr, "a, b (%g, %g) add to more than one. ucard is now %g\n", alpha, beta, lhcard + rhcard);
+                ucard = lhcard + rhcard;
+            } else {
+                ucard = std::max(lhcard + rhcard / (2. - alpha - beta), 0.);
+            }
+#if 0
+            std::fprintf(stderr, "for %zu/%zu, lhcard %g, rhcard %g, ucard %g\n", i, j, lhcard, rhcard, ucard);
+            std::fprintf(stderr, "alpha %g, beta %g, eq = %g, lhcard %g, rhcard %g, ucard %g\n", alpha, beta, eq, lhcard, rhcard, ucard);
+            std::fprintf(stderr, "gtlt %zu/%zu\n", size_t(gtlt.first), size_t(gtlt.second));
+#endif
             LSHDistType isz = ucard * eq;
             LSHDistType sim = eq;
             //std::fprintf(stderr, "isz %g. sim %g\n", isz, sim);
@@ -247,7 +257,6 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq
                             isz_size += mnv;
                             union_size += mxv;
                             ++lhi; ++rhi;
-                            continue;
                         } else if(lptr[lhi] < rptr[rhi]) {
                             union_size += lnptr[lhi++];
                         } else {
@@ -342,6 +351,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
                     std::lock_guard<std::mutex> guard(datq_lock);
                     datq.pop_front();
                 }
+                //std::fprintf(stderr, "Got from queue\n");
             }
         }
     });
@@ -352,6 +362,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
         auto datp = dat.get() - (asym ? 0: i + 1);
         OMP_PFOR_DYN
         for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
+            std::fprintf(stderr, "%zu is start, ns = %zu\n", start, ns);
             //std::fprintf(stderr, "Calling %zu, %zu (i < ns = %zu)\n", i, start, ns);
             datp[start] = compare(opts, result, i, start);
         }
@@ -366,7 +377,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
 }
 void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::fprintf(stderr, "Beginning cmp_core with options: \n");
-    DBG_ONLY(
+    //DBG_ONLY(
         if(opts.sspace_ == SPACE_SET) {
             std::fprintf(stderr, "Comparing sets\n");
         } else if(opts.sspace_ == SPACE_MULTISET) {
@@ -377,7 +388,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
             std::fprintf(stderr, "Comparing items in edit distance space\n");
         }
         std::fprintf(stderr, "Result type: %s\n", to_string(opts.kmer_result_).data());
-    )
+    //)
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
         if(result.signatures_.empty()) throw std::runtime_error("Empty signatures; trying to compress registers but don't have any");
     }
@@ -421,7 +432,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     } else if(opts.output_kind_ == DEDUP) {
         std::vector<size_t> ids;
         std::vector<std::vector<size_t>> constituents;
-        const double simthres = 0.9; // This will be changed in the future, but for now, this is hard-coded and dumb
+        //const double simthres = 0.9; // This will be changed in the future, but for now, this is hard-coded and dumb
         std::vector<size_t> order(result.names_.size());
         std::iota(order.begin(), order.end(), size_t(0));
         std::sort(order.begin(), order.end(), [&result](auto x, auto y) {return result.cardinalities_[x] < result.cardinalities_[y];});
@@ -429,7 +440,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
         // Use a given similarity threshold to then group items into the cluster
         // to which they are most similar if they are > than
         for(size_t idx = 0; idx < order.size(); ++idx) {
-            auto oid = order[idx];
+            //auto oid = order[idx];
         }
         throw std::runtime_error("Not implemented: Deduplication");
     }

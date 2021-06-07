@@ -715,7 +715,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     const bool save_idcounts = opts.save_kmercounts_ || opts.build_count_matrix_;
     //std::fprintf(stderr, "save ids: %d, save counts %d\n", save_ids, save_idcounts);
     if(opts.sspace_ == SPACE_SET) {
-        if(opts.one_perm_) {
+        if(opts.one_perm()) {
             sketching_data.opss.reset(new OPSetSketch(opts.sketchsize_));
             if(opts.count_threshold_ > 0) sketching_data.opss->set_mincount(opts.count_threshold_);
         } else sketching_data.fss.reset(new FullSetSketch(opts.sketchsize_, save_ids, save_idcounts));
