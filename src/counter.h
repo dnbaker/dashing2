@@ -70,7 +70,8 @@ struct Counter {
             if(it == c64_.end()) c64_.emplace(x, 1);
             else ++it->second;
         } else {
-            count_sketch_[s64_.mod(sketch::hash::WangHash::hash(x))] += (ct() == COUNTSKETCH_COUNTING && ((hv & BM64) == 0) ? -1.: 1.);
+            const auto hv = sketch::hash::WangHash::hash(x);
+            count_sketch_[s64_.mod(hv)] += (ct() == COUNTSKETCH_COUNTING && ((hv & BM64) == 0) ? -1.: 1.);
         }
     }
     template<typename IT, typename Alloc, typename CountT>

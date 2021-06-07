@@ -5,6 +5,7 @@
 #include "refine.h"
 #include "emitnn.h"
 #include "mio.hpp"
+#include "wcompare.h"
 
 
 namespace dashing2 {
@@ -22,13 +23,6 @@ static INLINE uint64_t reg2sig(RegT x) {
     }
 }
 
-struct PushBackCounter
-{
-  struct value_type { template<typename T> value_type(const T&) { } };
-  void push_back(const value_type &){++count;}
-  PushBackCounter(): count(0) {}
-  size_t count;
-};
 
 #ifdef _OPENMP
 #define OMP_STATIC_SCHED32 _Pragma("omp parallel for schedule(static, 32)")
@@ -67,9 +61,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
         }
     } else {
         RegT minreg = std::numeric_limits<RegT>::max(), maxreg = std::numeric_limits<RegT>::min();
-        OMP_ONLY(
-        #pragma omp parallel for simd reduction(min:minreg) reduction(max:maxreg)
-        )
+        OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
         for(size_t i = 0; i < nsigs; ++i) {
             minreg = std::min(minreg, sigs[i]);
             maxreg = std::max(maxreg, sigs[i]);
@@ -106,13 +98,13 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
     }
     return ret;
 }
+
+
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
     LSHDistType ret = std::numeric_limits<LSHDistType>::max();
-    const LSHDistType b2pow = -std::ldexp(1., -static_cast<int>(opts.fd_level_ * 8.));
-    const LSHDistType ib2pow = 1. / (1. + b2pow);
-    const LSHDistType invdenom = 1. / opts.sketchsize_;
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
-    const LSHDistType poisson_mult = 1. / std::max(1, opts.k_);
+    const LSHDistType invdenom = 1. / opts.sketchsize_;
+    auto sim2dist = [poisson_mult=1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
     if(opts.compressed_ptr_) {
         const bool bbit_c = opts.truncation_method_ > 0;
         std::pair<uint64_t, uint64_t> res{0, 0};
@@ -155,13 +147,14 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
         if(bbit_c) {
             // ret = ((num / denom) - (1. / 2^b)) / (1. - 1. / 2^b);
             // maps equality to 1 and down-estimates for account for collisions
-            ret = std::max(0., std::fma(res.first, invdenom, b2pow) * ib2pow);
+            const LSHDistType b2pow = -std::ldexp(1., -static_cast<int>(opts.fd_level_ * 8.));
+            ret = std::max(0., std::fma(res.first, invdenom, b2pow) / (1. + b2pow));
             if(opts.measure_ == INTERSECTION)
                 ret *= std::max((lhcard + rhcard) / (2. - (1. - ret)), 0.);
             else if(opts.measure_ == CONTAINMENT)
                 ret = std::max((lhcard + rhcard) / (2. - (1. - ret)), 0.) * ret / lhcard;
             else if(opts.measure_ == POISSON_LLR)
-                ret = -std::log(2. * ret / (1. + ret)) * poisson_mult;
+                ret = sim2dist(ret);
             else if(opts.measure_ == SYMMETRIC_CONTAINMENT)
                 ret = std::max((lhcard + rhcard) / (2. - (1. - ret)), 0.) * ret / std::min(lhcard, rhcard);
         } else {
@@ -187,7 +180,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             else if(opts.measure_ == SYMMETRIC_CONTAINMENT)
                 ret = (ret * mu) / std::min(lhcard, rhcard);
             else if(opts.measure_ == POISSON_LLR)
-                ret = -std::log(2. * ret / (1. + ret)) * poisson_mult;
+                ret = sim2dist(ret);
         }
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
@@ -206,29 +199,22 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             } else {
                 ucard = std::max(lhcard + rhcard / (2. - alpha - beta), 0.);
             }
-#if 0
-            std::fprintf(stderr, "for %zu/%zu, lhcard %g, rhcard %g, ucard %g\n", i, j, lhcard, rhcard, ucard);
-            std::fprintf(stderr, "alpha %g, beta %g, eq = %g, lhcard %g, rhcard %g, ucard %g\n", alpha, beta, eq, lhcard, rhcard, ucard);
-            std::fprintf(stderr, "gtlt %zu/%zu\n", size_t(gtlt.first), size_t(gtlt.second));
-#endif
-            LSHDistType isz = ucard * eq;
-            LSHDistType sim = eq;
+            LSHDistType isz = ucard * eq, sim = eq;
             //std::fprintf(stderr, "isz %g. sim %g\n", isz, sim);
             ret = opts.measure_ == SIMILARITY ? sim
                 : opts.measure_ == INTERSECTION ? isz
                 : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
-                : opts.measure_ == POISSON_LLR ? -std::log(2. * sim / (1. + sim)) * poisson_mult: -1.;
+                : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
             auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
             //std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%g\n", i, j, size_t(neq), ret);
             if(opts.measure_ == INTERSECTION) {
-                //std::fprintf(stderr, "cards: %g, %g, yielding %g isz\n", lhcard, rhcard, (lhcard + rhcard) / (1. + ret), (lhcard + rhcard) / (1. + ret) * ret);
                 ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / lhcard;
-            else if(opts.measure_ == POISSON_LLR) ret = -std::log(2. * ret / (1. + ret)) * poisson_mult;
+            else if(opts.measure_ == POISSON_LLR) ret = sim2dist(ret);
         }
     } else if(opts.exact_kmer_dist_) {
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
@@ -236,8 +222,6 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
         mio::mmap_source lhs(lpath), rhs(rpath);
         std::unique_ptr<mio::mmap_source> lhn, rhn;
         if(result.kmercountfiles_.size()) {
-            //if(!bns::isfile(result.kmercountfiles_.at(i))) throw std::runtime_error(std::string("Missing ") + result.kmercountfiles_[i]);
-            //if(!bns::isfile(result.kmercountfiles_.at(j))) throw std::runtime_error(std::string("Missing ") + result.kmercountfiles_[j]);
             lhn.reset(new mio::mmap_source(result.kmercountfiles_[i]));
             rhn.reset(new mio::mmap_source(result.kmercountfiles_[j]));
         }
@@ -246,26 +230,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
         const size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
         if(lhn && rhn) {
             const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
-            double union_size = 0, isz_size = 0; // maybe Kahan update?
-            for(size_t lhi = 0, rhi = 0; lhi < lhl || rhi < rhl;) {
-                if(lhi < lhl) {
-                    if(rhi < rhl) {
-                        if(lptr[lhi] == rptr[rhi]) {
-                            double mnv = std::min(lnptr[lhi], rnptr[rhi]);
-                            double mxv = std::max(lnptr[lhi], rnptr[rhi]);
-                            isz_size += mnv;
-                            union_size += mxv;
-                            ++lhi; ++rhi;
-                        } else if(lptr[lhi] < rptr[rhi]) {
-                            union_size += lnptr[lhi++];
-                        } else {
-                            union_size += rnptr[rhi++];
-                        }
-                    } else union_size += lnptr[lhi++];
-                } else if(rhi < rhl) {
-                    union_size += rnptr[rhi++];
-                }
-            }
+            auto [isz_size, union_size] = weighted_compare(lptr, lhl, rptr, rhl, lnptr, rnptr);
             double res = isz_size;
             double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
             if(opts.measure_ == INTERSECTION) {
@@ -280,9 +245,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
                 throw 1;
             ret = res;
         } else {
-            PushBackCounter c;
-            std::set_intersection(lptr, lptr + lhl, rptr, rptr + rhl, std::back_inserter(c));
-            double res = c.count; // res = isz
+            double res = set_compare(lptr, lhl, rptr, rhl);
             if(opts.measure_ == INTERSECTION) {
                 // do nothing
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) {
@@ -291,8 +254,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
                 res = res / (lhl + rhl - res);
             } else if(opts.measure_ == CONTAINMENT) {
                 res /= lhl;
-            } else
-                throw 1;
+            }
             ret = res;
         }
         // Compare exact representations, not compressed shrunk
@@ -337,10 +299,10 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
                     const size_t nw4 = (nwritten / 4) * 4;
                     size_t i;
                     for(i = 0; i < nw4; i += 4) {
-                        std::fprintf(ofp, "\t%0.7g\t%0.7g\t%0.7g\t%0.7g", datp[i], datp[i + 1], datp[i + 2], datp[i + 3]);
+                        std::fprintf(ofp, "\t%0.9g\t%0.9g\t%0.9g\t%0.9g", datp[i], datp[i + 1], datp[i + 2], datp[i + 3]);
                     }
                     for(; i < nwritten; ++i)
-                        std::fprintf(ofp, "\t%0.7g", datp[i]);
+                        std::fprintf(ofp, "\t%0.9g", datp[i]);
                     std::fputc('\n', ofp);
                 } else if(opts.output_format_ == MACHINE_READABLE) {
                     if(std::fwrite(datq.front().first.get(), sizeof(float), nwritten, ofp) != nwritten)
@@ -398,7 +360,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     // thresholded nn graphs
 
     // Step 1: Build LSH Index
-    std::vector<uint64_t> nperhashes{1, 2, 3, 4, 6, 8, 16};
+    std::vector<uint64_t> nperhashes{1, 2, 3, 4, 6, 8};
     std::vector<uint64_t> nperrows(nperhashes.size());
     for(size_t i = 0; i < nperhashes.size(); ++i) {
         const auto nh = nperhashes[i];
@@ -411,13 +373,9 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
             np = opts.sketchsize_ / nh * 6;
         } else np = opts.sketchsize_ / nh * 4;
     }
-#if 0
-    for(size_t i = 0; i < nperhashes.size(); ++i)
-        std::fprintf(stderr, "Layer %zu has %zu/%zu\n", i, size_t(nperhashes[i]), size_t(nperrows[i]));
-#endif
-    auto make_idx = [&]() {return opts.kmer_result_ >= FULL_MMER_SET
-        ? SetSketchIndex<uint64_t, LSHIDType>()
-        : SetSketchIndex<uint64_t, LSHIDType>(opts.sketchsize_, nperhashes, nperrows);
+    auto make_idx = [&]() -> SetSketchIndex<uint64_t, LSHIDType> {
+        if(opts.kmer_result_ >= FULL_MMER_SET) return {};
+        return SetSketchIndex<uint64_t, LSHIDType>(opts.sketchsize_, nperhashes, nperrows);
     };
     SetSketchIndex<uint64_t, LSHIDType> idx = make_idx();
 
