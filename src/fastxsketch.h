@@ -25,6 +25,7 @@ struct SketchingResult {
     std::vector<RegT> signatures_; // Signatures, packed into a single array
     std::vector<uint64_t> kmers_;  // This contains the k-mers corresponding to signatures, if asked for
     std::vector<double> kmercounts_; // Contains counts for k-mers, if desired
+    size_t nq = 0;
     const Dashing2Options *options_ = nullptr;
     size_t total_seqs() const {
         // Sum of nperfile if nonempty
@@ -34,6 +35,8 @@ struct SketchingResult {
     std::string str() const;
     static SketchingResult merge(SketchingResult *start, size_t n, const std::vector<std::string> &);
     void print();
+    size_t nqueries() const {return nq;}
+    void nqueries(size_t nqnew) {nq = nqnew;}
 };
 using FastxSketchingResult = SketchingResult;
 

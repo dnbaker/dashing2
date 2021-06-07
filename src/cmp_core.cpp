@@ -30,6 +30,12 @@ struct PushBackCounter
   size_t count;
 };
 
+#ifdef _OPENMP
+#define OMP_STATIC_SCHED32 _Pragma("omp parallel for schedule(static, 32)")
+#else
+#define OMP_STATIC_SCHED32
+#endif
+
 std::tuple<void *, double, double>
 make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs) {
     std::tuple<void *, double, double> ret = {nullptr, 0., 0.};
@@ -42,26 +48,26 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
     assert(fd != 0.5 || sigs.size() % 2 == 0);
     if(truncation_method > 0) {
         std::fprintf(stderr, "Performing %d-bit compression\n", int(fd * 8.));
-        if(fd == 8) {
-            std::transform(sigs.begin(), sigs.end(), (uint64_t *)compressed_reps, reg2sig);
-        } else if(fd == 4) {
-            std::transform(sigs.begin(), sigs.end(), (uint32_t *)compressed_reps, reg2sig);
-        } else if(fd == 2) {
-            std::transform(sigs.begin(), sigs.end(), (uint16_t *)compressed_reps, reg2sig);
-        } else if(fd == 1) {
-            std::transform(sigs.begin(), sigs.end(), (uint8_t *)compressed_reps, reg2sig);
-        } else if(fd == 0.5) {
+        if(fd == 0.5) {
             uint8_t *ptr = (uint8_t *)compressed_reps;
+            OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs / 2; ++i) {
                 auto sig1 = sigs[2 * i], sig2 = sigs[2 * i + 1];
                 ptr[i] = (reg2sig(sig1) & 0xfu) | ((reg2sig(sig2) & 0xfu) << 4);
-                //std::fprintf(stderr, "Double reg = %u\n", ptr[i], (reg2sig(sig1) & 0xfu), (reg2sig(sig2) & 0xfu) << 4);
             }
-        } else __builtin_unreachable();
+        } else {
+            OMP_STATIC_SCHED32
+            for(size_t i = 0; i < nsigs; ++i) {
+                const auto sig = reg2sig(sigs[i]);
+                if(fd == 8) ((uint64_t *)compressed_reps)[i] = sig;
+                else if(fd == 4) ((uint32_t *)compressed_reps)[i] = sig;
+                else if(fd == 2) ((uint16_t *)compressed_reps)[i] = sig;
+                else ((uint8_t *)compressed_reps)[i] = sig;
+            }
+        }
     } else {
-        std::fprintf(stderr, "Performing logarithmic %d-bit compression\n", int(fd * 8.));
         RegT minreg = std::numeric_limits<RegT>::max(), maxreg = std::numeric_limits<RegT>::min();
-        #pragma omp parallel for simd
+        #pragma omp parallel for simd reduction(min:minreg) reduction(max:maxreg)
         for(size_t i = 0; i < nsigs; ++i) {
             minreg = std::min(minreg, sigs[i]);
             maxreg = std::max(maxreg, sigs[i]);
@@ -73,33 +79,28 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
         std::get<1>(ret) = a;
         std::get<2>(ret) = b;
         const RegT logbinv = 1. / std::log1p(b - 1.);
-        if(fd == 4) {
-            std::transform(sigs.begin(), sigs.end(), (uint32_t *)compressed_reps,
-                           [q,a,logbinv](RegT x) {
-                 return std::max(uint32_t(0), std::min(uint32_t(q) + 1, static_cast<uint32_t>((1. - std::log(x / a) * logbinv))));
-            });
-        } else if(fd == 8) {
-            std::transform(sigs.begin(), sigs.end(), (uint64_t *)compressed_reps,
-                           [q,a,logbinv](RegT x)
-            {
-                 return std::min(uint64_t(q) + 1, static_cast<uint64_t>((1. - std::log(x / a) * logbinv)));
-            });
-        } else if(fd == 2) {
-            std::transform(sigs.begin(), sigs.end(), (uint16_t *)compressed_reps,
-                           [q,a,logbinv](RegT x) {
-                 return std::max(int64_t(0), std::min(int64_t(q) + 1, static_cast<int64_t>((1. - std::log(x / a) * logbinv))));
-            });
-        } else if(fd == 1) {
-            std::transform(sigs.begin(), sigs.end(), (uint8_t *)compressed_reps,
-                           [q,a,logbinv](RegT x) {
-                 return std::max(int(0), std::min(int(q) + 1, static_cast<int>((1. - std::log(x / a) * logbinv))));
-            });
-        } else if(fd == 0.5) {
-            uint8_t *ptr = (uint8_t *)compressed_reps;
+        if(fd == 0.5) {
+            OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs / 2; ++i) {
-                uint8_t lower_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i] / a) * logbinv))));
-                uint8_t upper_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i + 1] / a) * logbinv)))) << 4;
-                ptr[i] = lower_half | upper_half;
+                const uint8_t lower_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i] / a) * logbinv))));
+                const uint8_t upper_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i + 1] / a) * logbinv)))) << 4;
+                ((uint8_t *)compressed_reps)[i] = lower_half | upper_half;
+            }
+        } else {
+            OMP_STATIC_SCHED32
+            for(size_t i = 0, e = sigs.size(); i < e; ++i) {
+                RegT x = sigs[i];
+                const RegT sub = 1. - std::log(x / a) * logbinv;
+                if(fd == 8)
+                    ((uint64_t *)compressed_reps)[i] == std::min(uint64_t(q) + 1, static_cast<uint64_t>(sub));
+                else {
+                    const int64_t isub = std::max(int64_t(0), std::min(int64_t(q + 1), static_cast<int64_t>(sub)));
+                    if(fd == 4) ((uint32_t *)compressed_reps)[i] = isub;
+                    else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
+                    else {
+                        assert(fd == 1); ((uint8_t *)compressed_reps)[i] = isub;
+                    }
+                }
             }
         }
     }

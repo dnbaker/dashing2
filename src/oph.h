@@ -120,7 +120,6 @@ struct LazyOnePermSetSketch {
     SigT *data() {
         as_sigs_.reset(new std::vector<SigT>(registers_.size()));
         const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
-        size_t idx = 0;
         const SigT mul = -SigT(1) / size();
         const SigT omul = SigT(1) / modv;
         for(size_t i = 0; i < size(); ++i) {

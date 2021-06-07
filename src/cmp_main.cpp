@@ -39,6 +39,7 @@ void cmp_usage() {
     std::fprintf(stderr, "dashing2 cmp usage is not written.\n");
 }
 void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std::vector<std::string> &paths) {
+    std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());
     auto &pf = paths.front();
     struct stat st;
     ::stat(pf.data(), &st);
@@ -271,6 +272,7 @@ int cmp_main(int argc, char **argv) {
         load_results(distopts, result, paths);
     } else {
         result = sketch_core(distopts, paths, outfile);
+        result.nqueries(nq);
     }
     cmp_core(distopts, result);
     return 0;
