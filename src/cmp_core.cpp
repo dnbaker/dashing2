@@ -163,7 +163,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             else if(opts.measure_ == CONTAINMENT)
                 ret = std::max((lhcard + rhcard) / (2. - (1. - ret)), 0.) * ret / lhcard;
             else if(opts.measure_ == POISSON_LLR)
-                ret = -std::log(ret) * poisson_mult;
+                ret = -std::log(2. * ret / (1. + ret)) * poisson_mult;
             else if(opts.measure_ == SYMMETRIC_CONTAINMENT)
                 ret = std::max((lhcard + rhcard) / (2. - (1. - ret)), 0.) * ret / std::min(lhcard, rhcard);
         } else {
@@ -189,7 +189,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             else if(opts.measure_ == SYMMETRIC_CONTAINMENT)
                 ret = (ret * mu) / std::min(lhcard, rhcard);
             else if(opts.measure_ == POISSON_LLR)
-                ret = -std::log(ret) * poisson_mult;
+                ret = -std::log(2. * ret / (1. + ret)) * poisson_mult;
         }
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
@@ -219,7 +219,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             ret = opts.measure_ == SIMILARITY ? sim
                 : opts.measure_ == INTERSECTION ? isz
                 : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
-                : opts.measure_ == POISSON_LLR ? -std::log(sim) * poisson_mult: -1.;
+                : opts.measure_ == POISSON_LLR ? -std::log(2. * sim / (1. + sim)) * poisson_mult: -1.;
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
             auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
@@ -230,7 +230,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
                 ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / lhcard;
-            else if(opts.measure_ == POISSON_LLR) ret = -std::log(ret) * poisson_mult;
+            else if(opts.measure_ == POISSON_LLR) ret = -std::log(2. * ret / (1. + ret)) * poisson_mult;
         }
     } else if(opts.exact_kmer_dist_) {
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
