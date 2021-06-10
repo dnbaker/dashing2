@@ -13,40 +13,47 @@ struct PushBackCounter
 };
 
 template<size_t MODE=0>
-std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl, const uint64_t *rptr, size_t rhl, const double *lnptr, const double *rnptr) {
-    double union_size = 0, isz_size = 0; // maybe Kahan update?
-    double union_carry = 0., isz_carry = 0.;
-    auto increment = [](auto &sum, auto &carry, auto inc) {
-        if constexpr(MODE)
-            sketch::kahan::update(sum, carry, inc);
-        else
-            sum += inc;
+std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl, const double lhsum, const uint64_t *rptr, size_t rhl, const double rhsum, const double *lnptr, const double *rnptr) {
+    double isz_size = 0, isz_carry = 0.;
+    auto increment = [](auto &sum, auto &carry, auto inc) __attribute__((__always_inline__)) {
+        if(MODE) sketch::kahan::update(sum, carry, inc);
+        else    sum += inc;
     };
-    for(size_t lhi = 0, rhi = 0; lhi < lhl || rhi < rhl;) {
-        if(lhi < lhl) {
-            if(rhi < rhl) {
-                if(lptr[lhi] == rptr[rhi]) {
-                    double mnv = std::min(lnptr[lhi], rnptr[rhi]);
-                    double mxv = std::max(lnptr[lhi], rnptr[rhi]);
-                    increment(isz_size, isz_carry, mnv);
-                    increment(union_size, union_carry, mxv);
-                    ++lhi; ++rhi;
-                } else if(lptr[lhi] < rptr[rhi]) {
-                    increment(union_size, union_carry, lnptr[lhi++]);
-                } else {
-                    increment(union_size, union_carry, rnptr[rhi++]);
-                }
-            } else increment(union_size, union_carry, lnptr[lhi++]);
-        } else if(rhi < rhl) increment(union_size, union_carry, rnptr[rhi++]);
+    // TODO:
+    for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
+        if(lptr[lhi] == rptr[rhi]) {
+            increment(isz_size, isz_carry, std::min(lnptr[lhi++], rnptr[rhi++]));
+        } else {
+            const bool v = lptr[lhi] < rptr[rhi];
+            lhi += v; rhi += !v;
+        }
     }
-    return std::make_pair(isz_size, union_size);
+    return std::make_pair(isz_size, lhsum + rhsum - isz_size);
 }
-std::pair<double, double> weighted_compare(const uint64_t *lptr, size_t lhl, const uint64_t *rptr, size_t rhl, double *lnptr, double *rnptr, bool kahan) {
-    return kahan ? weighted_compare_mode<1>(lptr, lhl, rptr, rhl, lnptr, rnptr): weighted_compare_mode<0>(lptr, lhl, rptr, rhl, lnptr, rnptr);
+std::pair<double, double> weighted_compare(const uint64_t *lptr, size_t lhl, const double lhsum, const uint64_t *rptr, size_t rhl, const double rhsum, const double *lnptr, const double *rnptr, bool kahan) {
+    return kahan ? weighted_compare_mode<1>(lptr, lhl, lhsum, rptr, rhl, rhsum, lnptr, rnptr): weighted_compare_mode<0>(lptr, lhl, lhsum, rptr, rhl, rhsum, lnptr, rnptr);
 }
 size_t set_compare(const uint64_t *lptr, size_t lhl, const uint64_t *rptr, size_t rhl) {
     PushBackCounter c;
     std::set_intersection(lptr, lptr + lhl, rptr, rptr + rhl, std::back_inserter(c));
     return c.count;
 }
+
+double cosine_compare(const uint64_t *lptr, size_t lhl, [[maybe_unused]] const double lhnorm, const uint64_t *rptr, size_t rhl, [[maybe_unused]] const double rhnorm, const double *lnptr, const double *rnptr, bool kahan) {
+    double dotprod = 0, carry = 0.;
+    auto increment = [kahan](auto &norm, auto &carry, auto inc) __attribute__((__always_inline__)) {
+        if(kahan) sketch::kahan::update(norm, carry, inc); else norm += inc;
+    };
+    // TODO:
+    for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
+        if(lptr[lhi] == rptr[rhi]) {
+            increment(dotprod, carry, lnptr[lhi++] * rnptr[rhi++]);
+        } else {
+            const bool v = lptr[lhi] < rptr[rhi];
+            lhi += v; rhi += !v;
+        }
+    }
+    return dotprod;
 }
+
+} // namespace dashing2

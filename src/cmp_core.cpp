@@ -228,9 +228,9 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
         const size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
         if(lhn && rhn) {
             const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
-            auto [isz_size, union_size] = weighted_compare(lptr, lhl, rptr, rhl, lnptr, rnptr);
-            double res = isz_size;
             double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
+            auto [isz_size, union_size] = weighted_compare(lptr, lhl, lhc, rptr, rhl, rhc, lnptr, rnptr);
+            double res = isz_size;
             if(opts.measure_ == INTERSECTION) {
                 // do nothing
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) {
