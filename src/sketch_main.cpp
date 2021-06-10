@@ -1,6 +1,7 @@
 #include "sketch_core.h"
 #include "options.h"
 #include "cmp_main.h"
+#include <filesystem>
 
 
 
@@ -145,6 +146,10 @@ int sketch_main(int argc, char **argv) {
         SHARED_FIELDS
         case '?': case 'h': sketch_usage(); return 1;
     }}
+    const std::string ex(std::filesystem::absolute(std::filesystem::path(argv[-1])));
+    std::string cmd(ex);
+    for(char **s = argv; *s; cmd += std::string(" ") + *s++);
+    std::fprintf(stderr, "[Dashing2] Invocation: %s ", cmd.data());
     if(nt < 0) {
         if(char *s = std::getenv("OMP_NUM_THREADS")) nt = std::atoi(s);
         else nt = 1;
@@ -176,10 +181,13 @@ int sketch_main(int argc, char **argv) {
         .save_kmers(save_kmers)
         .outprefix(outprefix)
         .save_kmercounts(save_kmercounts)
-        .parse_by_seq(parse_by_seq);
+        .parse_by_seq(parse_by_seq)
+        .cmd(cmd).count_threshold(count_threshold)
     std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);
-    opts.count_threshold_ = count_threshold;
-    if(opts.sspace_ == SPACE_PSET && opts.kmer_result_ == ONE_PERM) opts.kmer_result_ = FULL_SETSKETCH;
+    if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
+            && opts.kmer_result_ == ONE_PERM) {
+        opts.kmer_result_ = FULL_SETSKETCH;
+    }
     if(paths.empty()) {
         std::fprintf(stderr, "No paths provided. See usage.\n");
         sketch_usage();

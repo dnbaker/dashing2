@@ -170,7 +170,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         else if(!opss.empty()) opss[tid].reset();
         else if(!bmhs.empty()) bmhs[tid].reset();
         else if(!pmhs.empty()) pmhs[tid].reset();
-        else if(!omhs.empty()) omhs[tid].reset();
         //else throw std::runtime_error("Unexpected: no sketches are available");
         if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();
     };
@@ -287,7 +286,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 for_each_substr([&](const std::string &subpath) {
                     auto lfunc = [&](auto x) {if(!opts.fs_ || !opts.fs_->in_set(x)) func(x);};
 #define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
-                    if(opts.w_ > opts.k_ || opts.k_ <= 64) {
+                    if(!opts.parse_protein() && (opts.w_ > opts.k_ || opts.k_ <= 64)) {
                         if(opts.k_ < 32) {
                             auto encoder(opts.enc_);
                             FUNC_FE(encoder.for_each);
@@ -574,7 +573,6 @@ struct OptSketcher {
         if(pmh) pmh->reset();
         if(opss) opss->reset();
         if(fss) fss->reset();
-        if(omh) omh->reset();
         if(ctr) ctr->reset();
         rh_.reset();
         rh128_.reset();

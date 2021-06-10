@@ -88,7 +88,8 @@ struct Dashing2Options {
     bool build_count_matrix_ = false;
     bool build_sig_matrix_ = true;
     std::string outprefix_;
-    std::string spacing;
+    std::string spacing_;
+    std::string cmd_;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
@@ -100,89 +101,44 @@ struct Dashing2Options {
     std::unique_ptr<FilterSet> fs_;
     
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
-        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), spacing(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
+        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
         std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, space = %s, datatype = %s\n", k, w, ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
         if(nt <= 0) {
+            DBG_ONLY(std::fprintf(stderr, "[%s:%s:%d] num threads < 0, checking OMP_NUM_THREADS\n", __FILE__, __func__, __LINE__);)
             if(char *s = std::getenv("OMP_NUM_THREADS"))
                 nt = std::max(std::atoi(s), 1);
             else nt = 1;
         }
         nthreads(nt);
     }
-    bool trim_folder_paths() const {
-        return trim_folder_paths_ || outprefix_.size();
-    }
-    auto w() const {return w_;}
-    bool canonicalize() const {return enc_.canonicalize();}
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
-    std::string to_string() const {
-        size_t m = 4096;
-        std::string ret(m, '\0');
-        char *s = ret.data();
-        auto pos = std::sprintf(s, "Dashing2Options;k:%d", k_);
-        if(w_ > 0) pos += std::sprintf(&ret[pos], ";w:%d", w_);
-        pos += std::sprintf(&ret[pos], ";%s", parse_by_seq_ ? "parsebyseq": "parsebyfile");
-        if(trim_chr_) pos += std::sprintf(&ret[pos], ";trimchr");
-        pos += std::sprintf(&ret[pos], ";sketchsize:%zu", sketchsize_);
-        if(count_threshold_ > 0)
-            pos += std::sprintf(&ret[pos], ";%0.8g", count_threshold_);
-        if(kmer_result_ == ONE_PERM) {
-            pos += std::sprintf(&ret[pos], ";sketchtype:onepermsetsketch");
-        } else if(kmer_result_ == FULL_SETSKETCH) {
-            if(sspace_ == SPACE_SET)
-                pos += std::sprintf(&ret[pos], ";sketchtype:fullsetsketch");
-            else if(sspace_ == SPACE_MULTISET)
-                pos += std::sprintf(&ret[pos], ";sketchtype:bagminhash");
-            else if(sspace_ == SPACE_PSET)
-                pos += std::sprintf(&ret[pos], ";sketchtype:probminhash");
-            else
-                pos += std::sprintf(&ret[pos], ";sketchtype:orderminhash");
-        } else if(kmer_result_ == FULL_MMER_SEQUENCE) {
-            pos += std::sprintf(&ret[pos], ";sketchtype:mmerseq%d", use128() ? 128: 64);
-        } else if(kmer_result_ == FULL_MMER_SET || kmer_result_ == FULL_MMER_COUNTDICT) {
-            pos += std::sprintf(&ret[pos], ";sketchtype:mmerset%d", use128() ? 128: 64);
-            if(kmer_result_ == FULL_MMER_COUNTDICT) pos += std::sprintf(&ret[pos], ",kmercountsf64");
-        }
-        pos += std::sprintf(&ret[pos], ";%s", ::dashing2::to_string(dtype_).data());
-        if(spacing.size()) {
-            pos += std::sprintf(&ret[pos], ";spacing:%s", spacing.data());
-        }
-        if(outprefix_.size()) pos += std::sprintf(&ret[pos], ";outprefix:%s", outprefix_.data());
-        if(cssize_) pos += std::sprintf(&ret[pos], ";counting=countsketch%zu\n", cssize_);
-        if(bed_parse_normalize_intervals_) pos += std::sprintf(&ret[pos], ";normalize_intervals");
-        if(by_chrom_) pos += std::sprintf(&ret[pos], ";sketchbychrom");
-        if(homopolymer_compress_minimizers_) pos += std::sprintf(&ret[pos], ";hp-compress-minimizers");
-        if(canonicalize()) pos += std::sprintf(&ret[pos], ";canon");
-        if(fs_) {
-            pos += std::sprintf(&ret[pos], ";%s", fs_->to_string().data());
-        }
-        ret.resize(pos);
-        return ret;
-    }
-    Dashing2Options &parse_by_seq(bool v) {parse_by_seq_ = v; return *this;}
+    std::string to_string() const;
+    void validate const ();
+#define D2O(name, oname)\
+    Dashing2Options &oname(decltype(name) x) {name = x; return *this;}\
+    std::add_const_t<decltype(name)> &oname() const {return name;}\
+    decltype(name) &oname() {return name;}
+#define D2O2(name) D2O(name##_, name)
+    D2O2(cmd) D2O2(outprefix) D2O2(save_kmers)
+    D2O2(save_kmercounts) D2O2(homopolymer_compress_minimizers)
+    D2O2(kmer_result) D2O2(use128) D2O2(cache_sketches)
+    D2O2(sketchsize) D2O2(nthreads) D2O2(cssize) D2O2(parse_by_seq)
+#undef D2O
+#undef D2O2
+    // Getters and setters for all of the above
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
     Dashing2Options &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
-    Dashing2Options &sketchsize(size_t sz) {sketchsize_ = sz; return *this;}
-    Dashing2Options &use128(size_t sz) {use128_ = sz; return *this;}
-    Dashing2Options &cssize(size_t sz) {cssize_ = sz; return *this;}
-    Dashing2Options &nthreads(unsigned nthreads) {nthreads_ = nthreads; OMP_ONLY(omp_set_num_threads(nthreads);) return *this;}
-    Dashing2Options &kmer_result(KmerSketchResultType kmer_result) {kmer_result_ = kmer_result; return *this;}
-    Dashing2Options &cache_sketches(bool v) {cache_sketches_ = v;return *this;}
-    Dashing2Options &save_kmers(bool v) {save_kmers_ = v;return *this;}
-    Dashing2Options &save_kmercounts(bool v) {save_kmercounts_ = v;return *this;}
-    Dashing2Options &outprefix(const std::string &v) {outprefix_ = v;return *this;}
-    bool parse_by_seq() {return parse_by_seq_;}
-    std::string &outprefix() {return outprefix_;}
-    const std::string &outprefix() const {return outprefix_;}
-    bool cache_sketches() const {return cache_sketches_;}
-    unsigned nthreads() const {return nthreads_;}
-    unsigned kmer_result() const {return kmer_result_;}
-    size_t sketchsize() const {return sketchsize_;}
-    bool use128() const {return use128_;}
-    size_t cssize() const {return cssize_;}
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
+    bool trim_folder_paths() const {
+        return trim_folder_paths_ || outprefix_.size();
+    }
+    bool canonicalize() const {return enc_.canonicalize();}
+    void canonicalize(bool val) {
+        enc_.canonicalize(val);
+    }
+    auto w() const {return w_;}
 };
 
 

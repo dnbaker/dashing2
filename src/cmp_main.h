@@ -89,6 +89,7 @@ struct Dashing2DistOptions: public Dashing2Options {
         std::free(compressed_ptr_);
     }
     void validate() const {
+        Dashing2Options::validate();
         if(num_neighbors_ > 0 && min_similarity_ > 0.) {
             throw std::invalid_argument("invalid: nn > 0 and minsim > 0. Pick either top-k or minimum similarity. (Can't do both.)");
         }
