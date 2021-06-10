@@ -37,6 +37,7 @@ struct IntervalSketchResult {
     using Map = ska::flat_hash_map<std::string, std::vector<RegT>>;
     std::unique_ptr<Map> chrmap_;
     std::unique_ptr<std::vector<RegT>> global_;
+    double card_;
 };
 
 template<typename F>
@@ -74,7 +75,6 @@ struct Dashing2Options {
     bool trim_chr_ = true;
     size_t sketchsize_ = 2048;
     double count_threshold_ = 0.;
-    bool one_perm_ = true;
     KmerSketchResultType kmer_result_ = ONE_PERM;
     bool by_chrom_ = false;
     bool bed_parse_normalize_intervals_ = false;
@@ -99,7 +99,6 @@ struct Dashing2Options {
     unsigned nthreads_;
 
     std::unique_ptr<FilterSet> fs_;
-    
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
         std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, space = %s, datatype = %s\n", k, w, ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
@@ -139,6 +138,8 @@ struct Dashing2Options {
         enc_.canonicalize(val);
     }
     auto w() const {return w_;}
+    bool one_perm() const {return kmer_result_ == ONE_PERM && sspace_ == SPACE_SET;}
+    double count_threshold() const {return count_threshold_;}
 };
 
 

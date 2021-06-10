@@ -9,7 +9,7 @@ def parse_knn(path, idsize=4, dstsize=4):
            idsize=4
                Size of integers. Defaults to 4, can be changed with -DLSHIDTYPE=TYPE
                For instance, if compiled with -DLSHIDTYPE="uint64_t", you would need to use 8
-           dstsize=4 
+           dstsize=4
                Size of distance floating-point values. Defaults to 4 (floats), can be changed with -DDASHING2_INDEX_FLOAT_TYPE=TYPE
                For instance, if compiled with -DDASHING2_INDEX_FLOAT_TYPE="double", you would need to use 8
     Output: scipy.sparse.csr_matrix

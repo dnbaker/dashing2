@@ -23,6 +23,7 @@ enum OptArg{
     OPTARG_BBIT_SIGS,
     OPTARG_EXACT_KMER_DIST,
     OPTARG_ISZ,
+    OPTARG_BED_NORMALIZE,
     OPTARG_DUMMY
 };
 
@@ -41,7 +42,8 @@ enum OptArg{
     LO_FLAG("edit-distance", 'E', s, SPACE_EDIT_DISTANCE)\
     LO_FLAG("set", 'H', res, FULL_MMER_SET)\
     LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)\
-    LO_FLAG("full-setsketch", 'Z', res, FULL_SETSKETCH)\
+    {"full-setsketch", no_argument, 0, 'Z'},\
+    {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
     LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
 
 

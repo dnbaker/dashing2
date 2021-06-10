@@ -115,6 +115,7 @@ int sketch_main(int argc, char **argv) {
     bool parse_by_seq = false;
     Measure measure = SIMILARITY;
     // By default, use full hash values, but allow people to enable smaller
+    bool normalize_bed = false;
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
@@ -135,6 +136,7 @@ int sketch_main(int argc, char **argv) {
         case 'H': res = FULL_MMER_SET; break;
         case 'J': res = FULL_MMER_COUNTDICT; break;
         case 'G': res = FULL_MMER_SEQUENCE; break;
+        case OPTARG_BED_NORMALIZE: normalize_bed = true; break;
         case '2': use128 = true; break;
         case 'm': count_threshold = std::atof(optarg); break;
         case 'F': ffile = optarg; break;
@@ -188,12 +190,14 @@ int sketch_main(int argc, char **argv) {
             && opts.kmer_result_ == ONE_PERM) {
         opts.kmer_result_ = FULL_SETSKETCH;
     }
+    opts.bed_parse_normalize_intervals_ = normalize_bed;
     if(paths.empty()) {
         std::fprintf(stderr, "No paths provided. See usage.\n");
         sketch_usage();
         return 1;
     }
     SketchingResult result = sketch_core(opts, paths, outfile);
+    result.nqueries(nq); // TODO: use nqueries to perform asymmetric comparisons
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
         distopts.measure_ = measure;

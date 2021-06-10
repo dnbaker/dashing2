@@ -12,7 +12,6 @@ template<typename T, size_t pow2=false>
 struct LazyOnePermSetSketch {
     size_t m_;
     // Solution: hash reversibly, track the maximum IDs
-    
     std::vector<T> registers_;
     static_assert(std::is_integral_v<T> || std::is_same_v<T, u128_t>, "LazyOnePermSetSketch is to be used with integral types");
     std::vector<double> counts_;
@@ -118,18 +117,14 @@ struct LazyOnePermSetSketch {
         return *p;
     }
     SigT *data() {
+        if(as_sigs_) return as_sigs->data();
         as_sigs_.reset(new std::vector<SigT>(registers_.size()));
+        auto asp = as_sigs->data();
         const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
-        size_t idx = 0;
-        const SigT mul = -SigT(1) / size();
-        const SigT omul = SigT(1) / modv;
+        const SigT mul = -SigT(1) / size(), omul = SigT(1) / modv;
         for(size_t i = 0; i < size(); ++i) {
-            SigT v;
             const auto lv = registers_[i] / m_;
-            if(lv) {
-                v = mul * std::log(omul * lv);
-            } else v = 0.;
-            as_sigs_->operator[](i) = v;
+            (*as_sigs)[i] = lv ? mul * std::log(omul * lv): SigT(0);
         }
         return as_sigs_->data();
     }

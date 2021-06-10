@@ -39,6 +39,7 @@ void cmp_usage() {
     std::fprintf(stderr, "dashing2 cmp usage is not written.\n");
 }
 void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std::vector<std::string> &paths) {
+    std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());
     auto &pf = paths.front();
     struct stat st;
     ::stat(pf.data(), &st);
@@ -149,6 +150,7 @@ int cmp_main(int argc, char **argv) {
     std::string outprefix;
     OutputKind ok = SYMMETRIC_ALL_PAIRS;
     std::string cmpout; // Only used if distances are also requested
+    bool normalize_bed = false;
     int topk_threshold = -1;
     int truncate_mode = 0;
     double nbytes_for_fastdists = sizeof(RegT);
@@ -178,6 +180,7 @@ int cmp_main(int argc, char **argv) {
         case 'm': count_threshold = std::atof(optarg); break;
         case 'F': ffile = optarg; break;
         case 'Q': qfile = optarg; break;
+        case OPTARG_BED_NORMALIZE: normalize_bed = true; break;
         case OPTARG_ISZ: measure = INTERSECTION; break;
         case OPTARG_REGBYTES: nbytes_for_fastdists = std::atof(optarg); break;
         case OPTARG_OUTPREF: {
@@ -214,6 +217,23 @@ int cmp_main(int argc, char **argv) {
         .sketchsize(sketchsize).save_kmers(save_kmers).outprefix(outprefix)
         .save_kmercounts(save_kmercounts).parse_by_seq(parse_by_seq)
         .count_threshold(count_threshold);
+=======
+    if(nbytes_for_fastdists == 0.5 && (opts.sketchsize_ % 2)) {
+        std::fprintf(stderr, "Increasing sketch size to a multiple of 2 to avoid cutting in half\n");
+        ++opts.sketchsize_;
+    }
+    opts.nthreads(nt)
+        .kmer_result(res)
+        .cache_sketches(cache)
+        .cssize(cssize)
+        .use128(use128)
+        .sketchsize(sketchsize)
+        .save_kmers(save_kmers)
+        .outprefix(outprefix)
+        .save_kmercounts(save_kmercounts)
+        .parse_by_seq(parse_by_seq).count_threshold(count_threshold);
+    opts.bed_parse_normalize_intervals_ = normalize_bed;
+>>>>>>> draftb
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
     distopts.measure_ = measure;
     SketchingResult result;
@@ -264,6 +284,7 @@ int cmp_main(int argc, char **argv) {
         load_results(distopts, result, paths);
     } else {
         result = sketch_core(distopts, paths, outfile);
+        result.nqueries(nq);
     }
     cmp_core(distopts, result);
     return 0;

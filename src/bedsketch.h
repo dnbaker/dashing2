@@ -4,8 +4,7 @@
 #include "d2.h"
 
 namespace dashing2 {
-
-std::vector<RegT> bed2sketch(std::string path, const Dashing2Options &opts);
+std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const Dashing2Options &opts);
 }
 
 #endif

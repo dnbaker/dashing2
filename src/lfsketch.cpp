@@ -38,11 +38,12 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     if(opts.sspace_ > SPACE_PSET) throw std::invalid_argument("Can't do edit distance for Splice junction files");
     LFResult ret;
     ret.filenames() = {path};
-    std::unique_ptr<char[]> gzbuf(new char[65536]);
+    std::unique_ptr<char[]> gzbuf(new char[GZBUFSZ]);
     gzFile ifp;
     if((ifp = gzopen(path.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to open input file ") + path);
+    constexpr size_t GZ_BUFFER_SIZE = 524288;
     char *line;
-    if(!(line = gzgets(ifp, gzbuf.get(), 65536))) throw 1;
+    if(!(line = gzgets(ifp, gzbuf.get(), GZ_BUFFER_SIZE))) throw 1;
 
     for(char *s = std::strchr(line, ' ') + 1;s;) {
         char *s2 = std::strchr(s, ' ');
@@ -64,7 +65,7 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     std::unique_ptr<std::vector<BagMinHash>> bmhs;
     std::unique_ptr<std::vector<ProbMinHash>> pmhs;
     if(opts.sspace_ == SPACE_SET) {
-        if(opts.one_perm_) {
+        if(opts.one_perm()) {
             opss.reset(new std::vector<OPSetSketch>());
             while(opss->size() < nsamples) opss->emplace_back(opts.sketchsize_);
         } else
@@ -76,17 +77,13 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     }
     auto t = std::chrono::high_resolution_clock::now();
     size_t ln = 0;
-    for(char *line;(line = gzgets(ifp, gzbuf.get(), 65536)) != nullptr;) {
+    for(char *line;(line = gzgets(ifp, gzbuf.get(), GZ_BUFFER_SIZE)) != nullptr;) {
         if(++ln % 1024 == 0) std::fprintf(stderr, "%zu lines read in %gms\n", ln, std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t).count());
         char *lend = line;
         int ncolons = 0;
-        while(*lend && ncolons < 3) {
-            if(*lend++ == ':')
-                ++ncolons;
-        }
-        if(opts.trim_chr_ && (*line == 'c' || *line == 'C') && std::memcmp(line + 1, "hr", 2) == 0) {
+        while(*lend && ncolons < 3) ncolons += (*lend++ == ':');
+        if(opts.trim_chr_ && (*line == 'c' || *line == 'C') && std::memcmp(line + 1, "hr", 2) == 0)
             line += 3;
-        }
         std::string splice_site(line, lend - 1);
         const uint64_t splice_hash = std::hash<std::string>{}(splice_site);
         ret.splice_sites().push_back(std::move(splice_site));
