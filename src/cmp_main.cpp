@@ -217,23 +217,7 @@ int cmp_main(int argc, char **argv) {
         .sketchsize(sketchsize).save_kmers(save_kmers).outprefix(outprefix)
         .save_kmercounts(save_kmercounts).parse_by_seq(parse_by_seq)
         .count_threshold(count_threshold);
-=======
-    if(nbytes_for_fastdists == 0.5 && (opts.sketchsize_ % 2)) {
-        std::fprintf(stderr, "Increasing sketch size to a multiple of 2 to avoid cutting in half\n");
-        ++opts.sketchsize_;
-    }
-    opts.nthreads(nt)
-        .kmer_result(res)
-        .cache_sketches(cache)
-        .cssize(cssize)
-        .use128(use128)
-        .sketchsize(sketchsize)
-        .save_kmers(save_kmers)
-        .outprefix(outprefix)
-        .save_kmercounts(save_kmercounts)
-        .parse_by_seq(parse_by_seq).count_threshold(count_threshold);
     opts.bed_parse_normalize_intervals_ = normalize_bed;
->>>>>>> draftb
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
     distopts.measure_ = measure;
     SketchingResult result;

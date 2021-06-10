@@ -97,24 +97,12 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
     }
     return ret;
 }
-LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
-    //std::fprintf(stderr, "Comparing: %zu/%zu\n", i, j);
-    LSHDistType ret = std::numeric_limits<LSHDistType>::max();
-    const LSHDistType b2pow = -std::ldexp(1., -static_cast<int>(opts.fd_level_ * 8.));
-    const LSHDistType ib2pow = 1. / (1. + b2pow);
-    const LSHDistType invdenom = 1. / opts.sketchsize_;
-    //std::fprintf(stderr, "cardinalities size: %zu. i: %zu. j: %zu\n", result.cardinalities_.size(), i, j);
-    const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
-    const LSHDistType poisson_mult = 1. / std::max(1, opts.k_);
-=======
-
 
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
     LSHDistType ret = std::numeric_limits<LSHDistType>::max();
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const LSHDistType invdenom = 1. / opts.sketchsize_;
     auto sim2dist = [poisson_mult=1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
->>>>>>> draftb
     if(opts.compressed_ptr_) {
         const bool bbit_c = opts.truncation_method_ > 0;
         std::pair<uint64_t, uint64_t> res{0, 0};

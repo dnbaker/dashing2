@@ -34,14 +34,14 @@ LFResult LFResult::merge_results(const LFResult *start, size_t n) {
     }
     return ret;
 }
+static constexpr size_t GZ_BUFFER_SIZE = 524288;
 LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     if(opts.sspace_ > SPACE_PSET) throw std::invalid_argument("Can't do edit distance for Splice junction files");
     LFResult ret;
     ret.filenames() = {path};
-    std::unique_ptr<char[]> gzbuf(new char[GZBUFSZ]);
+    std::unique_ptr<char[]> gzbuf(new char[GZ_BUFFER_SIZE]);
     gzFile ifp;
     if((ifp = gzopen(path.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to open input file ") + path);
-    constexpr size_t GZ_BUFFER_SIZE = 524288;
     char *line;
     if(!(line = gzgets(ifp, gzbuf.get(), GZ_BUFFER_SIZE))) throw 1;
 

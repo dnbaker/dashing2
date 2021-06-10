@@ -184,7 +184,7 @@ int sketch_main(int argc, char **argv) {
         .outprefix(outprefix)
         .save_kmercounts(save_kmercounts)
         .parse_by_seq(parse_by_seq)
-        .cmd(cmd).count_threshold(count_threshold)
+        .cmd(cmd).count_threshold(count_threshold);
     std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);
     if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
             && opts.kmer_result_ == ONE_PERM) {

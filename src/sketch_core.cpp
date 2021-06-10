@@ -76,10 +76,10 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 const auto &n(result.names_[i]);
                 if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) throw std::runtime_error("Failed to write names to file");
                 if(result.cardinalities_.size()) {
-                    std::fprintf(ofp, "\t%g", result.cardinalities_[i]);
+                    std::fprintf(ofp, "\t%0.12g", result.cardinalities_[i]);
                 }
-                if(result.kmercountfiles_.size())
-                    std::fprintf(ofp, "\t%s", result.kmercountfiles_[i].data());
+                if(auto &kf = result.kmercountfiles_; kf.size())
+                    std::fputc('\t', ofp), std::fwrite(kf[i].data(), 1, kf[i].size(), ofp);
                 std::fputc('\n', ofp);
             }
             std::fclose(ofp);
@@ -96,14 +96,13 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             }
         }
         if(result.kmercounts_.size()) {
-            static constexpr size_t kcsz = sizeof(decltype(result.kmercounts_)::value_type);
-            const size_t nb = result.kmercounts_.size() * kcsz;
+            const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
             if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {
                 if(std::fwrite(result.kmercounts_.data(), nb, 1, ofp) != size_t(1))
                     std::fprintf(stderr, "Failed to write k-mer counts to disk properly, silent failing\n");
                 std::fclose(ofp);
             } else {
-                std::fprintf(stderr, "Failed to write k-mer counts, failing silently.\n");
+                std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());
             }
         }
     }

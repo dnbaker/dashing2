@@ -584,6 +584,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     std::fprintf(stderr, "oldsize %zu, increment %zu\n", oldsz, newsz);
     newsz = oldsz + newsz;
     if(opts.build_sig_matrix_) {
+        std::fprintf(stderr, "old sig size %zu, new %zu\n", ret.signatures_.size(), newsz * opts.sketchsize_);
         ret.signatures_.resize(newsz * opts.sketchsize_);
     }
     ret.cardinalities_.resize(newsz);
@@ -626,9 +627,6 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     sketchers.ctr->add(x);
                 else if(sketchers.fss)
                     sketchers.fss->update(x);
-                else {
-                    __builtin_unreachable();
-                }
             }, seqp.first, seqp.second);
             RegT *ptr = nullptr;
             const uint64_t *kmer_ptr = nullptr;
@@ -728,6 +726,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
         sketching_data.ctr.reset(new Counter(opts.cssize()));
     }
 
+    size_t nseqs = 0;
     for_each_substr([&](const auto &x) {
         if((ifp = gzopen(x.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to read from ") + x);
         gzbuffer(ifp, 1u << 17);

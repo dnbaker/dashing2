@@ -117,16 +117,16 @@ struct LazyOnePermSetSketch {
         return *p;
     }
     SigT *data() {
-        if(as_sigs_) return as_sigs->data();
+        if(as_sigs_) return as_sigs_->data();
         as_sigs_.reset(new std::vector<SigT>(registers_.size()));
-        auto asp = as_sigs->data();
+        auto asp = as_sigs_->data();
         const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
         const SigT mul = -SigT(1) / size(), omul = SigT(1) / modv;
         for(size_t i = 0; i < size(); ++i) {
             const auto lv = registers_[i] / m_;
-            (*as_sigs)[i] = lv ? mul * std::log(omul * lv): SigT(0);
+            asp[i] = lv ? mul * std::log(omul * lv): SigT(0);
         }
-        return as_sigs_->data();
+        return asp;
     }
     void reset() {
         std::memset(registers_.data(), 0, registers_.size() * sizeof(T));

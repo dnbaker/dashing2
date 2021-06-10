@@ -112,7 +112,7 @@ struct Dashing2Options {
     }
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
     std::string to_string() const;
-    void validate const ();
+    void validate() const;
 #define D2O(name, oname)\
     Dashing2Options &oname(decltype(name) x) {name = x; return *this;}\
     std::add_const_t<decltype(name)> &oname() const {return name;}\
@@ -122,12 +122,14 @@ struct Dashing2Options {
     D2O2(save_kmercounts) D2O2(homopolymer_compress_minimizers)
     D2O2(kmer_result) D2O2(use128) D2O2(cache_sketches)
     D2O2(sketchsize) D2O2(nthreads) D2O2(cssize) D2O2(parse_by_seq)
+    D2O2(count_threshold)
 #undef D2O
 #undef D2O2
     // Getters and setters for all of the above
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
-    Dashing2Options &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
+    Dashing2Options &parse_protein(bool val) {rh_.enctype_ = rh128_.enctype_ = rht_ = (val ? bns::PROTEIN: bns::DNA); return *this;}
+    bool parse_protein() const {return rh_.enctype_ == bns::PROTEIN;}
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool trim_folder_paths() const {
@@ -139,7 +141,6 @@ struct Dashing2Options {
     }
     auto w() const {return w_;}
     bool one_perm() const {return kmer_result_ == ONE_PERM && sspace_ == SPACE_SET;}
-    double count_threshold() const {return count_threshold_;}
 };
 
 
