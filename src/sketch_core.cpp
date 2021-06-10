@@ -13,7 +13,9 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
     SketchingResult result;
     const size_t npaths = paths.size();
     if(opts.dtype_ == DataType::FASTX) {
+        std::fprintf(stderr, "Sketching fastX files\n");
         result = fastx2sketch(opts, paths);
+        std::fprintf(stderr, "Sketched fastX files\n");
     } else if(opts.dtype_ == DataType::LEAFCUTTER) {
         auto res = lf2sketch(paths, opts);
         result.signatures_ = std::move(res.registers());

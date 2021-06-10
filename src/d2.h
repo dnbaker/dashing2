@@ -99,9 +99,13 @@ struct Dashing2Options {
     unsigned nthreads_;
 
     std::unique_ptr<FilterSet> fs_;
-    Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
-        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
-        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, space = %s, datatype = %s\n", k, w, ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
+    Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false):
+        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_, canon), rh_(k), rh128_(k), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
+#if 0
+    RollingHasher(unsigned k=21, bool canon=false,
+                   RollingHashingType enc=DNA, long long int wsz = -1, uint64_t seed1=1337, uint64_t seed2=137):
+#endif
+        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, %s target, space = %s, datatype = %s\n", k, w, rht == bns::DNA ? "DNA": "Protein", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
         if(nt <= 0) {
             DBG_ONLY(std::fprintf(stderr, "[%s:%s:%d] num threads < 0, checking OMP_NUM_THREADS\n", __FILE__, __func__, __LINE__);)
             if(char *s = std::getenv("OMP_NUM_THREADS"))
@@ -109,6 +113,7 @@ struct Dashing2Options {
             else nt = 1;
         }
         nthreads(nt);
+        rh_.enctype_ = rh128_.enctype_ = rht;
     }
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
     std::string to_string() const;

@@ -15,7 +15,6 @@ static option_struct sketch_long_options[] = {\
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
     LO_FLAG("save-kmers", 's', save_kmers, true)\
-    LO_FLAG("enable-protein", OPTARG1, rht, bns::RollingHashingType::PROTEIN)\
     LO_FLAG("bed", OPTARG_BED, dt, DataType::BED)\
     LO_FLAG("bigwig", OPTARG_BIGWIG, dt, DataType::BIGWIG)\
     LO_FLAG("leafcutter", OPTARG_LEAFCUTTER, dt, DataType::LEAFCUTTER)\
@@ -117,14 +116,16 @@ int sketch_main(int argc, char **argv) {
     // By default, use full hash values, but allow people to enable smaller
     bool normalize_bed = false;
     OutputFormat of = OutputFormat::HUMAN_READABLE;
+    std::string spacing;
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
         case 'k': k = std::atoi(optarg); break;
         case 'w': w = std::atoi(optarg); break;
         case 'W': cache = true; break;
-        case 'B': s = SPACE_MULTISET; res = FULL_SETSKETCH; break;
-        case 'P': s = SPACE_PSET; res = FULL_SETSKETCH; break;
+        case 'B': std::fprintf(stderr, "Using BMH\n"); s = SPACE_MULTISET; res = FULL_SETSKETCH; break;
+        case 'P': std::fprintf(stderr, "Using PMH\n"); s = SPACE_PSET; res = FULL_SETSKETCH; break;
+        case 'E': s = SPACE_EDIT_DISTANCE; std::fprintf(stderr, "Used edit distance!\n"); break;
         case 'Z': res = FULL_SETSKETCH; break;
         case 'o': outfile = optarg; break;
         case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;
@@ -173,16 +174,16 @@ int sketch_main(int argc, char **argv) {
     }
     size_t nq = paths.size() - nref;
     std::fprintf(stderr, "Sketching %zu arguments (lhs) and %zu (rhs)\n", nref, nq);
-    Dashing2Options opts(k, w, rht, s, dt);
-    opts.nthreads(nt)
+    Dashing2Options opts(k, w, rht, s, dt, nt, use128, spacing, canon);
+    opts
         .kmer_result(res)
         .cache_sketches(cache)
         .cssize(cssize)
-        .use128(use128)
         .sketchsize(sketchsize)
         .save_kmers(save_kmers)
         .outprefix(outprefix)
         .save_kmercounts(save_kmercounts)
+        .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
         .cmd(cmd).count_threshold(count_threshold);
     std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);

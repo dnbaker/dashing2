@@ -15,7 +15,6 @@ static option_struct name[] = {\
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
     LO_FLAG("save-kmers", 's', save_kmers, true)\
-    LO_FLAG("enable-protein", OPTARG1, rht, bns::RollingHashingType::PROTEIN)\
     LO_FLAG("bed", OPTARG_BED, dt, DataType::BED)\
     LO_FLAG("bigwig", OPTARG_BIGWIG, dt, DataType::BIGWIG)\
     LO_FLAG("leafcutter", OPTARG_LEAFCUTTER, dt, DataType::LEAFCUTTER)\

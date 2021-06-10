@@ -24,6 +24,7 @@ enum OptArg{
     OPTARG_EXACT_KMER_DIST,
     OPTARG_ISZ,
     OPTARG_BED_NORMALIZE,
+    OPTARG_PROTEIN,
     OPTARG_DUMMY
 };
 
@@ -44,15 +45,17 @@ enum OptArg{
     LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)\
     {"full-setsketch", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
-    LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
+    {"enable-protein", no_argument, 0, OPTARG_PROTEIN},\
+    LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)
 
 
 #define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
 #define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
 #define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atoi(optarg); break;}
+#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN; std::fprintf(stderr, "Enabled protein\n"); break;}
 
-#define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD FASTCMP_FIELD
+#define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD FASTCMP_FIELD PROT_FIELD
 
 
 static constexpr const char *siglen =
