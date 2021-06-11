@@ -175,7 +175,12 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 } else if(sketchers.opss) {
                     ptr = sketchers.opss->data();
                     ret.cardinalities_[i] = sketchers.opss->getcard();
-                    std::fprintf(stderr, "Card is %g from OPSS\n", sketchers.opss->getcard());
+                    if(ret.cardinalities_[i] < 10 * opts.sketchsize_) {
+                        ska::flat_hash_set<uint64_t> ids;
+                        ids.reserve(opts.sketchsize_);
+                        sketchers.for_each([&](auto x) {ids.insert(x);}, ret.sequences_[i].data(), ret.sequences_[i].size());
+                        ret.cardinalities_[i] = ids.size();
+                    }
                     kmer_ptr = sketchers.opss->ids().data();
                     kmercounts.resize(opts.sketchsize_);
                     auto &idc = sketchers.opss->idcounts();
@@ -183,7 +188,6 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 } else {
                     assert(sketchers.fss);
                     ptr = sketchers.fss->data();
-                    std::fprintf(stderr, "Full setsketch\n");
                     ret.cardinalities_[i] = sketchers.fss->getcard();
                     std::fprintf(stderr, "Card is %g from FSS\n", sketchers.fss->getcard());
                     if(sketchers.fss->ids().size())
