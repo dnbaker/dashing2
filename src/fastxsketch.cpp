@@ -301,6 +301,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                         if(opts.k_ < 32) {
                             std::fprintf(stderr, "Exact encoding Parsing DNA with k = %u for 64-bit hashes\n", opts.k_);
                             auto encoder(opts.enc_);
+                            std::fprintf(stderr, "Clone was successful\n");
                             FUNC_FE(encoder.for_each);
                         } else {
                             std::fprintf(stderr, "Exact encoding Parsing DNA with k = %u for 128-bit hashes\n", opts.k_);
@@ -466,16 +467,20 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if(opss.empty() && fss.empty()) throw std::runtime_error("Both opss and fss are empty\n");
                 const size_t opsssz = opss.size();
                 if(opsssz) {
+                    std::fprintf(stderr, "Encode for the opset sketch, %zu is the size for tid %d\n", opss.size(), tid);
+                    assert(opss.size() > tid);
                     assert(opss[tid].total_updates() == 0);
-                    std::fprintf(stderr, "Encode for the opset sketch\n");
-                    perf_for_substrs([p=&opss[tid]](auto hv) {p->update(hv);});
+                    auto p = &opss[tid];
+                    perf_for_substrs([p](auto hv) {p->update(hv);});
                     std::fprintf(stderr, "Encode for the opset sketch. card now: %g, %zu updates\n", opss[tid].getcard(), opss[tid].total_updates());
-                    ret.cardinalities_[i] = opss[tid].getcard();
+                    assert(ret.cardinalities_.size() > i);
+                    ret.cardinalities_[i] = p->getcard();
                 } else {
                     std::fprintf(stderr, "Encode for the set sketch\n");
                     perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
                     ret.cardinalities_[i] = fss[tid].getcard();
                 }
+                std::fprintf(stderr, "parsed!\n");
                 const uint64_t *ids = nullptr;
                 const uint32_t *counts = nullptr;
                 const RegT *ptr = opsssz ? opss[tid].data(): fss[tid].data();
