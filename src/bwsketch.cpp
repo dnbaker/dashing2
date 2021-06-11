@@ -78,9 +78,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     long double total_weight = 0.;
     OMP_PRAGMA("omp parallel for schedule(dynamic) reduction(+:total_weight)")
     for(size_t i = 0; i < ids.size(); ++i) {
-#ifndef NDEBUG
-        std::fprintf(stderr, "Processing contig %zu/%zu\n", i, ids.size());
-#endif
+        DBG_ONLY(std::fprintf(stderr, "Processing contig %zu/%zu\n", i, ids.size());)
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
         const int contig_id = ids[i].first;
         std::string chrom = fp->cl->chrom[contig_id];
@@ -121,14 +119,12 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
             auto newvec = fss.size() ? fss[tid].to_sigs() :
                           opss.size() ? opss[tid].to_sigs() :
                           bmhs.size() ? bmhs[tid].to_sigs(): pmhs[tid].to_sigs();
-            total_weight += (fss.size() ? fss[tid].getcard(): opss.size()?  opss[tid].getcard(): bmhs.size() ? bmhs[tid].total_weight(): pmhs.size() ? pmhs[tid].total_weight(): RegT(-1);
+            total_weight += (fss.size() ? fss[tid].getcard(): opss.size() ? opss[tid].getcard(): bmhs.size() ? bmhs[tid].total_weight(): pmhs.size() ? pmhs[tid].total_weight(): RegT(-1));
 
             if(rvec.empty()) {
                 rvec = newvec;
             } else {
-#ifdef _OPENMP
-                #pragma omp simd
-#endif
+                OMP_PRAGMA("omp simd")
                 for(size_t i = 0; i < rvec.size(); ++i) {
                     rvec[i] = std::min(rvec[i], newvec[i]);
                 }

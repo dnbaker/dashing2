@@ -97,24 +97,12 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
     }
     return ret;
 }
-LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
-    //std::fprintf(stderr, "Comparing: %zu/%zu\n", i, j);
-    LSHDistType ret = std::numeric_limits<LSHDistType>::max();
-    const LSHDistType b2pow = -std::ldexp(1., -static_cast<int>(opts.fd_level_ * 8.));
-    const LSHDistType ib2pow = 1. / (1. + b2pow);
-    const LSHDistType invdenom = 1. / opts.sketchsize_;
-    //std::fprintf(stderr, "cardinalities size: %zu. i: %zu. j: %zu\n", result.cardinalities_.size(), i, j);
-    const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
-    const LSHDistType poisson_mult = 1. / std::max(1, opts.k_);
-=======
-
 
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
     LSHDistType ret = std::numeric_limits<LSHDistType>::max();
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const LSHDistType invdenom = 1. / opts.sketchsize_;
     auto sim2dist = [poisson_mult=1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
->>>>>>> draftb
     if(opts.compressed_ptr_) {
         const bool bbit_c = opts.truncation_method_ > 0;
         std::pair<uint64_t, uint64_t> res{0, 0};
@@ -197,12 +185,13 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
         if(opts.sspace_ == SPACE_SET) {
             std::fprintf(stderr, "Comparing setsketches at %zu/%zu, size = %zu\n", i, j, opts.sketchsize_);
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
-            for(size_t m = 0; m < opts.sketchsize_; ++m) std::fprintf(stderr, "%zu/%g/%g\n", m, lhsrc[m], rhsrc[m]);
+            //for(size_t m = 0; m < opts.sketchsize_; ++m) std::fprintf(stderr, "%zu/%g/%g\n", m, lhsrc[m], rhsrc[m]);
             LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
             eq = (1. - alpha - beta);
             lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
+            //std::fprintf(stderr, "lhcard %g, rhc %g\n", lhcard, rhcard);
             if(alpha + beta >= 1.) {
                 //std::fprintf(stderr, "a, b (%g, %g) add to more than one. ucard is now %g\n", alpha, beta, lhcard + rhcard);
                 ucard = lhcard + rhcard;
@@ -217,9 +206,15 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
                 : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
+            std::fprintf(stderr, "doing equality comparisons between registers for %s/%s\n", to_string(opts.sspace_).data(), to_string(opts.kmer_result_).data());
+            DBG_ONLY(
             auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
+            for(size_t k = 0; k < opts.sketchsize_; ++k) {
+                std::fprintf(stderr, "%zu lhs %g, rhs %g\n", k, result.signatures_[opts.sketchsize_ * i + k], result.signatures_[opts.sketchsize_ * j + k]);
+            }
+            )
             ret = invdenom * neq;
-            //std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%g\n", i, j, size_t(neq), ret);
+            DBG_ONLY(std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);)
             if(opts.measure_ == INTERSECTION) {
                 ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);
@@ -240,9 +235,9 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
         const size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
         if(lhn && rhn) {
             const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
-            auto [isz_size, union_size] = weighted_compare(lptr, lhl, rptr, rhl, lnptr, rnptr);
-            double res = isz_size;
             double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
+            auto [isz_size, union_size] = weighted_compare(lptr, lhl, lhc, rptr, rhl, rhc, lnptr, rnptr);
+            double res = isz_size;
             if(opts.measure_ == INTERSECTION) {
                 // do nothing
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) {

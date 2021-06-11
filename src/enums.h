@@ -26,7 +26,9 @@ enum SketchSpace {
     SPACE_SET,      // MinHash/SetSketch/HLL
     SPACE_MULTISET, // Weighted MinHash -- e.g., Bag or Tree
     SPACE_PSET,      // ProbMinHash
-    SPACE_EDIT_DISTANCE // edit distance -- implies OMH and forces us to use strings as input instead of bags of k-mers
+    SPACE_EDIT_DISTANCE, // edit distance -- implies OMH and forces us to use strings as input instead of bags of k-mers
+    EDIT_DISTANCE = SPACE_EDIT_DISTANCE,
+    MULTISET = SPACE_MULTISET
 };
 
 enum CountingType {

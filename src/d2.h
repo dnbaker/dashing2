@@ -99,9 +99,13 @@ struct Dashing2Options {
     unsigned nthreads_;
 
     std::unique_ptr<FilterSet> fs_;
-    Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing=""):
-        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_), rh_(k), rh128_(k), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
-        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, space = %s, datatype = %s\n", k, w, ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
+    Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false):
+        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_, canon), rh_(k, canon, rht, w), rh128_(k, canon, rht, w), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
+#if 0
+    RollingHasher(unsigned k=21, bool canon=false,
+                   RollingHashingType enc=DNA, long long int wsz = -1, uint64_t seed1=1337, uint64_t seed2=137):
+#endif
+        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, %s target, space = %s, datatype = %s\n", k, w, rht == bns::DNA ? "DNA": "Protein", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
         if(nt <= 0) {
             DBG_ONLY(std::fprintf(stderr, "[%s:%s:%d] num threads < 0, checking OMP_NUM_THREADS\n", __FILE__, __func__, __LINE__);)
             if(char *s = std::getenv("OMP_NUM_THREADS"))
@@ -109,10 +113,11 @@ struct Dashing2Options {
             else nt = 1;
         }
         nthreads(nt);
+        rh_.enctype_ = rh128_.enctype_ = rht;
     }
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
     std::string to_string() const;
-    void validate const ();
+    void validate() const;
 #define D2O(name, oname)\
     Dashing2Options &oname(decltype(name) x) {name = x; return *this;}\
     std::add_const_t<decltype(name)> &oname() const {return name;}\
@@ -122,12 +127,14 @@ struct Dashing2Options {
     D2O2(save_kmercounts) D2O2(homopolymer_compress_minimizers)
     D2O2(kmer_result) D2O2(use128) D2O2(cache_sketches)
     D2O2(sketchsize) D2O2(nthreads) D2O2(cssize) D2O2(parse_by_seq)
+    D2O2(count_threshold)
 #undef D2O
 #undef D2O2
     // Getters and setters for all of the above
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
-    Dashing2Options &parse_protein() {rh_.enctype_ = rh128_.enctype_ = rht_ = bns::PROTEIN; return *this;}
+    Dashing2Options &parse_protein(bool val) {rh_.enctype_ = rh128_.enctype_ = rht_ = (val ? bns::PROTEIN: bns::DNA); return *this;}
+    bool parse_protein() const {return rh_.enctype_ == bns::PROTEIN;}
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool trim_folder_paths() const {
@@ -139,7 +146,6 @@ struct Dashing2Options {
     }
     auto w() const {return w_;}
     bool one_perm() const {return kmer_result_ == ONE_PERM && sspace_ == SPACE_SET;}
-    double count_threshold() const {return count_threshold_;}
 };
 
 

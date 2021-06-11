@@ -4,7 +4,7 @@ CXX?=g++
 
 LIB=-lz
 INCLUDE+=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
-OPT+=-std=c++17 -O3 -march=native -fopenmp
+OPT+=-std=c++17 -O1 -march=native -fopenmp
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic
 EXTRA+=-DNOCURL
 CXXFLAGS+=-std=c++17
@@ -25,7 +25,7 @@ ifeq ($(shell uname -s ),Darwin)
 endif
 
 
-OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp
+OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp
 LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))
 DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS))
 GLIBOBJ=$(patsubst %.cpp,%.go,$(OBJFS))
@@ -48,7 +48,10 @@ read%-ld: test/read%.ldo $(LDLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LDLIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DDSKETCH_FLOAT_TYPE="long double"
 read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(FLIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
-%.o: %.cpp $(wildcard src/*.h)
+%: test/%.cpp $(LIBOBJ)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
+	# $(wildcard src/*.h)
+%.o: %.cpp 
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG
 %.do: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA)

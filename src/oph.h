@@ -8,8 +8,9 @@
 namespace dashing2 {
 
 namespace hash = sketch::hash;
-template<typename T, size_t pow2=false>
+template<typename T, size_t pow2=false, typename Hasher = hash::MultiplyAddXoRot<31>>
 struct LazyOnePermSetSketch {
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T>, "Must be integral and unsigned");
     size_t m_;
     // Solution: hash reversibly, track the maximum IDs
     std::vector<T> registers_;
@@ -22,15 +23,10 @@ struct LazyOnePermSetSketch {
     size_t mask_;
     int shift_;
     double count_threshold_;
+    uint64_t total_updates_ = 0;
+    Hasher hasher_;
     // MultiplyAddXoRot
     // is already enough to pass Rabbit/SmallCrush
-    using Hasher =
-#if 0
-        hash::FusedReversible3<hash::XorMultiply, hash::RotL33, hash::MultiplyAddXoRot<31>>;
-#else
-        hash::MultiplyAddXoRot<31>;
-#endif
-    Hasher hasher_;
     schism::Schismatic<uint64_t> div_;
     double mincount_ = 0.;
     std::vector<btree::map<T, uint32_t>> potentials_;
@@ -49,6 +45,7 @@ struct LazyOnePermSetSketch {
         div_ = schism::Schismatic<uint64_t>(m_);
         mask_ = m_ - 1;
         shift_ = sketch::integral::ilog2(m_);
+        reset();
     }
     void set_mincount(double v) {
         if(v > 0.) {
@@ -64,18 +61,22 @@ struct LazyOnePermSetSketch {
         //std::fprintf(stderr, "Expected %zu, found %zu. returning %zu\n", size_t(mul), 2 * mul, mul / (size() >> 1));
         return idx * (mul / (size() / 2));
     }
+    T decode(T x) const {
+        return hasher_.inverse(x);
+    }
     INLINE void update(const T oid) {
+        ++total_updates_;
         const T id = hasher_(oid);
         size_t idx;
         if constexpr(pow2) {
-            idx = id & mask_;
-            id >>= shift_;
+            idx = hasher_(id) & mask_;
         } else {
-            auto di = div_.div(id);
-            auto mo = id - m_ * di;
-            assert(di == (id / m_));
-            assert(mo == (id % m_));
-            assert(di < id);
+            auto hid = hasher_(id);
+            auto di = div_.div(hid);
+            auto mo = hid - m_ * di;
+            assert(di == (hid / m_));
+            assert(mo == (hid % m_));
+            assert(di < hid);
             idx = mo;
             //std::fprintf(stderr, "di = %zu, mo = %zu, idx = %zu, id = %zu\n", size_t(di), size_t(mo), size_t(idx), size_t(id));
         }
@@ -84,7 +85,7 @@ struct LazyOnePermSetSketch {
         auto &rref = registers_[idx];
         if(mincount_ > 0.) {
             // If mincount > 0, then
-            if(rref < id) {
+            if(rref > id) {
                 auto &pos = potentials_[idx];
                 auto it = pos.find(id);
                 if(it == pos.end()) it = pos.emplace(id, 1).first;
@@ -92,17 +93,20 @@ struct LazyOnePermSetSketch {
                 if(it->second >= mincount_) {
                     rref = id;
                     cref = it->second;
-                    pos.erase(it);
                     for(auto pit = pos.begin(); pit != pos.end();) {
-                        if(pit->first <= id) pit = pos.erase(pit);
+                        if(pit->first >= id)
+                        pit = pos.erase(pit);
                         else ++pit;
                     }
                     return;
                 }
-            } else if(rref == id) ++cref;
-        } else if(rref < id) {
-            rref = id; cref = 1.;
-        } else if(rref == id) ++cref;
+            } else cref += (rref == id);
+        } else {
+            if(rref > id) {
+                //std::fprintf(stderr, "Oldval %zu replaced with %zu because %s (diff: %zd)\n", size_t(rref), size_t(id), use_lt ? "lt": "gt", id - rref);
+                rref = id; cref = 1.;
+            } else cref += (rref == id);
+        }
     }
     std::vector<uint32_t> &idcounts() {
         auto p = new std::vector<uint32_t>(size());
@@ -110,39 +114,50 @@ struct LazyOnePermSetSketch {
         std::copy(counts_.begin(), counts_.end(), p->data());
         return *p;
     }
+    size_t total_updates() const {return total_updates_;}
     auto &ids() {
         auto p = new std::vector<uint64_t>(registers_.size());
         original_ids_.reset(p);
-        std::transform(registers_.begin(), registers_.end(), p->begin(), [this](T x) {return this->hasher_.inverse(x);});
+        std::transform(registers_.begin(), registers_.end(), p->begin(), [this](T x) {return this->decode(x);});
         return *p;
     }
+    static constexpr long double omul =
+        sizeof(T) == 16 ? 0x1p-128L:
+        sizeof(T) == 8 ? 0x1p-64L:
+        sizeof(T) == 4 ? 0x1p-32L:
+        sizeof(T) == 2 ? 0x1p-16L:
+        sizeof(T) == 1 ? 0x1p-8L: 0.L;
+    static_assert(omul != 0.L, "sanity");
+    static constexpr size_t get_modv() {return std::numeric_limits<T>::max();}
     SigT *data() {
-        if(as_sigs_) return as_sigs->data();
+        if(as_sigs_) return as_sigs_->data();
         as_sigs_.reset(new std::vector<SigT>(registers_.size()));
-        auto asp = as_sigs->data();
-        const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
-        const SigT mul = -SigT(1) / size(), omul = SigT(1) / modv;
-        for(size_t i = 0; i < size(); ++i) {
-            const auto lv = registers_[i] / m_;
-            (*as_sigs)[i] = lv ? mul * std::log(omul * lv): SigT(0);
+        auto asp = as_sigs_->data();
+        const long double mul = -SigT(1) / (m_ - std::count(registers_.begin(), registers_.end(), std::numeric_limits<T>::max()));
+        for(size_t i = 0; i < m_; ++i) {
+            //const auto lv = registers_[i];
+            if(registers_[i] == std::numeric_limits<T>::max()) continue;
+            const auto lv = std::numeric_limits<T>::max() - registers_[i] + 1;
+            asp[i] = mul * std::log(omul * lv);
+            //std::fprintf(stderr, "reg %zu is %g\n", i, asp[i]);
         }
-        return as_sigs_->data();
+        //auto mv = *std::max_element(registers_.begin(), registers_.end());
+        //std::fprintf(stderr, "Max: %g/%zu\n", mul * std::log(mv * omul), mv);
+        return asp;
     }
     void reset() {
-        std::memset(registers_.data(), 0, registers_.size() * sizeof(T));
+        std::fill_n(registers_.data(), registers_.size(), std::numeric_limits<T>::max());
         std::memset(counts_.data(), 0, counts_.size() * sizeof(double));
+        as_sigs_.reset();
+        card_ = -1.;
     }
     double getcard() {
         if(card_ > 0.) return card_;
-        const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
-        long double inv = 1. / modv;
+        //std::fprintf(stderr, "size: %zu\n", sz);
         long double sum = std::accumulate(registers_.begin(), registers_.end(), 0.L,
-                    [modv,inv,m=m_](auto x, auto y) {
-            return x + (modv - (y / m) % modv) * inv;
-        });
-        if(sum == 0.) return std::numeric_limits<double>::infinity();
-        card_ = std::pow(size(), 2) / sum;
-        return card_;
+            [](auto x, auto y) {return x + (y ? y * omul: 0.L);}
+        );
+        return card_ = sum ? double(std::pow(m_, 2) / sum): std::numeric_limits<double>::infinity();
     }
     size_t size() const {return registers_.size();}
     template<typename T2=SigT>
@@ -152,13 +167,10 @@ struct LazyOnePermSetSketch {
             if(std::is_integral_v<T2>) {
                 return x; // save as truncation/min hash value by twiddling
             } else {
-                const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / sz2;
-                long double inv = 1. / modv;
-                return -std::log((modv - (x / (sz2 * 2)) % modv) * inv);
+                return -std::log((get_modv() - x) * omul);
             }
         });
         return ret;
     }
 };
-
 }
