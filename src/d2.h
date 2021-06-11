@@ -110,8 +110,8 @@ struct Dashing2Options {
             DBG_ONLY(std::fprintf(stderr, "[%s:%s:%d] num threads < 0, checking OMP_NUM_THREADS\n", __FILE__, __func__, __LINE__);)
             if(char *s = std::getenv("OMP_NUM_THREADS"))
                 nt = std::max(std::atoi(s), 1);
-            else nt = 1;
         }
+        if(nt < 1) nt = 1;
         nthreads(nt);
         rh_.enctype_ = rh128_.enctype_ = rht;
     }
@@ -126,7 +126,7 @@ struct Dashing2Options {
     D2O2(cmd) D2O2(outprefix) D2O2(save_kmers)
     D2O2(save_kmercounts) D2O2(homopolymer_compress_minimizers)
     D2O2(kmer_result) D2O2(use128) D2O2(cache_sketches)
-    D2O2(sketchsize) D2O2(nthreads) D2O2(cssize) D2O2(parse_by_seq)
+    D2O2(sketchsize) D2O2(cssize) D2O2(parse_by_seq)
     D2O2(count_threshold)
 #undef D2O
 #undef D2O2
@@ -134,6 +134,12 @@ struct Dashing2Options {
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
     Dashing2Options &parse_protein(bool val) {rh_.enctype_ = rh128_.enctype_ = rht_ = (val ? bns::PROTEIN: bns::DNA); return *this;}
+    Dashing2Options &nthreads(int nt) {
+        nt = std::max(nt, 1);
+        nthreads_ = nt;
+        OMP_ONLY(omp_set_num_threads(nt);)
+        return *this;
+    }
     bool parse_protein() const {return rh_.enctype_ == bns::PROTEIN;}
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
@@ -146,6 +152,7 @@ struct Dashing2Options {
     }
     auto w() const {return w_;}
     bool one_perm() const {return kmer_result_ == ONE_PERM && sspace_ == SPACE_SET;}
+    auto nthreads() const {return nthreads_;}
 };
 
 
