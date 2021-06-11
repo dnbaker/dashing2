@@ -27,7 +27,7 @@ struct LazyOnePermSetSketch {
     // MultiplyAddXoRot
     // is already enough to pass Rabbit/SmallCrush
     using Hasher =
-#if 1
+#if 0
         hash::FusedReversible3<hash::XorMultiply, hash::RotL33, hash::MultiplyAddXoRot<31>>;
 #else
         hash::MultiplyAddXoRot<31>;
