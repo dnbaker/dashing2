@@ -154,9 +154,10 @@ int sketch_main(int argc, char **argv) {
     for(char **s = argv; *s; cmd += std::string(" ") + *s++);
     std::fprintf(stderr, "[Dashing2] Invocation: %s ", cmd.data());
     if(nt < 0) {
-        if(char *s = std::getenv("OMP_NUM_THREADS")) nt = std::atoi(s);
-        else nt = 1;
+        char *s = std::getenv("OMP_NUM_THREADS");
+        if(s) nt = std::max(std::atoi(s), 1);
     }
+    OMP_ONLY(omp_set_num_threads(nt));
     std::fprintf(stderr, "rest: %s\n", to_string(res).data());
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;

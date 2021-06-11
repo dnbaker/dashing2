@@ -120,7 +120,7 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
     if(paths.empty()) throw std::invalid_argument("Can't sketch empty path set");
-    const size_t nt = opts.nthreads();
+    const size_t nt = std::max(opts.nthreads(), 1u);
     const size_t ss = opts.sketchsize();
     FastxSketchingResult ret;
     ret.options_ = &opts;
@@ -149,14 +149,11 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         if(opts.kmer_result_ == ONE_PERM) {
             make(opss);
             for(auto &x: opss) x.set_mincount(opts.count_threshold_);
-        } else if(opts.kmer_result_ == FULL_SETSKETCH) {
+        } else if(opts.kmer_result_ == FULL_SETSKETCH)
             make_save(fss);
-        }
-    } else if(opts.sspace_ == SPACE_MULTISET) {
-        make_save(bmhs);
-    } else if(opts.sspace_ == SPACE_PSET) {
-        make(pmhs);
-    } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
+    } else if(opts.sspace_ == SPACE_MULTISET) make_save(bmhs);
+    else if(opts.sspace_ == SPACE_PSET) make(pmhs);
+    else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         if(opts.parse_by_seq_) {
             omhs.reserve(nt);
             for(size_t i = 0; i < nt; omhs.emplace_back(ss, opts.k_), ++i);
@@ -165,22 +162,14 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         }
     }
     while(ctrs.size() < nt) ctrs.emplace_back(opts.cssize());
-    auto reset = [&](int tid) {
-#if 0
-        if(!fss.empty()) fss[tid].reset();
-        else if(!opss.empty()) opss[tid].reset();
-        else if(!bmhs.empty()) bmhs[tid].reset();
-        else if(!pmhs.empty()) pmhs[tid].reset();
-        //else throw std::runtime_error("Unexpected: no sketches are available");
-        if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();
-#else
-        if(!fss.empty()) fss[tid].reset();
-        if(!opss.empty()) opss[tid].reset();
-        if(!bmhs.empty()) bmhs[tid].reset();
-        if(!pmhs.empty()) pmhs[tid].reset();
-        if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();
-#endif
-    };
+#define __RESET(tid) do { \
+        if(!opss.empty()) opss[tid].reset();\
+        else if(!fss.empty()) fss[tid].reset();\
+        else if(!bmhs.empty()) bmhs[tid].reset();\
+        else if(!pmhs.empty()) pmhs[tid].reset();\
+        if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();\
+    } while(0)
+
     if(opts.parse_by_seq_) {
         std::vector<FastxSketchingResult> res(paths.size());
         ret.nperfile_.resize(paths.size());
@@ -252,10 +241,12 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         }
         OMP_PFOR_DYN
         for(size_t i = 0; i < paths.size(); ++i) {
-            const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-            const auto starttime = std::chrono::high_resolution_clock::now();
+            int tid = 0;
+            OMP_ONLY(tid = omp_get_thread_num();)
+            //const int tid = OMP_ELSE(omp_get_thread_num(), 0);
+            //const auto starttime = std::chrono::high_resolution_clock::now();
             auto &path = paths[i];
-            std::fprintf(stderr, "parsing from path = %s\n", path.data());
+            //std::fprintf(stderr, "parsing from path = %s\n", path.data());
             ret.destination_files_[i] = makedest(path);
             auto &destination = ret.destination_files_[i];
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
@@ -291,19 +282,19 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());
                 continue;
             }
-            reset(tid);
+            __RESET(tid);
             auto perf_for_substrs = [&](const auto &func) {
                 for_each_substr([&](const std::string &subpath) {
-                    std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
+                    //std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
                     auto lfunc = [&](auto x) {if(!opts.fs_ || !opts.fs_->in_set(x)) func(x);};
 #define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
                     if(!opts.parse_protein() && (opts.w_ > opts.k_ || opts.k_ <= 64)) {
                         if(opts.k_ < 32) {
-                            std::fprintf(stderr, "Exact encoding Parsing DNA with k = %u for 64-bit hashes\n", opts.k_);
+                            //std::fprintf(stderr, "Exact encoding Parsing DNA with k = %u for 64-bit hashes\n", opts.k_);
                             auto encoder(opts.enc_);
                             FUNC_FE(encoder.for_each);
                         } else {
-                            std::fprintf(stderr, "Exact encoding Parsing DNA with k = %u for 128-bit hashes\n", opts.k_);
+                            //std::fprintf(stderr, "Exact encoding Parsing DNA with k = %u for 128-bit hashes\n", opts.k_);
                             auto encoder(opts.enc_.to_u128());
                             FUNC_FE(encoder.for_each);
                         }
@@ -399,7 +390,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                                           static_cast<uint64_t *>(nullptr);
                     if(!ptr) throw 2;
                     if((ofp = std::fopen(destkmer.data(), "wb")) == nullptr) throw std::runtime_error("Failed to write k-mer file");
-                    std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
+                    //std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 
                     checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
                     DBG_ONLY(std::fprintf(stderr, "About to copy to kmers of size %zu\n", ret.kmers_.size());)
@@ -428,7 +419,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     }
                 }
             } else if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
-                std::fprintf(stderr, "Full mmer sequence\n");
+                //std::fprintf(stderr, "Full mmer sequence\n");
                 std::FILE * ofp;
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr) throw std::runtime_error("Failed to open file for writing minimizer sequence");
                 void *dptr = nullptr;
@@ -459,20 +450,23 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 // These occur twice, because if the user asks for counts, or if the user asks for a minimum count level for inclusion.
                 // Because of this, we have to generate the key-count map.
                 // Those cases are handled above with the count-based methods.
-                std::fprintf(stderr, "kmer result is oneperm or setsketch\n");
+                //std::fprintf(stderr, "kmer result is oneperm or setsketch. Dest: %s\n", destination.data());
                 std::FILE * ofp;
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr)
                     throw std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence");
                 if(opss.empty() && fss.empty()) throw std::runtime_error("Both opss and fss are empty\n");
                 const size_t opsssz = opss.size();
                 if(opsssz) {
-                    assert(opss[tid].total_updates() == 0);
-                    std::fprintf(stderr, "Encode for the opset sketch\n");
-                    perf_for_substrs([p=&opss[tid]](auto hv) {p->update(hv);});
-                    std::fprintf(stderr, "Encode for the opset sketch. card now: %g, %zu updates\n", opss[tid].getcard(), opss[tid].total_updates());
-                    ret.cardinalities_[i] = opss[tid].getcard();
+                    //std::fprintf(stderr, "Encode for the opset sketch, %zu is the size for tid %d\n", opss.size(), tid);
+                    assert(opss.size() > tid);
+                    assert(opss.at(tid).total_updates() == 0);
+                    auto p = &opss[tid];
+                    perf_for_substrs([p](auto hv) {p->update(hv);});
+                    //std::fprintf(stderr, "Encode for the opset sketch. card now: %g, %zu updates\n", opss[tid].getcard(), opss[tid].total_updates());
+                    assert(ret.cardinalities_.size() > i);
+                    ret.cardinalities_[i] = p->getcard();
                 } else {
-                    std::fprintf(stderr, "Encode for the set sketch\n");
+                    //std::fprintf(stderr, "Encode for the set sketch\n");
                     perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
                     ret.cardinalities_[i] = fss[tid].getcard();
                 }
@@ -493,7 +487,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if(counts && ret.kmercounts_.size())
                     std::copy(counts, counts + ss, &ret.kmercounts_[i * ss]);
             } else throw std::runtime_error("Unexpected: Not FULL_MMER_SEQUENCE, FULL_MMER_SET, ONE_PERM, FULL_SETSKETCH, SPACE_MULTISET, or SPACE_PSET");
-            std::fprintf(stderr, "Sketching from tid %d at index %zu finished in %gms\n", tid, i, std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - starttime).count());;
+            //std::fprintf(stderr, "Sketching from tid %d at index %zu finished in %gms\n", tid, i, std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - starttime).count());;
         } // parallel paths loop
     }
     return ret;

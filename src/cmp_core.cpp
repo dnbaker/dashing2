@@ -183,7 +183,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET) {
-            std::fprintf(stderr, "Comparing setsketches at %zu/%zu, size = %zu\n", i, j, opts.sketchsize_);
+            //std::fprintf(stderr, "Comparing setsketches at %zu/%zu, size = %zu\n", i, j, opts.sketchsize_);
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
             //for(size_t m = 0; m < opts.sketchsize_; ++m) std::fprintf(stderr, "%zu/%g/%g\n", m, lhsrc[m], rhsrc[m]);
             LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
@@ -207,8 +207,8 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
             std::fprintf(stderr, "doing equality comparisons between registers for %s/%s\n", to_string(opts.sspace_).data(), to_string(opts.kmer_result_).data());
-            DBG_ONLY(
             auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
+            DBG_ONLY(
             for(size_t k = 0; k < opts.sketchsize_; ++k) {
                 std::fprintf(stderr, "%zu lhs %g, rhs %g\n", k, result.signatures_[opts.sketchsize_ * i + k], result.signatures_[opts.sketchsize_ * j + k]);
             }
@@ -336,7 +336,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
 }
 void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::fprintf(stderr, "Beginning cmp_core with options: \n");
-    DBG_ONLY(
+    VERBOSE_ONLY(
         if(opts.sspace_ == SPACE_SET) {
             std::fprintf(stderr, "Comparing sets\n");
         } else if(opts.sspace_ == SPACE_MULTISET) {
