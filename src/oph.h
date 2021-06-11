@@ -22,10 +22,11 @@ struct LazyOnePermSetSketch {
     size_t mask_;
     int shift_;
     double count_threshold_;
+    uint64_t total_updates_ = 0;
     // MultiplyAddXoRot
     // is already enough to pass Rabbit/SmallCrush
     using Hasher =
-#if 0
+#if 1
         hash::FusedReversible3<hash::XorMultiply, hash::RotL33, hash::MultiplyAddXoRot<31>>;
 #else
         hash::MultiplyAddXoRot<31>;
@@ -65,6 +66,7 @@ struct LazyOnePermSetSketch {
         return idx * (mul / (size() / 2));
     }
     INLINE void update(const T oid) {
+        ++total_updates_;
         const T id = hasher_(oid);
         size_t idx;
         if constexpr(pow2) {
@@ -110,6 +112,7 @@ struct LazyOnePermSetSketch {
         std::copy(counts_.begin(), counts_.end(), p->data());
         return *p;
     }
+    size_t total_updates() const {return total_updates_;}
     auto &ids() {
         auto p = new std::vector<uint64_t>(registers_.size());
         original_ids_.reset(p);
@@ -119,12 +122,16 @@ struct LazyOnePermSetSketch {
     SigT *data() {
         if(as_sigs_) return as_sigs_->data();
         as_sigs_.reset(new std::vector<SigT>(registers_.size()));
+        std::vector<T> tmp = registers_;
+        std::reverse(tmp.begin(), tmp.end());
+        for(auto &x: tmp) x = ~x / m_;
         auto asp = as_sigs_->data();
         const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
         const SigT mul = -SigT(1) / size(), omul = SigT(1) / modv;
         for(size_t i = 0; i < size(); ++i) {
             const auto lv = registers_[i] / m_;
             asp[i] = lv ? mul * std::log(omul * lv): SigT(0);
+            std::fprintf(stderr, "sig %zu = %g\n", i, asp[i]);
         }
         return asp;
     }
@@ -134,14 +141,16 @@ struct LazyOnePermSetSketch {
     }
     double getcard() {
         if(card_ > 0.) return card_;
-        const auto modv = (std::numeric_limits<T>::max() / 2 + 1) / (size() / 2);
+        const auto modv = std::numeric_limits<T>::max() / size();
         long double inv = 1. / modv;
         long double sum = std::accumulate(registers_.begin(), registers_.end(), 0.L,
                     [modv,inv,m=m_](auto x, auto y) {
+            std::fprintf(stderr, "frac: %g/%g\n", (modv - (y / m) % modv) * inv, ((y / m) % modv) * inv);
             return x + (modv - (y / m) % modv) * inv;
         });
         if(sum == 0.) return std::numeric_limits<double>::infinity();
         card_ = std::pow(size(), 2) / sum;
+        std::fprintf(stderr, "card: %g\n", card_);
         return card_;
     }
     size_t size() const {return registers_.size();}

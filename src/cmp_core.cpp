@@ -185,12 +185,13 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
         if(opts.sspace_ == SPACE_SET) {
             std::fprintf(stderr, "Comparing setsketches at %zu/%zu, size = %zu\n", i, j, opts.sketchsize_);
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
-            for(size_t m = 0; m < opts.sketchsize_; ++m) std::fprintf(stderr, "%zu/%g/%g\n", m, lhsrc[m], rhsrc[m]);
+            //for(size_t m = 0; m < opts.sketchsize_; ++m) std::fprintf(stderr, "%zu/%g/%g\n", m, lhsrc[m], rhsrc[m]);
             LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
             eq = (1. - alpha - beta);
             lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
+            std::fprintf(stderr, "lhcard %g, rhc %g\n", lhcard, rhcard);
             if(alpha + beta >= 1.) {
                 //std::fprintf(stderr, "a, b (%g, %g) add to more than one. ucard is now %g\n", alpha, beta, lhcard + rhcard);
                 ucard = lhcard + rhcard;
@@ -205,9 +206,13 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
                 : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
+            std::fprintf(stderr, "doing equality comparisons between registers for %s/%s\n", to_string(opts.sspace_).data(), to_string(opts.kmer_result_).data());
             auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
+            for(size_t k = 0; k < opts.sketchsize_; ++k) {
+                std::fprintf(stderr, "%zu lhs %g, rhs %g\n", k, result.signatures_[opts.sketchsize_ * i + k], result.signatures_[opts.sketchsize_ * j + k]);
+            }
             ret = invdenom * neq;
-            //std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%g\n", i, j, size_t(neq), ret);
+            std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);
             if(opts.measure_ == INTERSECTION) {
                 ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);

@@ -5,7 +5,8 @@
 namespace dashing2 {
 
 std::vector<std::string> glob(std::string pattern) {
-    glob_t res{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    glob_t res;
+    std::memset(&res, 0, sizeof(res));
     std::vector<std::string> ret;
     int rc = ::glob(pattern.data(), GLOB_TILDE, nullptr, &res);
     if(rc) throw std::runtime_error(std::string("glob error: ") + to_string(rc));

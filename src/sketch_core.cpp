@@ -96,7 +96,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             } else {
                 std::fprintf(stderr, "Failed to write k-mers, failing silently.\n");
             }
-        }
+        } else std::fprintf(stderr, "Not saving k-mers because result kmers is empty\n");
         if(result.kmercounts_.size()) {
             const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
             if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {

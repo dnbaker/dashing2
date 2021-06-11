@@ -107,15 +107,15 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     return ret;
 }
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex) {
+    std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     const size_t oldsz = ret.names_.size();
-    std::fprintf(stderr, "oldsize %zu, increment %zu. seq size %zu, name size %zu\n", oldsz, newsz, ret.sequences_.size(), ret.names_.size());
     newsz = oldsz + newsz;
     if(opts.build_sig_matrix_) {
-        std::fprintf(stderr, "old sig size %zu, new %zu\n", ret.signatures_.size(), newsz * opts.sketchsize_);
+        //std::fprintf(stderr, "old sig size %zu, new %zu\n", ret.signatures_.size(), newsz * opts.sketchsize_);
         ret.signatures_.resize(newsz * opts.sketchsize_);
     }
     ret.cardinalities_.resize(newsz);
-    std::fprintf(stderr, "mmer matrix size %zu. buuild %d, save kmers %d\n", ret.kmers_.size(), opts.build_mmer_matrix_, opts.save_kmers_);
+    //std::fprintf(stderr, "mmer matrix size %zu. buuild %d, save kmers %d\n", ret.kmers_.size(), opts.build_mmer_matrix_, opts.save_kmers_);
     if(opts.build_mmer_matrix_ || opts.save_kmers_) {
         ret.kmers_.resize(opts.sketchsize_ * newsz);
     }
@@ -131,8 +131,6 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         if(sketchers.omh) {
             std::fprintf(stderr, "omh is set, not hashing: %s/%zu\n", ret.sequences_[i].data(), ret.sequences_[i].size());
             std::vector<uint64_t> res = sketchers.omh->hash(ret.sequences_[i].data(), ret.sequences_[i].size());
-            size_t idx = (i - oldsz) * opts.sketchsize_;
-            std::fprintf(stderr, "IDX %zu, size %zu\n", idx, ret.signatures_.size());
             auto destp = &ret.signatures_[i * opts.sketchsize_];
             if constexpr(sizeof(RegT) == sizeof(uint64_t)) { // double
                 std::fprintf(stderr, "Copying 64-bit registers for OMH\n");
@@ -148,7 +146,10 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             } else {
                 std::copy(res.begin(), res.end(), (uint32_t *)destp);
             }
+            ret.cardinalities_[i] = ret.sequences_[i].size();
         } else {
+            assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
+            std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
                 if(sketchers.opss) sketchers.opss->update(x);
@@ -162,21 +163,19 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             std::vector<double> kmercounts;
             if(opts.sspace_ == SPACE_SET) {
                 if(sketchers.ctr) {
-                    double card;
                     if(sketchers.opss) {
                         sketchers.ctr->finalize(*sketchers.opss, opts.count_threshold_);
                         ptr = sketchers.opss->data();
-                        card = sketchers.opss->getcard();
+                        ret.cardinalities_[i] = sketchers.opss->getcard();
                     } else {
                         sketchers.ctr->finalize(*sketchers.fss, opts.count_threshold_);
                         ptr = sketchers.fss->data();
-                        card = sketchers.fss->getcard();
+                        ret.cardinalities_[i] = sketchers.fss->getcard();
                     }
-                    ret.cardinalities_[i] = card;
-                    std::fprintf(stderr, "Counting minhash\n");
                 } else if(sketchers.opss) {
                     ptr = sketchers.opss->data();
                     ret.cardinalities_[i] = sketchers.opss->getcard();
+                    std::fprintf(stderr, "Card is %g from OPSS\n", sketchers.opss->getcard());
                     kmer_ptr = sketchers.opss->ids().data();
                     kmercounts.resize(opts.sketchsize_);
                     auto &idc = sketchers.opss->idcounts();
@@ -186,6 +185,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     ptr = sketchers.fss->data();
                     std::fprintf(stderr, "Full setsketch\n");
                     ret.cardinalities_[i] = sketchers.fss->getcard();
+                    std::fprintf(stderr, "Card is %g from FSS\n", sketchers.fss->getcard());
                     if(sketchers.fss->ids().size())
                         kmer_ptr = sketchers.fss->ids().data();
                     if(sketchers.fss->idcounts().size()) {
