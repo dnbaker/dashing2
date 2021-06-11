@@ -9,7 +9,7 @@ namespace dashing2 {
 static option_struct name[] = {\
     LO_FLAG("canon", 'C', canon, true)\
     LO_FLAG("cache", 'W', cache, true)\
-    LO_FLAG("multiset", OPTARG_DUMMY, s, SPACE_MULTISET)\
+    LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
@@ -136,7 +136,7 @@ enum KmerSketchResultType {
 int cmp_main(int argc, char **argv) {
     int c;
     int k = 16, w = 50, nt = -1;
-    SketchSpace s = SPACE_SET;
+    SketchSpace sketch_space = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false, presketched = false;
     bool exact_kmer_dist = false;
@@ -162,8 +162,8 @@ int cmp_main(int argc, char **argv) {
         case 'k': k = std::atoi(optarg); break;
         case 'w': w = std::atoi(optarg); break;
         case 'W': cache = true; break;
-        case 'B': s = SPACE_MULTISET; res = FULL_SETSKETCH; break;
-        case 'P': s = SPACE_PSET; res = FULL_SETSKETCH; break;
+        case 'B': sketch_space = SPACE_MULTISET; res = FULL_SETSKETCH; break;
+        case 'P': sketch_space = SPACE_PSET; res = FULL_SETSKETCH; break;
         case 'Z': res = FULL_SETSKETCH; break;
         case 'o': outfile = optarg; break;
         case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;
@@ -207,7 +207,7 @@ int cmp_main(int argc, char **argv) {
             paths.push_back(l);
     }
     size_t nq = paths.size() - nref;
-    Dashing2Options opts(k, w, rht, s, dt);
+    Dashing2Options opts(k, w, rht, sketch_space, dt);
     if(nbytes_for_fastdists == 0.5)
         opts.sketchsize_ += opts.sketchsize_ & 1; // Ensure that sketch size is a multiple of 2 if using nibbles
     opts.nthreads(nt)
