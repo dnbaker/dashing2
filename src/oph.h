@@ -128,19 +128,16 @@ struct LazyOnePermSetSketch {
         sizeof(T) == 2 ? 0x1p-16L:
         sizeof(T) == 1 ? 0x1p-8L: 0.L;
     static_assert(omul != 0.L, "sanity");
-    size_t get_modv() const {return std::numeric_limits<T>::max();}
+    static constexpr size_t get_modv() {return std::numeric_limits<T>::max();}
     SigT *data() {
         if(as_sigs_) return as_sigs_->data();
         as_sigs_.reset(new std::vector<SigT>(registers_.size()));
-        std::vector<T> tmp = registers_;
-        std::reverse(tmp.begin(), tmp.end());
-        for(auto &x: tmp) x = ~x / m_;
         auto asp = as_sigs_->data();
         const long double mul = -SigT(1) / (m_ - std::count(registers_.begin(), registers_.end(), std::numeric_limits<T>::max()));
         for(size_t i = 0; i < m_; ++i) {
             //const auto lv = registers_[i];
             if(registers_[i] == std::numeric_limits<T>::max()) continue;
-            const auto lv = std::numeric_limits<T>::max() - registers_[i];
+            const auto lv = std::numeric_limits<T>::max() - registers_[i] + 1;
             asp[i] = mul * std::log(omul * lv);
             //std::fprintf(stderr, "reg %zu is %g\n", i, asp[i]);
         }
@@ -156,16 +153,11 @@ struct LazyOnePermSetSketch {
     }
     double getcard() {
         if(card_ > 0.) return card_;
-        long double inv = 1. / std::numeric_limits<T>::max();
         //std::fprintf(stderr, "size: %zu\n", sz);
         long double sum = std::accumulate(registers_.begin(), registers_.end(), 0.L,
-                    [inv,m=m_](auto x, auto y) -> long double {
-            return x + (y ? y * inv: 0.L);
-            //if(y == 0) {std::fprintf(stderr, "sub num\n"); --sz; return x;}
-        });
-        if(sum == 0.) return std::numeric_limits<double>::infinity();
-        card_ = std::pow(m_, 2) / sum;
-        return card_;
+            [](auto x, auto y) {return x + (y ? y * omul: 0.L);}
+        );
+        return card_ = sum ? double(std::pow(m_, 2) / sum): std::numeric_limits<double>::infinity();
     }
     size_t size() const {return registers_.size();}
     template<typename T2=SigT>
@@ -175,9 +167,7 @@ struct LazyOnePermSetSketch {
             if(std::is_integral_v<T2>) {
                 return x; // save as truncation/min hash value by twiddling
             } else {
-                long double inv = 1. / get_modv();
-                auto v = get_modv() - x;
-                return -std::log(v * inv);
+                return -std::log((get_modv() - x) * omul);
             }
         });
         return ret;
