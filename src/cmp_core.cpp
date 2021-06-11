@@ -191,7 +191,7 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             beta = gtlt.second * invdenom;
             eq = (1. - alpha - beta);
             lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
-            std::fprintf(stderr, "lhcard %g, rhc %g\n", lhcard, rhcard);
+            //std::fprintf(stderr, "lhcard %g, rhc %g\n", lhcard, rhcard);
             if(alpha + beta >= 1.) {
                 //std::fprintf(stderr, "a, b (%g, %g) add to more than one. ucard is now %g\n", alpha, beta, lhcard + rhcard);
                 ucard = lhcard + rhcard;
@@ -207,12 +207,14 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
             std::fprintf(stderr, "doing equality comparisons between registers for %s/%s\n", to_string(opts.sspace_).data(), to_string(opts.kmer_result_).data());
+            DBG_ONLY(
             auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
             for(size_t k = 0; k < opts.sketchsize_; ++k) {
                 std::fprintf(stderr, "%zu lhs %g, rhs %g\n", k, result.signatures_[opts.sketchsize_ * i + k], result.signatures_[opts.sketchsize_ * j + k]);
             }
+            )
             ret = invdenom * neq;
-            std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);
+            DBG_ONLY(std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);)
             if(opts.measure_ == INTERSECTION) {
                 ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);
