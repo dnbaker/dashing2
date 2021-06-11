@@ -16,7 +16,9 @@ struct OptSketcher {
     int k_, w_;
     bool use128_, enable_protein_;
     OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), k_(opts.k_), w_(opts.w_), use128_(opts.use128()), enable_protein_(opts.parse_protein()) {
-        //if(opts.sspace_ == SPACE_EDIT_DISTANCE) omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
+        if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
+            omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
+        }
     }
     template<typename Func>
     void for_each(const Func &func, const char *s, size_t n) {
@@ -45,12 +47,10 @@ struct OptSketcher {
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex);
 
 FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs, size_t seqs_per_batch) {
-    std::fprintf(stderr, "Calling byseq\n");
     FastxSketchingResult ret;
     gzFile ifp;
     kseq_t *myseq = kseqs ? &kseqs[OMP_ELSE(omp_get_thread_num(), 0)]: (kseq_t *)std::calloc(sizeof(kseq_t), 1);
     size_t batch_index = 0;
-    std::fprintf(stderr, "Making data\n");
     OptSketcher sketching_data(opts);
     sketching_data.rh_ = opts.rh_;
     sketching_data.rh128_ = opts.rh128_;
@@ -59,7 +59,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     //std::fprintf(stderr, "save ids: %d, save counts %d\n", save_ids, save_idcounts);
     if(opts.sspace_ == SPACE_SET) {
         if(opts.one_perm()) {
-            std::fprintf(stderr, "Using OPSS\n");
+            //std::fprintf(stderr, "Using OPSS\n");
             sketching_data.opss.reset(new OPSetSketch(opts.sketchsize_));
             if(opts.count_threshold_ > 0) sketching_data.opss->set_mincount(opts.count_threshold_);
         } else sketching_data.fss.reset(new FullSetSketch(opts.sketchsize_, save_ids, save_idcounts));
