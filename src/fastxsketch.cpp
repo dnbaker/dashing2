@@ -120,7 +120,7 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
     if(paths.empty()) throw std::invalid_argument("Can't sketch empty path set");
-    const size_t nt = opts.nthreads();
+    const size_t nt = std::max(opts.nthreads(), 1u);
     const size_t ss = opts.sketchsize();
     FastxSketchingResult ret;
     ret.options_ = &opts;
@@ -147,17 +147,13 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
     };
     if(opts.sspace_ == SPACE_SET) {
         if(opts.kmer_result_ == ONE_PERM) {
-            while(opss.size() < nt) opss.emplace_back(ss);
+            make(opss);
             for(auto &x: opss) x.set_mincount(opts.count_threshold_);
-            std::fprintf(stderr, "opss size now: %zu\n", opss.size());
-        } else if(opts.kmer_result_ == FULL_SETSKETCH) {
+        } else if(opts.kmer_result_ == FULL_SETSKETCH)
             make_save(fss);
-        }
-    } else if(opts.sspace_ == SPACE_MULTISET) {
-        make_save(bmhs);
-    } else if(opts.sspace_ == SPACE_PSET) {
-        make(pmhs);
-    } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
+    } else if(opts.sspace_ == SPACE_MULTISET) make_save(bmhs);
+    else if(opts.sspace_ == SPACE_PSET) make(pmhs);
+    else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         if(opts.parse_by_seq_) {
             omhs.reserve(nt);
             for(size_t i = 0; i < nt; omhs.emplace_back(ss, opts.k_), ++i);
@@ -166,22 +162,14 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         }
     }
     while(ctrs.size() < nt) ctrs.emplace_back(opts.cssize());
-    auto reset = [&](int tid) {
-#if 0
-        if(!fss.empty()) fss[tid].reset();
-        else if(!opss.empty()) opss[tid].reset();
-        else if(!bmhs.empty()) bmhs[tid].reset();
-        else if(!pmhs.empty()) pmhs[tid].reset();
-        //else throw std::runtime_error("Unexpected: no sketches are available");
-        if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();
-#else
-        if(!fss.empty()) fss[tid].reset();
-        if(!opss.empty()) opss[tid].reset();
-        if(!bmhs.empty()) bmhs[tid].reset();
-        if(!pmhs.empty()) pmhs[tid].reset();
-        if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();
-#endif
-    };
+#define __RESET(tid) do { \
+        if(!opss.empty()) opss[tid].reset();\
+        else if(!fss.empty()) fss[tid].reset();\
+        else if(!bmhs.empty()) bmhs[tid].reset();\
+        else if(!pmhs.empty()) pmhs[tid].reset();\
+        if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();\
+    } while(0)
+
     if(opts.parse_by_seq_) {
         std::vector<FastxSketchingResult> res(paths.size());
         ret.nperfile_.resize(paths.size());
@@ -294,7 +282,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());
                 continue;
             }
-            reset(tid);
+            __RESET(tid);
             auto perf_for_substrs = [&](const auto &func) {
                 for_each_substr([&](const std::string &subpath) {
                     //std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
