@@ -4,7 +4,7 @@ CXX?=g++
 
 LIB=-lz
 INCLUDE+=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
-OPT+=-std=c++17 -O1 -march=native -fopenmp
+OPT+=-std=c++17 -O3 -march=native -fopenmp
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic
 EXTRA+=-DNOCURL
 CXXFLAGS+=-std=c++17
