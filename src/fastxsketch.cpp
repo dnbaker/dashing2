@@ -256,7 +256,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             int tid = 0;
             OMP_ONLY(tid = omp_get_thread_num();)
             //const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-            const auto starttime = std::chrono::high_resolution_clock::now();
+            //const auto starttime = std::chrono::high_resolution_clock::now();
             auto &path = paths[i];
             //std::fprintf(stderr, "parsing from path = %s\n", path.data());
             ret.destination_files_[i] = makedest(path);

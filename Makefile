@@ -13,6 +13,7 @@ OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp))
 OBJ=$(OFS)
 OBJLD=$(patsubst %.o,%.ldo,$(OFS))
 OBJF=$(patsubst %.o,%.fo,$(OFS))
+OBJDBG=$(patsubst %.o,%.do,$(OFS))
 
 all: dashing2
 unit: readfx readbw readbed
@@ -35,7 +36,7 @@ LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 dashing2: $(OBJ) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
 dashing2-d: $(DLIBOBJ) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(DLIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-g: $(GLIBOBJ) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-ld: $(OBJLD) libBigWig.a
