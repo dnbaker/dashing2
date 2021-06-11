@@ -9,7 +9,7 @@
 static option_struct sketch_long_options[] = {\
     LO_FLAG("canon", 'C', canon, true)\
     LO_FLAG("cache", 'W', cache, true)\
-    LO_FLAG("multiset", OPTARG_DUMMY, s, SPACE_MULTISET)\
+    LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
@@ -95,7 +95,7 @@ void sketch_usage() {
 int sketch_main(int argc, char **argv) {
     int c;
     int k = 16, w = -1, nt = -1;
-    SketchSpace s = SPACE_SET;
+    SketchSpace sketch_space = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false;
     bool exact_kmer_dist = false;
@@ -123,9 +123,8 @@ int sketch_main(int argc, char **argv) {
         case 'k': k = std::atoi(optarg); break;
         case 'w': w = std::atoi(optarg); break;
         case 'W': cache = true; break;
-        case 'B': std::fprintf(stderr, "Using BMH\n"); s = SPACE_MULTISET; res = FULL_SETSKETCH; break;
-        case 'P': std::fprintf(stderr, "Using PMH\n"); s = SPACE_PSET; res = FULL_SETSKETCH; break;
-        case 'E': s = SPACE_EDIT_DISTANCE; std::fprintf(stderr, "Used edit distance!\n"); break;
+        case 'B': std::fprintf(stderr, "Using BMH\n"); sketch_space = SPACE_MULTISET; res = FULL_SETSKETCH; break;
+        case 'P': std::fprintf(stderr, "Using PMH\n"); sketch_space = SPACE_PSET; res = FULL_SETSKETCH; break;
         case 'Z': res = FULL_SETSKETCH; break;
         case 'o': outfile = optarg; break;
         case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;
@@ -175,7 +174,7 @@ int sketch_main(int argc, char **argv) {
     }
     size_t nq = paths.size() - nref;
     std::fprintf(stderr, "Sketching %zu arguments (lhs) and %zu (rhs)\n", nref, nq);
-    Dashing2Options opts(k, w, rht, s, dt, nt, use128, spacing, canon);
+    Dashing2Options opts(k, w, rht, sketch_space, dt, nt, use128, spacing, canon);
     opts
         .kmer_result(res)
         .cache_sketches(cache)

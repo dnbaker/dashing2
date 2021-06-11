@@ -30,7 +30,7 @@ static INLINE uint64_t reg2sig(RegT x) {
 #endif
 
 std::tuple<void *, double, double>
-make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs) {
+make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs, bool is_edit_distance) {
     std::tuple<void *, double, double> ret = {nullptr, 0., 0.};
     if(fd >= sizeof(RegT)) return ret;
     size_t mem = fd * sigs.size();
@@ -39,7 +39,25 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs)
     if(posix_memalign((void **)&compressed_reps, 64, mem)) throw std::bad_alloc();
     const size_t nsigs = sigs.size();
     assert(fd != 0.5 || sigs.size() % 2 == 0);
-    if(truncation_method > 0) {
+    if(is_edit_distance) {
+        const uint64_t *sptr = (const uint64_t *)sigs.data();
+        if(fd == 0.5) {
+            uint8_t *ptr = (uint8_t *)compressed_reps;
+            OMP_STATIC_SCHED32
+            for(size_t i = 0; i < nsigs / 2; ++i) {
+                ptr[i] = (sptr[2 * i] & 0xfu) | ((sptr[2 * i + 1] & 0xfu) << 4);
+            }
+        } else {
+            OMP_STATIC_SCHED32
+            for(size_t i = 0; i < nsigs; ++i) {
+                const auto sig = sptr[i];
+                if(fd == 8) ((uint64_t *)compressed_reps)[i] = sig;
+                else if(fd == 4) ((uint32_t *)compressed_reps)[i] = sig;
+                else if(fd == 2) ((uint16_t *)compressed_reps)[i] = sig;
+                else ((uint8_t *)compressed_reps)[i] = sig;
+            }
+        }
+    } else if(truncation_method > 0) {
         std::fprintf(stderr, "Performing %d-bit compression\n", int(fd * 8.));
         if(fd == 0.5) {
             uint8_t *ptr = (uint8_t *)compressed_reps;
@@ -189,15 +207,12 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
             LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
-            eq = (1. - alpha - beta);
             lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
+            eq = (1. - alpha - beta);
             //std::fprintf(stderr, "lhcard %g, rhc %g\n", lhcard, rhcard);
-            if(alpha + beta >= 1.) {
-                //std::fprintf(stderr, "a, b (%g, %g) add to more than one. ucard is now %g\n", alpha, beta, lhcard + rhcard);
-                ucard = lhcard + rhcard;
-            } else {
-                ucard = std::max(lhcard + rhcard / (2. - alpha - beta), 0.);
-            }
+            if(eq <= 0.)
+                return opts.measure_ != POISSON_LLR ? 0.: std::numeric_limits<double>::max();
+            ucard = std::max(lhcard + rhcard / (2. - alpha - beta), 0.);
             LSHDistType isz = ucard * eq, sim = eq;
             //std::fprintf(stderr, "isz %g. sim %g\n", isz, sim);
             ret = opts.measure_ == SIMILARITY ? sim
@@ -206,13 +221,8 @@ case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\
                 : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
-            std::fprintf(stderr, "doing equality comparisons between registers for %s/%s\n", to_string(opts.sspace_).data(), to_string(opts.kmer_result_).data());
-            auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
-            DBG_ONLY(
-            for(size_t k = 0; k < opts.sketchsize_; ++k) {
-                std::fprintf(stderr, "%zu lhs %g, rhs %g\n", k, result.signatures_[opts.sketchsize_ * i + k], result.signatures_[opts.sketchsize_ * j + k]);
-            }
-            )
+            //std::fprintf(stderr, "doing equality comparisons between registers for %s/%s\n", to_string(opts.sspace_).data(), to_string(opts.kmer_result_).data());
+            const auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
             DBG_ONLY(std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);)
             if(opts.measure_ == INTERSECTION) {
@@ -351,7 +361,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
         if(result.signatures_.empty()) throw std::runtime_error("Empty signatures; trying to compress registers but don't have any");
     }
-    std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_);
+    std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_, opts.sspace_ == SPACE_EDIT_DISTANCE);
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
         emit_all_pairs(opts, result);
         return;
