@@ -8,7 +8,7 @@
 namespace dashing2 {
 
 namespace hash = sketch::hash;
-template<typename T, size_t pow2=false>
+template<typename T, size_t pow2=false, typename Hasher = hash::MultiplyAddXoRot<31>>
 struct LazyOnePermSetSketch {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T>, "Must be integral and unsigned");
     size_t m_;
@@ -24,15 +24,9 @@ struct LazyOnePermSetSketch {
     int shift_;
     double count_threshold_;
     uint64_t total_updates_ = 0;
+    Hasher hasher_;
     // MultiplyAddXoRot
     // is already enough to pass Rabbit/SmallCrush
-    using Hasher =
-#if 0
-        hash::FusedReversible3<hash::XorMultiply, hash::RotL33, hash::MultiplyAddXoRot<31>>;
-#else
-        hash::MultiplyAddXoRot<31>;
-#endif
-    Hasher hasher_;
     schism::Schismatic<uint64_t> div_;
     double mincount_ = 0.;
     std::vector<btree::map<T, uint32_t>> potentials_;
@@ -89,7 +83,6 @@ struct LazyOnePermSetSketch {
         assert(idx < size());
         auto &cref = counts_[idx];
         auto &rref = registers_[idx];
-        bool val;
         if(mincount_ > 0.) {
             // If mincount > 0, then
             if(rref > id) {
@@ -128,21 +121,31 @@ struct LazyOnePermSetSketch {
         std::transform(registers_.begin(), registers_.end(), p->begin(), [this](T x) {return this->decode(x);});
         return *p;
     }
+    static constexpr long double omul =
+        sizeof(T) == 16 ? 0x1p-128L:
+        sizeof(T) == 8 ? 0x1p-64L:
+        sizeof(T) == 4 ? 0x1p-32L:
+        sizeof(T) == 2 ? 0x1p-16L:
+        sizeof(T) == 1 ? 0x1p-8L: 0.L;
+    static_assert(omul != 0.L, "sanity");
     size_t get_modv() const {return std::numeric_limits<T>::max();}
     SigT *data() {
         if(as_sigs_) return as_sigs_->data();
         as_sigs_.reset(new std::vector<SigT>(registers_.size()));
-        const size_t modv = get_modv();
         std::vector<T> tmp = registers_;
         std::reverse(tmp.begin(), tmp.end());
         for(auto &x: tmp) x = ~x / m_;
         auto asp = as_sigs_->data();
-        const long double mul = -SigT(1) / m_;
-        const long double omul = 1.L / modv;
+        const long double mul = -SigT(1) / (m_ - std::count(registers_.begin(), registers_.end(), std::numeric_limits<T>::max()));
         for(size_t i = 0; i < m_; ++i) {
+            //const auto lv = registers_[i];
+            if(registers_[i] == std::numeric_limits<T>::max()) continue;
             const auto lv = std::numeric_limits<T>::max() - registers_[i];
-            asp[i] = lv ? mul * std::log(omul * lv): 0.L;
+            asp[i] = mul * std::log(omul * lv);
+            //std::fprintf(stderr, "reg %zu is %g\n", i, asp[i]);
         }
+        //auto mv = *std::max_element(registers_.begin(), registers_.end());
+        //std::fprintf(stderr, "Max: %g/%zu\n", mul * std::log(mv * omul), mv);
         return asp;
     }
     void reset() {
@@ -154,20 +157,14 @@ struct LazyOnePermSetSketch {
     double getcard() {
         if(card_ > 0.) return card_;
         long double inv = 1. / std::numeric_limits<T>::max();
-        size_t sz = size();
-        std::fprintf(stderr, "size: %zu\n", sz);
+        //std::fprintf(stderr, "size: %zu\n", sz);
         long double sum = std::accumulate(registers_.begin(), registers_.end(), 0.L,
-                    [inv,m=m_,&sz](auto x, auto y) -> long double {
-            //long double frac = use_lt ? (y * inv): (std::numeric_limits<T>::max() - y) * inv;
-            long double frac = (y * inv);
-            std::fprintf(stderr, "frac: %Lg\n", frac);
-            if(y == 0) {--sz; return x;}
-            //if(!use_lt) y = std::numeric_limits<T>::max() - y;
-            std::fprintf(stderr, "regval %zu/%g\n", size_t(y), double(y * inv));
-            return x + frac;
+                    [inv,m=m_](auto x, auto y) -> long double {
+            return x + (y ? y * inv: 0.L);
+            //if(y == 0) {std::fprintf(stderr, "sub num\n"); --sz; return x;}
         });
         if(sum == 0.) return std::numeric_limits<double>::infinity();
-        card_ = std::pow(sz, 2) / sum;
+        card_ = std::pow(m_, 2) / sum;
         return card_;
     }
     size_t size() const {return registers_.size();}
