@@ -138,6 +138,7 @@ struct LazyOnePermSetSketch {
     void reset() {
         std::memset(registers_.data(), 0, registers_.size() * sizeof(T));
         std::memset(counts_.data(), 0, counts_.size() * sizeof(double));
+        as_sigs_.reset();
     }
     double getcard() {
         if(card_ > 0.) return card_;
@@ -145,7 +146,7 @@ struct LazyOnePermSetSketch {
         long double inv = 1. / modv;
         long double sum = std::accumulate(registers_.begin(), registers_.end(), 0.L,
                     [modv,inv,m=m_](auto x, auto y) {
-            std::fprintf(stderr, "frac: %g/%g\n", (modv - (y / m) % modv) * inv, ((y / m) % modv) * inv);
+            std::fprintf(stderr, "frac: %Lg/%Lg\n", (modv - (y / m) % modv) * inv, ((y / m) % modv) * inv);
             return x + (modv - (y / m) % modv) * inv;
         });
         if(sum == 0.) return std::numeric_limits<double>::infinity();
