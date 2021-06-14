@@ -297,7 +297,6 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
         std::fputc('\n', ofp);
         std::fprintf(ofp, "%zu\n", ns);
     }
-    // TODO: support non-binary output by changing the daemon functio
     std::thread sub = std::thread([&](){
         while(loopint == 0 || datq.size()) {
             if(datq.empty()) {

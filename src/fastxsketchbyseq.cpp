@@ -189,7 +189,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     assert(sketchers.fss);
                     ptr = sketchers.fss->data();
                     ret.cardinalities_[i] = sketchers.fss->getcard();
-                    std::fprintf(stderr, "Card is %g from FSS\n", sketchers.fss->getcard());
+                    DBG_ONLY(std::fprintf(stderr, "Card is %g from FSS\n", sketchers.fss->getcard());)
                     if(sketchers.fss->ids().size())
                         kmer_ptr = sketchers.fss->ids().data();
                     if(sketchers.fss->idcounts().size()) {

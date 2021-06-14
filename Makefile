@@ -26,7 +26,7 @@ ifeq ($(shell uname -s ),Darwin)
 endif
 
 
-OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp
+OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp src/bwreduce.cpp
 LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))
 DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS))
 GLIBOBJ=$(patsubst %.cpp,%.go,$(OBJFS))

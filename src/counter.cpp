@@ -17,7 +17,9 @@ Counter &Counter::operator+=(const Counter &o) {
         }
     } else {
         const size_t cs = count_sketch_.size();
+#ifdef _OPENMP
         #pragma omp simd
+#endif
         for(size_t i = 0; i < cs; ++i) {
             count_sketch_[i] += o.count_sketch_[i];
         }
@@ -32,5 +34,9 @@ void Counter::reset() {
     if(!c64d_.empty()) c64d_.clear();
     if(!c128d_.empty()) c128d_.clear();
 }
-
+bool Counter::empty() const
+{
+    return c64_.empty() && c128_.empty() && std::find_if(count_sketch_.begin(), count_sketch_.end(), [](auto x) {return x != 0;}) == count_sketch_.end();
 }
+
+} // namespace dashing2

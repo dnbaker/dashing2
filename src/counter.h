@@ -30,7 +30,7 @@ struct Counter {
         }
     }
     void reset();
-    bool empty() const {return c64_.empty() && c128_.empty() && std::find_if(count_sketch_.begin(), count_sketch_.end(), [](auto x) {return x != 0;}) == count_sketch_.end();}
+    bool empty() const;
     void add(u128_t x, double inc) {
         switch(ct()) {
             case COUNTSKETCH_COUNTING: case COUNTMIN_COUNTING: {

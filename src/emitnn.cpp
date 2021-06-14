@@ -20,7 +20,7 @@ void emit_neighbors(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
     if(outname.size() && (ofp = std::fopen(outname.data(), "wb")) == nullptr)
         throw std::runtime_error(std::string("Failed to open file ") + outname + " for writing");
     if(opts.output_format_ == HUMAN_READABLE) {
-        std::fprintf(ofp, "#Collection\tNeighbor lists -- name:distance, separated by tabs");
+        std::fprintf(ofp, "#Collection\tNeighbor lists -- name:distance, separated by tabs\n");
         for(size_t i = 0; i < lists.size(); ++i) {
             auto &l = lists[i];
             std::fprintf(ofp, "%s", result.names_[i].data());

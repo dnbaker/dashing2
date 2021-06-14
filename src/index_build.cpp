@@ -20,17 +20,19 @@ void pqueue::erase(typename std::priority_queue<PairT>::container_type::iterator
 void update(pqueue &x, ska::flat_hash_set<LSHIDType> &xset, const PairT &item, const int topk, size_t k, std::mutex &mut) {
     const auto [dist, id] = item;
     if(xset.find(id) != xset.end()) {
-        std::fprintf(stderr, "id %u is already present\n", int(id));
+        DBG_ONLY(std::fprintf(stderr, "id %u is already present\n", int(id));)
         return;
     }
     if(topk <= 0 || x.size() < k) {
         std::lock_guard<std::mutex> lock(mut);
         xset.insert(id);
         x.push(item);
-
+        return;
         //assert(*std::min_element(x.begin(), x.end()) == x.front());
-    } else if(x.top() < item) {
-        std::fprintf(stderr, "New top before update: %g/Size %zu\n", x.front().first, x.size());
+    }
+    DBG_ONLY(std::fprintf(stderr, "Updating item %g/%u\n", item.first, item.second);)
+    if(x.top() < item) {
+        DBG_ONLY(std::fprintf(stderr, "New top before update: %g/Size %zu, with new item %g/%zu added\n", x.front().first, x.size(), item.first, item.second);)
         std::lock_guard<std::mutex> lock(mut);
         auto old = x.top();
         // If the rank is the same as k - 1, save both
@@ -40,10 +42,15 @@ void update(pqueue &x, ska::flat_hash_set<LSHIDType> &xset, const PairT &item, c
             x.pop();
         }
         x.push(item);
-        std::fprintf(stderr, "New top after update: %g/Size %zu\n", x.front().first, x.size());
     }
 }
 
+#define ALL_CASE_NS\
+               CASE_N(8, uint64_t);\
+               CASE_N(4, uint32_t);\
+               CASE_N(2, uint16_t);\
+               CASE_N(1, uint8_t);\
+                default: __builtin_unreachable();
 
 std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed) {
     // Builds the LSH index and populates nearest-neighbor lists in parallel
@@ -58,51 +65,37 @@ std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashin
             n.reserve(opts.num_neighbors_);
     std::vector<ska::flat_hash_set<LSHIDType>> neighbor_sets(ns);
     std::unique_ptr<std::mutex[]> mutexes(new std::mutex[ns]);
-    std::fprintf(stderr, "About to build index\n");
     // Build the index
     for(size_t i  = 0; i < ns; ++i) {
         if(index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
             switch(int(opts.fd_level_)) {
-#define CASE_N(digit, TYPE) case digit: {minispan<TYPE> mspan((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * i, opts.sketchsize_);\
-    idx.update(mspan);} break
-               CASE_N(8, uint64_t);
-               CASE_N(4, uint32_t);
-               CASE_N(2, uint16_t);
-               CASE_N(1, uint8_t);
-                default: __builtin_unreachable();
+#define CASE_N(digit, TYPE) case digit: idx.update(minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * i, opts.sketchsize_)); break
+            ALL_CASE_NS
 #undef CASE_N
             }
         } else {
-            std::fprintf(stderr, "Indexing with span index %zu/%zu\n", i + 1, ns);
-            minispan<RegT> mspan(&result.signatures_[opts.sketchsize_ * i], opts.sketchsize_);
-            idx.update(mspan);
+            idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * i], opts.sketchsize_));
         }
-        // res = update_query(,, x)
-        // Build a candidate list and the index at the same time
-        // When this is complete, we'll have a list of IDs to do comparisons with
     }
     // Build neighbor lists
     // Currently parallelizing the outer loop,
     // but the inner might be worth trying
     OMP_PFOR_DYN
     for(size_t id = 0; id < ns; ++id) {
-        std::fprintf(stderr, "%zu\t%zu\n", id, ns);
+        //std::fprintf(stderr, "%zu\t%zu\n", id, ns);
         std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
         if(index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
             switch(int(opts.fd_level_)) {
-#define CASE_N(i, TYPE) case i: {minispan<TYPE> mspan((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * id, opts.sketchsize_);\
-    query_res = idx.query_candidates(mspan, ntoquery);} break
-               CASE_N(8, uint64_t);
-               CASE_N(4, uint32_t);
-               CASE_N(2, uint16_t);
-               CASE_N(1, uint8_t);
-                default: __builtin_unreachable();
+#define CASE_N(i, TYPE) \
+        case i: {query_res = idx.query_candidates(\
+            minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * id, opts.sketchsize_),\
+            ntoquery);\
+        } break
+               ALL_CASE_NS
 #undef CASE_N
             }
-        } else {
-            minispan<RegT> mspan(&result.signatures_[opts.sketchsize_ * id], opts.sketchsize_);
-            query_res = idx.query_candidates(mspan, ntoquery);
-        }
+        } else
+            query_res = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * id], opts.sketchsize_), ntoquery);
         auto &[ids, counts, npr] = query_res;
         const size_t idn = ids.size();
         for(size_t j = 0; j < idn; ++j) {
