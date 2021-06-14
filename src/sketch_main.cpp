@@ -7,29 +7,6 @@
 
 #define SKETCH_OPTS \
 static option_struct sketch_long_options[] = {\
-    LO_FLAG("canon", 'C', canon, true)\
-    LO_FLAG("cache", 'W', cache, true)\
-    LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
-    LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
-    LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
-    LO_FLAG("128bit", '2', use128, true)\
-    LO_FLAG("long-kmers", '2', use128, true)\
-    LO_FLAG("save-kmers", 's', save_kmers, true)\
-    LO_FLAG("bed", OPTARG_BED, dt, DataType::BED)\
-    LO_FLAG("bigwig", OPTARG_BIGWIG, dt, DataType::BIGWIG)\
-    LO_FLAG("leafcutter", OPTARG_LEAFCUTTER, dt, DataType::LEAFCUTTER)\
-    LO_ARG("outprefix", OPTARG_OUTPREF)\
-    LO_ARG("kmer-length", 'k')\
-    LO_ARG("window-size", 'w')\
-    LO_ARG("countsketch-size", 'c')\
-    LO_ARG("threads", 'p')\
-    LO_ARG("sketchsize", 'S')\
-    LO_ARG("save-kmercounts", 'N')\
-    LO_ARG("save-kmers", 's')\
-    LO_ARG("ffile", 'F')\
-    LO_ARG("qfile", 'Q')\
-    LO_ARG("count-threshold", 'm')\
-    LO_ARG("outfile", 'o')\
     SHARED_OPTS\
 };
 
@@ -120,31 +97,6 @@ int sketch_main(int argc, char **argv) {
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
-        case 'k': k = std::atoi(optarg); break;
-        case 'w': w = std::atoi(optarg); break;
-        case 'W': cache = true; break;
-        case 'B': std::fprintf(stderr, "Using BMH\n"); sketch_space = SPACE_MULTISET; res = FULL_SETSKETCH; break;
-        case 'P': std::fprintf(stderr, "Using PMH\n"); sketch_space = SPACE_PSET; res = FULL_SETSKETCH; break;
-        case 'Z': res = FULL_SETSKETCH; break;
-        case 'o': outfile = optarg; break;
-        case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;
-        case 'C': canon = true; break;
-        case 'p': nt = std::atoi(optarg); break;
-        case 'S': sketchsize = std::atoi(optarg); break;
-        case 'N': save_kmers = save_kmercounts = true; break;
-        case 's': save_kmers = true; break;
-        case 'H': res = FULL_MMER_SET; break;
-        case 'J': res = FULL_MMER_COUNTDICT; break;
-        case 'G': res = FULL_MMER_SEQUENCE; break;
-        case OPTARG_BED_NORMALIZE: normalize_bed = true; break;
-        case '2': use128 = true; break;
-        case 'm': count_threshold = std::atof(optarg); break;
-        case 'F': ffile = optarg; break;
-        case 'Q': qfile = optarg; break;
-        case OPTARG_ISZ: measure = INTERSECTION; break;
-        case OPTARG_OUTPREF: {
-            outprefix = optarg; break;
-        }
         SHARED_FIELDS
         case '?': case 'h': sketch_usage(); return 1;
     }}
