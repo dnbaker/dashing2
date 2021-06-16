@@ -60,8 +60,8 @@ public:
     T decode(T x) const {
         return hasher_.inverse(x);
     }
-    static INLINE T shasher_(T x) {
-        return T(0xd63af43ad731df95) ^ ((x >> 33) ^ (x << 33));
+    static INLINE constexpr T shasher_(T x) {
+        return static_cast<T>(0xd63af43ad731df95) ^ ((x >> 31) ^ (x << 33));
     }
     INLINE void update(const T oid) {
         ++total_updates_;
@@ -70,15 +70,7 @@ public:
         if constexpr(pow2) {
             idx = idx & mask_;
         } else {
-            auto di = div_.div(idx);
-            idx = (idx - m_ * di);
-#if 0
-            auto mo = idx - m_ * di;
-            assert(di == (hid / m_));
-            assert(mo == (hid % m_));
-            assert(di < hid);
-            idx = mo;
-#endif
+            idx -= m_ * div_.div(idx);
         }
         assert(idx < size());
         auto &cref = counts_[idx];
@@ -132,6 +124,7 @@ public:
         std::memset(counts_.data(), 0, counts_.size() * sizeof(double));
         as_sigs_.reset();
         card_ = -1.;
+        for(auto &p: potentials_) p.clear();
     }
     double getcard() {
         if(card_ > 0.) return card_;
