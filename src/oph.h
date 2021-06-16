@@ -138,6 +138,8 @@ public:
         std::memset(counts_.data(), 0, counts_.size() * sizeof(double));
         as_sigs_.reset();
         card_ = -1.;
+        for(auto &p: potentials_)
+            p.clear();
     }
     double getcard() {
         if(card_ > 0.) return card_;
@@ -155,12 +157,8 @@ public:
         for(size_t i = 0; i < m_; ++i) {
             //const auto lv = registers_[i];
             if(registers_[i] == std::numeric_limits<T>::max()) continue;
-            const auto lv = std::numeric_limits<T>::max() - registers_[i] + 1;
-            asp[i] = mul * std::log(omul * lv);
-            //std::fprintf(stderr, "reg %zu is %g\n", i, asp[i]);
+            asp[i] = mul * std::log(omul * (std::numeric_limits<T>::max() - registers_[i] + 1));
         }
-        //auto mv = *std::max_element(registers_.begin(), registers_.end());
-        //std::fprintf(stderr, "Max: %g/%zu\n", mul * std::log(mv * omul), mv);
         return asp;
     }
     std::vector<uint64_t> &ids() {
@@ -179,4 +177,4 @@ public:
     size_t total_updates() const {return total_updates_;}
     size_t size() const {return m_;}
 };
-}
+} // namespace dashing2
