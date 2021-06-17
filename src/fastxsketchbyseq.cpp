@@ -35,13 +35,13 @@ struct OptSketcher {
     }
     bool enable_protein() const {return enable_protein_;}
     void reset() {
+        rh_.reset(); rh128_.reset();
         if(bmh) bmh->reset();
         if(pmh) pmh->reset();
         if(opss) opss->reset();
         if(fss) fss->reset();
         if(ctr) ctr->reset();
-        rh_.reset();
-        rh128_.reset();
+        //if(omh) omh->reset();
     }
 };
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex);

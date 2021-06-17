@@ -120,7 +120,7 @@ LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, si
     LSHDistType ret = std::numeric_limits<LSHDistType>::max();
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const LSHDistType invdenom = 1. / opts.sketchsize_;
-    auto sim2dist = [poisson_mult=1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
+    auto sim2dist = [poisson_mult=-1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
     if(opts.compressed_ptr_) {
         const bool bbit_c = opts.truncation_method_ > 0;
         std::pair<uint64_t, uint64_t> res{0, 0};
