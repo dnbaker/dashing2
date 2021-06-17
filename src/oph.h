@@ -160,4 +160,4 @@ public:
     size_t total_updates() const {return total_updates_;}
     size_t size() const {return m_;}
 };
-}
+} // namespace dashing2

@@ -164,6 +164,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         else if(!fss.empty()) fss[tid].reset();\
         else if(!bmhs.empty()) bmhs[tid].reset();\
         else if(!pmhs.empty()) pmhs[tid].reset();\
+        /*else if(!omhs.empty()) omhs[tid].reset();*/\
         if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();\
     } while(0)
 
