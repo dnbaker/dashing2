@@ -32,11 +32,7 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
             }
         }
     }
-    for(size_t i = k; i > 0;) {
-        --i;
-        ret[i] = pq.top();
-        pq.pop();
-    }
+    for(size_t i = k; i > 0;ret[--i] = pq.top(), pq.pop());
 }
 
 template<typename T>
@@ -44,10 +40,9 @@ void load_copy(const std::string &path, T *ptr) {
     std::FILE *fp = std::fopen(path.data(), "rb");
     if(!fp) throw std::runtime_error(std::string("Failed to open ") + path);
     struct stat st;
-    if(::fstat(::fileno(fp), &st)) {
+    if(::fstat(::fileno(fp), &st))
         throw std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp)));
-    }
-    std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), size_t(st.st_size));
+    DBG_ONLY(std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), size_t(st.st_size));)
     size_t nb = std::fread(ptr, 1, st.st_size, fp);
     if(nb != size_t(st.st_size)) {
         std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, size_t(st.st_size), nb);
@@ -226,7 +221,10 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 ret = ret + std::string(".ct_threshold") + std::to_string(opts.count_threshold_);
             }
             if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_EDIT_DISTANCE) {
-                ret = ret + "." + to_string(opts.ct());
+                ret += '.';
+                ret += to_string(opts.ct());
+                if(opts.ct() != EXACT_COUNTING)
+                    ret += std::to_string(opts.cssize_);
             }
             ret = ret + "." + to_string(opts.sspace_);
             ret = ret + "." + bns::to_string(opts.rht_);
@@ -380,7 +378,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 } else nb = 0, srcptr = nullptr;
                 if(srcptr && ret.signatures_.size())
                     std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
-                std::fprintf(stderr, "Copying out buffer of %zu to file %s\n", nb, destination.data());
                 checked_fwrite(ofp, buf, nb);
                 std::fclose(ofp);
                 if((opts.save_kmers_ || opts.build_mmer_matrix_) && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {

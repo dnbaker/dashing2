@@ -344,8 +344,8 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     if(ofp != stdout) std::fclose(ofp);
 }
 void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
-    std::fprintf(stderr, "Beginning cmp_core with options: \n");
     VERBOSE_ONLY(
+    std::fprintf(stderr, "Beginning cmp_core with options: \n");
         if(opts.sspace_ == SPACE_SET) {
             std::fprintf(stderr, "Comparing sets\n");
         } else if(opts.sspace_ == SPACE_MULTISET) {
