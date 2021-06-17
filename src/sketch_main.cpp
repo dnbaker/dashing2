@@ -90,6 +90,7 @@ int sketch_main(int argc, char **argv) {
     size_t nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
     Measure measure = SIMILARITY;
+    std::ios_base::sync_with_stdio(false);
     // By default, use full hash values, but allow people to enable smaller
     bool normalize_bed = false;
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -114,6 +115,9 @@ int sketch_main(int argc, char **argv) {
     std::unique_ptr<std::vector<std::string>> qup;
     if(ffile.size()) {
         std::ifstream ifs(ffile);
+        static constexpr size_t bufsize = 1<<18;
+        std::unique_ptr<char []> buf(new char[bufsize]);
+        ifs.rdbuf()->pubsetbuf(buf.get(), bufsize);
         for(std::string l;std::getline(ifs, l);) {
             paths.push_back(l);
         }
@@ -138,7 +142,7 @@ int sketch_main(int argc, char **argv) {
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
         .cmd(cmd).count_threshold(count_threshold);
-    std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);
+    DBG_ONLY(std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);)
     if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
             && opts.kmer_result_ == ONE_PERM) {
         opts.kmer_result_ = FULL_SETSKETCH;

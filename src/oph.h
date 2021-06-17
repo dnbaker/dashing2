@@ -60,21 +60,17 @@ public:
     T decode(T x) const {
         return hasher_.inverse(x);
     }
+    static INLINE constexpr T shasher_(T x) {
+        return static_cast<T>(0xd63af43ad731df95) ^ ((x >> 31) ^ (x << 33));
+    }
     INLINE void update(const T oid) {
         ++total_updates_;
         const T id = hasher_(oid);
-        size_t idx;
+        size_t idx = shasher_(id);
         if constexpr(pow2) {
-            idx = hasher_(id) & mask_;
+            idx = idx & mask_;
         } else {
-            auto hid = hasher_(id);
-            auto di = div_.div(hid);
-            auto mo = hid - m_ * di;
-            assert(di == (hid / m_));
-            assert(mo == (hid % m_));
-            assert(di < hid);
-            idx = mo;
-            //std::fprintf(stderr, "di = %zu, mo = %zu, idx = %zu, id = %zu\n", size_t(di), size_t(mo), size_t(idx), size_t(id));
+            idx -= m_ * div_.div(idx);
         }
         assert(idx < size());
         auto &cref = counts_[idx];
@@ -103,16 +99,6 @@ public:
             } else cref += (rref == id);
         }
     }
-#if 0
-    size_t total_updates() const;
-    std::vector<uint32_t> &idcounts();
-    std::vector<uint64_t> &ids();
-    static constexpr size_t get_modv();
-    size_t size() const;
-    SigT *data();
-    void reset();
-    double getcard();
-#endif
 
     static constexpr long double omul =
         sizeof(T) == 16 ? 0x1p-128L:
@@ -138,8 +124,7 @@ public:
         std::memset(counts_.data(), 0, counts_.size() * sizeof(double));
         as_sigs_.reset();
         card_ = -1.;
-        for(auto &p: potentials_)
-            p.clear();
+        for(auto &p: potentials_) p.clear();
     }
     double getcard() {
         if(card_ > 0.) return card_;

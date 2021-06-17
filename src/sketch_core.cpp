@@ -9,7 +9,6 @@ INLINE size_t nbytes_from_line(const std::string &line) {
 }
 
 SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string> &paths, std::string &outfile) {
-    std::vector<std::pair<size_t, uint64_t>> filesizes = get_filesizes(paths);
     SketchingResult result;
     const size_t npaths = paths.size();
     if(opts.dtype_ == DataType::FASTX) {
@@ -21,6 +20,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         result.nperfile_.resize(res.nsamples_per_file().size());
         std::copy(res.nsamples_per_file().begin(), res.nsamples_per_file().end(), result.nperfile_.begin());
     } else if(opts.dtype_ == DataType::BED || opts.dtype_ == DataType::BIGWIG) {
+        std::vector<std::pair<size_t, uint64_t>> filesizes = get_filesizes(paths);
         result.signatures_.resize(npaths * opts.sketchsize_);
         result.names_.resize(npaths);
         result.cardinalities_.resize(npaths);
