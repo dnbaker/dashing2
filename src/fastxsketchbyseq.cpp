@@ -36,11 +36,11 @@ struct OptSketcher {
     bool enable_protein() const {return enable_protein_;}
     void reset() {
         rh_.reset(); rh128_.reset();
-        if(bmh) bmh->reset();
-        if(pmh) pmh->reset();
-        if(opss) opss->reset();
-        if(fss) fss->reset();
         if(ctr) ctr->reset();
+        if(bmh) bmh->reset();
+        else if(pmh) pmh->reset();
+        else if(opss) opss->reset();
+        else if(fss) fss->reset();
         //if(omh) omh->reset();
     }
 };
