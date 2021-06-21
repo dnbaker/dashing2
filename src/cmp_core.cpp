@@ -77,9 +77,11 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
             }
         }
     } else {
-        RegT minreg = std::numeric_limits<RegT>::max(), maxreg = std::numeric_limits<RegT>::min();
+        RegT minreg = sigs[0], maxreg = minreg;
         OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
         for(size_t i = 0; i < nsigs; ++i) {
+            if(sigs[i] == std::numeric_limits<RegT>::max())
+                continue;
             minreg = std::min(minreg, sigs[i]);
             maxreg = std::max(maxreg, sigs[i]);
         }
@@ -145,7 +147,10 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = ske
         } else {
             switch(int(2. * opts.fd_level_)) {
 #define CASE_ENTRY(v, TYPE)\
-case v: {std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\n", i, j, int(2. * opts.fd_level_)); TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
+case v: {\
+    VERBOSE_ONLY(std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\n", i, j, int(8. * opts.fd_level_));)\
+    TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_);\
+    res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
                 CASE_ENTRY(16, uint64_t)
                 CASE_ENTRY(8, uint32_t)
                 CASE_ENTRY(4, uint16_t)

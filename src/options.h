@@ -58,7 +58,7 @@ enum OptArg{
     /*LO_FLAG("edit-distance", 'E', sketch_space, SPACE_EDIT_DISTANCE)*/\
     LO_FLAG("set", 'H', res, FULL_MMER_SET)\
     LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)\
-    LO_FLAG("bbits-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
+    LO_FLAG("bbit-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
     LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
     LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\

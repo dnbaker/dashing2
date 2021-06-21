@@ -283,7 +283,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 } else if(opts.kmer_result_ == FULL_MMER_SET) {
                     ret.cardinalities_[myind] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
                 }
-                std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());
+                DBG_ONLY(std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());)
                 continue;
             }
             __RESET(tid);
