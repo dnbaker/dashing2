@@ -50,7 +50,7 @@ public:
         reset();
     }
     void set_mincount(double v) {
-        if(v > 0.) {
+        if(v > 1.) {
             mincount_ = v;
             potentials_.resize(size());
         }
@@ -67,15 +67,14 @@ public:
         ++total_updates_;
         const T id = hasher_(oid);
         size_t idx = shasher_(id);
-        if constexpr(pow2) {
+        if constexpr(pow2)
             idx = idx & mask_;
-        } else {
+        else
             idx -= m_ * div_.div(idx);
-        }
         assert(idx < size());
         auto &cref = counts_[idx];
         auto &rref = registers_[idx];
-        if(mincount_ > 0.) {
+        if(mincount_ > 1.) {
             // If mincount > 0, then
             if(rref > id) {
                 auto &pos = potentials_[idx];
@@ -128,11 +127,11 @@ public:
     }
     double getcard() {
         if(card_ > 0.) return card_;
-        //std::fprintf(stderr, "size: %zu\n", sz);
         long double sum = std::accumulate(registers_.begin(), registers_.end(), 0.L,
-            [](auto x, auto y) {return x + (y ? y * omul: 0.L);}
+            [](auto x, auto y) {return x + y * omul;}
         );
-        return card_ = sum ? double(std::pow(m_, 2) / sum): std::numeric_limits<double>::infinity();
+        if(!sum) return std::numeric_limits<double>::infinity();
+        return m_ * (m_ / sum);
     }
     SigT *data() {
         if(as_sigs_) return as_sigs_->data();
@@ -140,7 +139,6 @@ public:
         auto asp = as_sigs_->data();
         const long double mul = -SigT(1) / (m_ - std::count(registers_.begin(), registers_.end(), std::numeric_limits<T>::max()));
         for(size_t i = 0; i < m_; ++i) {
-            //const auto lv = registers_[i];
             if(registers_[i] == std::numeric_limits<T>::max()) continue;
             asp[i] = mul * std::log(omul * (std::numeric_limits<T>::max() - registers_[i] + 1));
         }

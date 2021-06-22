@@ -69,7 +69,7 @@ struct Dashing2DistOptions: public Dashing2Options {
     void *compressed_ptr_ = nullptr;
     double compressed_b_ = -1.;
     double compressed_a_ = -1.;
-    Measure measure_ = SIMILARITY;
+    mutable Measure measure_ = SIMILARITY;
     std::string outfile_path_;
     bool exact_kmer_dist_ = false;
     Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false): Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist)
@@ -92,6 +92,10 @@ struct Dashing2DistOptions: public Dashing2Options {
         Dashing2Options::validate();
         if(num_neighbors_ > 0 && min_similarity_ > 0.) {
             throw std::invalid_argument("invalid: nn > 0 and minsim > 0. Pick either top-k or minimum similarity. (Can't do both.)");
+        }
+        if((sspace_ == SPACE_PSET || sspace_ == SPACE_EDIT_DISTANCE) && measure_ == INTERSECTION) {
+            std::fprintf(stderr, "Can't estimate intersection sizes for ProbMinHash due to the implicit normalization. Reverting to similarity\n");
+            measure_ = SIMILARITY;
         }
     }
 };
