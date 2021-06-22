@@ -14,7 +14,7 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
     std::pair<std::vector<RegT>, double> ret({std::vector<RegT>(opts.sketchsize_), 0.});
     auto &retvec(ret.first);
     std::string cache_path = path + to_suffix(opts);
-    std::fprintf(stderr, "Using %s\n", op ? "oneperm": "fullsetsketch");
+    DBG_ONLY(std::fprintf(stderr, "Using %s\n", op ? "oneperm": "fullsetsketch");)
 
     if(opts.trim_folder_paths_) {
         cache_path = trim_folder(path);
@@ -35,9 +35,9 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
     }
     for(std::string s;std::getline(ifs, s);) {
         if(s.empty() || s.front() == '#') continue;
-        char *p = &s[0], *p2 = std::strchr(p, '\t');
-        if(!p2) 
-            throw std::invalid_argument("Malformed line");
+        char *p = s.data(), *p2;
+        if((p2 = std::strchr(p, '\t')) == nullptr)
+            throw std::invalid_argument(std::string("Malformed line: ") + s);
         if(opts.trim_chr_ && ((*p == 'c' || *p == 'C') && p[1] == 'h' && p[2] == 'r'))
             p += 3;
         const uint64_t chrhash = XXH3_64bits(p, p2 - p);

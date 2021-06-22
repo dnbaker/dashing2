@@ -1,5 +1,6 @@
 #include "fastxsketch.h"
 #include "mio.hpp"
+#include "sketch_core.h"
 //#include <optional>
 namespace dashing2 {
 
@@ -31,11 +32,7 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
             }
         }
     }
-    for(size_t i = k; i > 0;) {
-        --i;
-        ret[i] = pq.top();
-        pq.pop();
-    }
+    for(size_t i = k; i > 0;ret[--i] = pq.top(), pq.pop());
 }
 
 template<typename T>
@@ -43,10 +40,9 @@ void load_copy(const std::string &path, T *ptr) {
     std::FILE *fp = std::fopen(path.data(), "rb");
     if(!fp) throw std::runtime_error(std::string("Failed to open ") + path);
     struct stat st;
-    if(::fstat(::fileno(fp), &st)) {
+    if(::fstat(::fileno(fp), &st))
         throw std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp)));
-    }
-    std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), size_t(st.st_size));
+    DBG_ONLY(std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), size_t(st.st_size));)
     size_t nb = std::fread(ptr, 1, st.st_size, fp);
     if(nb != size_t(st.st_size)) {
         std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, size_t(st.st_size), nb);
@@ -120,6 +116,7 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
     if(paths.empty()) throw std::invalid_argument("Can't sketch empty path set");
+    std::vector<std::pair<size_t, uint64_t>> filesizes = get_filesizes(paths);
     const size_t nt = std::max(opts.nthreads(), 1u);
     const size_t ss = opts.sketchsize();
     FastxSketchingResult ret;
@@ -167,6 +164,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         else if(!fss.empty()) fss[tid].reset();\
         else if(!bmhs.empty()) bmhs[tid].reset();\
         else if(!pmhs.empty()) pmhs[tid].reset();\
+        /*else if(!omhs.empty()) omhs[tid].reset();*/\
         if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();\
     } while(0)
 
@@ -197,12 +195,12 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         if(opts.save_kmercounts_ || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
             ret.kmercountfiles_.resize(paths.size());
         }
-        ret.names_.resize(paths.size());
         ret.cardinalities_.resize(paths.size());
-        std::copy(paths.begin(), paths.end(), ret.names_.begin());
+#ifndef NDEBUG
         for(size_t i = 0; i < ret.names_.size(); ++i) {
             std::fprintf(stderr, "name %zu is %s\n", i, ret.names_[i].data());
         }
+#endif
         std::fprintf(stderr, "kmer result type: %s\n", to_string(opts.kmer_result_).data());
         std::fprintf(stderr, "sketching space type: %s\n", to_string(opts.sspace_).data());
         std::string suffix = to_suffix(opts);
@@ -215,15 +213,19 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     ret = opts.outprefix_ + '/' + ret;
                 }
             }
-            ret = ret + std::string(".") + std::to_string(opts.k_);
+            ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
+            ret = ret + std::string(".k") + std::to_string(opts.k_);
             if(opts.w_ > opts.k_) {
-                ret = ret + std::string(".") + std::to_string(opts.w_);
+                ret = ret + std::string(".w") + std::to_string(opts.w_);
             }
             if(opts.count_threshold_ > 0) {
-                ret = ret + std::string(".") + std::to_string(opts.count_threshold_);
+                ret = ret + std::string(".ct_threshold") + std::to_string(opts.count_threshold_);
             }
             if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_EDIT_DISTANCE) {
-                ret = ret + "." + to_string(opts.ct());
+                ret += '.';
+                ret += to_string(opts.ct());
+                if(opts.ct() != EXACT_COUNTING)
+                    ret += std::to_string(opts.cssize_);
             }
             ret = ret + "." + to_string(opts.sspace_);
             ret = ret + "." + bns::to_string(opts.rht_);
@@ -245,16 +247,18 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             OMP_ONLY(tid = omp_get_thread_num();)
             //const int tid = OMP_ELSE(omp_get_thread_num(), 0);
             //const auto starttime = std::chrono::high_resolution_clock::now();
-            auto &path = paths[i];
+            auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
+            const size_t mss = ss * myind;
+            auto &path = paths[myind];
             //std::fprintf(stderr, "parsing from path = %s\n", path.data());
-            ret.destination_files_[i] = makedest(path);
-            auto &destination = ret.destination_files_[i];
+            ret.destination_files_[myind] = makedest(path);
+            auto &destination = ret.destination_files_[myind];
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
             const std::string destkmer = destination_prefix + ".kmer.u64";
             const std::string destkmercounts = destination_prefix + ".kmercounts.f64";
             const bool dkif = bns::isfile(destkmer);
             const bool dkcif = bns::isfile(destkmercounts);
-            if(ret.kmercountfiles_.size() > i) ret.kmercountfiles_[i] = destkmercounts;
+            if(ret.kmercountfiles_.size() > myind) ret.kmercountfiles_[myind] = destkmercounts;
             if(opts.cache_sketches_ &&
                bns::isfile(destination) &&
                (!opts.save_kmers_ || dkif) &&
@@ -263,23 +267,23 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             {
                 if(opts.kmer_result_ < FULL_MMER_SET) {
                     if(ret.signatures_.size()) {
-                        load_copy(destination, &ret.signatures_[ss * i]);
-                        ret.cardinalities_[i] = compute_cardest(&ret.signatures_[ss * i], ss);
+                        load_copy(destination, &ret.signatures_[mss]);
+                        ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
                     }
                     if(ret.kmers_.size())
-                        load_copy(destkmer, &ret.kmers_[ss * i]);
+                        load_copy(destkmer, &ret.kmers_[mss]);
                     if(ret.kmercounts_.size())
-                        load_copy(destkmercounts, &ret.kmercounts_[ss * i]);
+                        load_copy(destkmercounts, &ret.kmercounts_[mss]);
                 } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                     if(!bns::isfile(destkmercounts))
                         throw std::runtime_error(std::string("Expected destkmercounts (") + destkmercounts + ") to be a file. Run again?");
                     mio::mmap_sink ms(destkmercounts);
                     if(ms.size() % sizeof(double)) throw std::runtime_error(std::string("Wrong size file ") + destkmercounts);
-                    ret.cardinalities_[i] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
+                    ret.cardinalities_[myind] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
                 } else if(opts.kmer_result_ == FULL_MMER_SET) {
-                    ret.cardinalities_[i] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
+                    ret.cardinalities_[myind] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
                 }
-                std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());
+                DBG_ONLY(std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());)
                 continue;
             }
             __RESET(tid);
@@ -290,19 +294,17 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
 #define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
                     if(!opts.parse_protein() && (opts.w_ > opts.k_ || opts.k_ <= 64)) {
                         if(opts.k_ < 32) {
-                            //std::fprintf(stderr, "Exact encoding Parsing DNA with k = %u for 64-bit hashes\n", opts.k_);
                             auto encoder(opts.enc_);
                             FUNC_FE(encoder.for_each);
                         } else {
-                            //std::fprintf(stderr, "Exact encoding Parsing DNA with k = %u for 128-bit hashes\n", opts.k_);
                             auto encoder(opts.enc_.to_u128());
                             FUNC_FE(encoder.for_each);
                         }
                     } else if(opts.use128()) {
-                        std::fprintf(stderr, "Parsing Protein with k = %u for 128-bit hashes\n", opts.k_);
+                        DBG_ONLY(std::fprintf(stderr, "Parsing Protein with k = %u for 128-bit hashes\n", opts.k_);)
                         FUNC_FE(opts.rh128_.for_each_hash);
                     } else {
-                        std::fprintf(stderr, "Parsing Protein with k = %u for 64-bit hashes\n", opts.k_);
+                        DBG_ONLY(std::fprintf(stderr, "Parsing Protein with k = %u for 64-bit hashes\n", opts.k_);)
                         FUNC_FE(opts.rh_.for_each_hash);
                     }
 #undef FUNC_FE
@@ -325,19 +327,19 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     } else {
                         ctr.finalize(kmervec64, kmerveccounts, opts.count_threshold_);
                     }
-                    ret.cardinalities_[i] = opts.kmer_result_ == FULL_MMER_SET ? (opts.use128() ? kmervec128.size(): kmervec64.size()): std::accumulate(kmerveccounts.begin(), kmerveccounts.end(), size_t(0));
+                    ret.cardinalities_[myind] = opts.kmer_result_ == FULL_MMER_SET ? (opts.use128() ? kmervec128.size(): kmervec64.size()): std::accumulate(kmerveccounts.begin(), kmerveccounts.end(), size_t(0));
                 } else if(opts.sspace_ == SPACE_MULTISET) {
                     ctr.finalize(bmhs[tid], opts.count_threshold_);
-                    ret.cardinalities_[i] = bmhs[tid].total_weight();
-                    std::copy(bmhs[tid].data(), bmhs[tid].data() + ss, &ret.signatures_[i * ss]);
+                    ret.cardinalities_[myind] = bmhs[tid].total_weight();
+                    std::copy(bmhs[tid].data(), bmhs[tid].data() + ss, &ret.signatures_[mss]);
                 } else if(opts.sspace_ == SPACE_PSET) {
                     ctr.finalize(pmhs[tid], opts.count_threshold_);
-                    std::copy(pmhs[tid].data(), pmhs[tid].data() + ss, &ret.signatures_[i * ss]);
-                    ret.cardinalities_[i] = pmhs[tid].total_weight();
+                    std::copy(pmhs[tid].data(), pmhs[tid].data() + ss, &ret.signatures_[mss]);
+                    ret.cardinalities_[myind] = pmhs[tid].total_weight();
                 } else if(setsketch_with_counts) {
                     assert(fss.size());
                     ctr.finalize(fss[tid], opts.count_threshold_);
-                    ret.cardinalities_[i] = fss[tid].getcard();
+                    ret.cardinalities_[myind] = fss[tid].getcard();
                 } else throw std::runtime_error("Unexpected space for counter-based m-mer encoding");
                     // Make bottom-k if we generated full k-mer sets or k-mer count dictionaries, and copy then over
                 if(kmervec64.size() || kmervec128.size()) {
@@ -348,7 +350,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                         if(kmerveccounts.empty()) kvcp = nullptr;
                         if(kmervec128.size()) bottomk(kmervec128, keys, opts.count_threshold_, kvcp);
                         else bottomk(kmervec64, keys, opts.count_threshold_, kvcp);
-                        std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[i * ss]);
+                        std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[mss]);
                     }
                 }
                 std::FILE * ofp = std::fopen(destination.data(), "wb");
@@ -376,13 +378,12 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     srcptr = fss[tid].data();
                 } else nb = 0, srcptr = nullptr;
                 if(srcptr && ret.signatures_.size())
-                    std::copy(srcptr, srcptr + ss, &ret.signatures_[i * ss]);
-                std::fprintf(stderr, "Copying out buffer of %zu to file %s\n", nb, destination.data());
+                    std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
                 checked_fwrite(ofp, buf, nb);
                 std::fclose(ofp);
                 if((opts.save_kmers_ || opts.build_mmer_matrix_) && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
                     assert(ret.kmerfiles_.size());
-                    ret.kmerfiles_[i] = destkmer;
+                    ret.kmerfiles_[myind] = destkmer;
                     const uint64_t *ptr = opts.sspace_ == SPACE_PSET ? pmhs[tid].ids().data():
                                       opts.sspace_ == SPACE_MULTISET ? bmhs[tid].ids().data():
                                       opts.kmer_result_ == ONE_PERM ? opss[tid].ids().data() :
@@ -395,7 +396,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
                     DBG_ONLY(std::fprintf(stderr, "About to copy to kmers of size %zu\n", ret.kmers_.size());)
                     if(ret.kmers_.size())
-                        std::copy(ptr, ptr + ss, &ret.kmers_[i * ss]);
+                        std::copy(ptr, ptr + ss, &ret.kmers_[mss]);
                     if(ofp) std::fclose(ofp);
                 }
                 if(opts.save_kmercounts_ || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
@@ -415,7 +416,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     std::fclose(ofp);
                     if(ret.kmercounts_.size()) {
                         std::fprintf(stderr, "Copying range of size %zu from tmp to ret.kmercounts of size %zu\n", tmp.size(), ret.kmercounts_.size());
-                        std::copy(tmp.begin(), tmp.begin() + ss, &ret.kmercounts_[i * ss]);
+                        std::copy(tmp.begin(), tmp.begin() + ss, &ret.kmercounts_[mss]);
                     }
                 }
             } else if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
@@ -443,7 +444,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 });
                 assert(dptr);
                 checked_fwrite(ofp, dptr, l * (1 + opts.use128()) * sizeof(uint64_t));
-                ret.cardinalities_[i] = l;
+                ret.cardinalities_[myind] = l;
                 std::free(dptr);
                 std::fclose(ofp);
             } else if(opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) {
@@ -464,11 +465,11 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     perf_for_substrs([p](auto hv) {p->update(hv);});
                     //std::fprintf(stderr, "Encode for the opset sketch. card now: %g, %zu updates\n", opss[tid].getcard(), opss[tid].total_updates());
                     assert(ret.cardinalities_.size() > i);
-                    ret.cardinalities_[i] = p->getcard();
+                    ret.cardinalities_[myind] = p->getcard();
                 } else {
                     //std::fprintf(stderr, "Encode for the set sketch\n");
                     perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
-                    ret.cardinalities_[i] = fss[tid].getcard();
+                    ret.cardinalities_[myind] = fss[tid].getcard();
                 }
                 const uint64_t *ids = nullptr;
                 const uint32_t *counts = nullptr;
@@ -481,14 +482,14 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 ::write(::fileno(ofp), ptr, sizeof(RegT) * ss);
                 //checked_fwrite(ofp, ptr, sizeof(RegT) * ss);
                 std::fclose(ofp);
-                if(ptr && ret.signatures_.size()) std::copy(ptr, ptr + ss, &ret.signatures_[i * ss]);
+                if(ptr && ret.signatures_.size()) std::copy(ptr, ptr + ss, &ret.signatures_[mss]);
                 if(ids && ret.kmers_.size())
-                    std::copy(ids, ids + ss, &ret.kmers_[i * ss ]);
+                    std::copy(ids, ids + ss, &ret.kmers_[mss]);
                 if(counts && ret.kmercounts_.size())
-                    std::copy(counts, counts + ss, &ret.kmercounts_[i * ss]);
+                    std::copy(counts, counts + ss, &ret.kmercounts_[mss]);
             } else throw std::runtime_error("Unexpected: Not FULL_MMER_SEQUENCE, FULL_MMER_SET, ONE_PERM, FULL_SETSKETCH, SPACE_MULTISET, or SPACE_PSET");
-            //std::fprintf(stderr, "Sketching from tid %d at index %zu finished in %gms\n", tid, i, std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - starttime).count());;
         } // parallel paths loop
+        ret.names_ = paths;
     }
     return ret;
 }
@@ -502,7 +503,11 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         std::transform(ret.names_.begin(), ret.names_.end(), ret.names_.begin(), [&names](const auto &x) {return names.front() + ":" + x;});
         return ret;
     }
-    ret.nperfile_.resize(n);
+    //ret.nperfile_.resize(total_seq);
+    for(size_t i = 0; i < n; ++i) {
+        ret.nperfile_.insert(ret.nperfile_.end(), start[i].nperfile_.begin(), start[i].nperfile_.end());
+    }
+    size_t total_seq = ret.nperfile_.size();
     size_t total_seqs = 0, total_sig_size = 0;
     std::vector<size_t> offsets(n + 1);
     std::vector<size_t> sig_offsets(n + 1);
@@ -510,12 +515,13 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     for(size_t i = 0; i < n; ++i) {
         const size_t nseqsi = start[i].names_.size();
         const size_t nregs = start[i].signatures_.size();
-        ret.nperfile_[i] = nseqsi;
+        assert(start[i].names_.size() == start[i].cardinalities_.size());
         total_seqs += nseqsi;
         total_sig_size += nregs;
         offsets[i + 1] = total_seqs;
         sig_offsets[i + 1] = total_sig_size;
     }
+    std::fprintf(stderr, "Computed offset arrays\n");
     ret.names_.resize(total_seqs);
     if(std::any_of(start, start + n, [](auto &x) {return x.sequences_.size();})) {
         ret.sequences_.resize(total_seqs);
@@ -535,28 +541,35 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
                regsz = !start->signatures_.empty(),
                kmersz = !start->kmers_.empty(),
                kmercountsz = !start->kmercounts_.empty();
-    std::fprintf(stderr, "Copying into merged thing with %zu total sequences\n", ret.names_.size());
-    OMP_PFOR
     for(size_t i = 0; i < n; ++i) {
+        std::fprintf(stderr, "Copying out signatures for i = %zu\n", i);
         auto &src = start[i];
         assert(src.names_.size() == offsets[i + 1] - offsets[i]);
-        const auto ofs = offsets[i];
+        const auto ofs = offsets[i], sofs = sig_offsets[i];
         std::string fname;
         if(names.size() > i) fname = names[i].substr(0, names[i].find_first_of(' '));
         // Append filename to sequence names to ensure seq names
         std::transform(src.names_.begin(), src.names_.end(), &ret.names_[ofs], [&fname](const auto &x) {
             return x + ':' + fname;
         });
-        std::copy(src.cardinalities_.begin(), src.cardinalities_.end(), &ret.cardinalities_[ofs]);
-        if(seqsz)
-            std::copy(src.sequences_.begin(), src.sequences_.end(), &ret.sequences_[ofs]);
-        if(regsz)
-            std::copy(src.signatures_.begin(), src.signatures_.end(), &ret.signatures_[sig_offsets[i]]);
+        std::fprintf(stderr, "Copy cardinalities of size %zu to %zu/%zu\n", src.cardinalities_.size(), ofs, ret.cardinalities_.size());
+        std::copy(src.cardinalities_.begin(), src.cardinalities_.end(), &ret.cardinalities_.at(ofs));
+        std::fprintf(stderr, "Copy sequences\n");
+        if(seqsz) {
+            std::fprintf(stderr, "Copying %zd sequences to idx %zu/%zu\n", src.sequences_.size(), ofs, ret.sequences_.size());
+            std::copy(src.sequences_.begin(), src.sequences_.end(), &ret.sequences_.at(ofs));
+        }
+        std::fprintf(stderr, "Copy sigs\n");
+        if(!start[i].signatures_.empty())
+            std::copy(src.signatures_.begin(), src.signatures_.end(), &ret.signatures_.at(sofs));
+        std::fprintf(stderr, "Copy kmers\n");
         if(kmersz)
-            std::copy(src.kmers_.begin(), src.kmers_.end(), &ret.kmers_[sig_offsets[i]]);
+            std::copy(src.kmers_.begin(), src.kmers_.end(), &ret.kmers_[sofs]);
         if(kmercountsz)
-            std::copy(src.kmercounts_.begin(), src.kmercounts_.end(), &ret.kmercounts_[sig_offsets[i]]);
+            std::copy(src.kmercounts_.begin(), src.kmercounts_.end(), &ret.kmercounts_[sofs]);
+        std::fprintf(stderr, "Copyied out signatures for i = %zu\n", i);
     }
+    std::fprintf(stderr, "Returning result\n");
     return ret;
 }
 

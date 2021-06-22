@@ -9,11 +9,11 @@ INLINE size_t nbytes_from_line(const std::string &line) {
 }
 
 SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string> &paths, std::string &outfile) {
-    std::vector<std::pair<size_t, uint64_t>> filesizes = get_filesizes(paths);
     SketchingResult result;
     const size_t npaths = paths.size();
     if(opts.dtype_ == DataType::FASTX) {
         result = fastx2sketch(opts, paths);
+        std::fprintf(stderr, "Made fastx2sketch %s\n", __FILE__);
     } else if(opts.dtype_ == DataType::LEAFCUTTER) {
         auto res = lf2sketch(paths, opts);
         result.signatures_ = std::move(res.registers());
@@ -21,6 +21,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         result.nperfile_.resize(res.nsamples_per_file().size());
         std::copy(res.nsamples_per_file().begin(), res.nsamples_per_file().end(), result.nperfile_.begin());
     } else if(opts.dtype_ == DataType::BED || opts.dtype_ == DataType::BIGWIG) {
+        std::vector<std::pair<size_t, uint64_t>> filesizes = get_filesizes(paths);
         result.signatures_.resize(npaths * opts.sketchsize_);
         result.names_.resize(npaths);
         result.cardinalities_.resize(npaths);
@@ -46,6 +47,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
         }
     }
+    std::fprintf(stderr, "Created result\n");
     if(paths.size() == 1 && outfile.empty()) {
         const std::string suf =
                 opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
@@ -62,12 +64,23 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
+    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;}));
     if(outfile.size()) {
         if(result.signatures_.empty()) throw std::runtime_error("Can't write stacked sketches if signatures were not generated");
         std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());
         std::FILE *ofp = std::fopen(outfile.data(), "wb");
         if(!ofp) throw std::runtime_error(std::string("Failed to open file at ") + outfile);
-        std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
+        if(even)
+            std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
+        else {
+            size_t offset = 0;
+            const uint64_t terminus = uint64_t(-1);
+            for(size_t i = 0; i < result.nperfile_.size(); ++i) {
+                std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
+                offset += result.nperfile_.at(i);
+                std::fwrite(&terminus, sizeof(terminus), 1, ofp);
+            }
+        }
         std::fclose(ofp);
         if(result.names_.size()) {
             if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
@@ -105,6 +118,8 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());
             }
         }
+    } else {
+        std::fprintf(stderr, "Nothing written to disk, as no output file provided.\n");
     }
     return result;
 }

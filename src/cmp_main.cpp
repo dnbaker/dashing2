@@ -7,32 +7,11 @@ namespace dashing2 {
 
 #define CMP_OPTS(name) \
 static option_struct name[] = {\
-    LO_FLAG("canon", 'C', canon, true)\
-    LO_FLAG("cache", 'W', cache, true)\
-    LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
-    LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
-    LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
-    LO_FLAG("128bit", '2', use128, true)\
-    LO_FLAG("long-kmers", '2', use128, true)\
-    LO_FLAG("save-kmers", 's', save_kmers, true)\
-    LO_FLAG("bed", OPTARG_BED, dt, DataType::BED)\
-    LO_FLAG("bigwig", OPTARG_BIGWIG, dt, DataType::BIGWIG)\
-    LO_FLAG("leafcutter", OPTARG_LEAFCUTTER, dt, DataType::LEAFCUTTER)\
     LO_FLAG("presketched", OPTARG_PRESKETCHED, presketched, true)\
-    LO_ARG("regbytes", OPTARG_REGBYTES)\
-    LO_ARG("outprefix", OPTARG_OUTPREF)\
-    LO_ARG("kmer-length", 'k')\
-    LO_ARG("window-size", 'w')\
-    LO_ARG("countsketch-size", 'c')\
-    LO_ARG("threads", 'p')\
-    LO_ARG("sketchsize", 'S')\
-    LO_ARG("save-kmercounts", 'N')\
-    LO_ARG("ffile", 'F')\
-    LO_ARG("qfile", 'Q')\
-    LO_ARG("count-threshold", 'm')\
-    LO_ARG("outfile", 'o')\
     SHARED_OPTS\
 }
+
+
 
 void cmp_usage() {
     std::fprintf(stderr, "dashing2 cmp usage is not written.\n");
@@ -71,15 +50,16 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
     } else { // Else, we have to load sketches from each file
         result.nperfile_.resize(paths.size());
         auto &fsizes = result.nperfile_;
-        std::vector<size_t> csizes(fsizes.size());
+        std::vector<size_t> csizes(fsizes.size() + 1);
         for(size_t i = 0; i < paths.size(); ++i) {
             struct stat st;
             ::stat(paths[i].data(), &st);
             assert(st.st_size % sizeof(RegT) == 0);
-            fsizes[i] = st.st_size / sizeof(RegT);
-            csizes[i + 1] = csizes[i] + st.st_size;
+            const auto nelem = st.st_size / sizeof(RegT);
+            fsizes[i] = nelem;
+            csizes[i + 1] = csizes[i] + nelem;
         }
-        const size_t totalsize = std::accumulate(fsizes.begin(), fsizes.end(), size_t(0));
+        const size_t totalsize = csizes.back();
         result.signatures_.resize(totalsize); // Account for the size of the sketch registers
         if(bns::isfile(pf + ".kmerhashes.u64")) {
             std::fprintf(stderr, "Loading k-mer hashes, too\n");
@@ -154,37 +134,12 @@ int cmp_main(int argc, char **argv) {
     int truncate_mode = 0;
     double nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
+    bool hpcompress = false;
     Measure measure = SIMILARITY;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::MACHINE_READABLE;
     CMP_OPTS(cmp_long_options);
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
-        case 'k': k = std::atoi(optarg); break;
-        case 'w': w = std::atoi(optarg); break;
-        case 'W': cache = true; break;
-        case 'B': sketch_space = SPACE_MULTISET; res = FULL_SETSKETCH; break;
-        case 'P': sketch_space = SPACE_PSET; res = FULL_SETSKETCH; break;
-        case 'Z': res = FULL_SETSKETCH; break;
-        case 'o': outfile = optarg; break;
-        case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;
-        case 'C': canon = true; break;
-        case 'p': nt = std::atoi(optarg); break;
-        case 'S': sketchsize = std::atoi(optarg); break;
-        case 'N': save_kmers = save_kmercounts = true; break;
-        case 's': save_kmers = true; break;
-        case 'H': res = FULL_MMER_SET; break;
-        case 'J': res = FULL_MMER_COUNTDICT; break;
-        case 'G': res = FULL_MMER_SEQUENCE; break;
-        case '2': use128 = true; break;
-        case 'm': count_threshold = std::atof(optarg); break;
-        case 'F': ffile = optarg; break;
-        case 'Q': qfile = optarg; break;
-        case OPTARG_BED_NORMALIZE: normalize_bed = true; break;
-        case OPTARG_ISZ: measure = INTERSECTION; break;
-        case OPTARG_REGBYTES: nbytes_for_fastdists = std::atof(optarg); break;
-        case OPTARG_OUTPREF: {
-            outprefix = optarg; break;
-        }
         SHARED_FIELDS
         case '?': case 'h': cmp_usage(); return 1;
     }}
@@ -215,7 +170,8 @@ int cmp_main(int argc, char **argv) {
         .cache_sketches(cache).cssize(cssize).use128(use128)
         .sketchsize(sketchsize).save_kmers(save_kmers).outprefix(outprefix)
         .save_kmercounts(save_kmercounts).parse_by_seq(parse_by_seq)
-        .count_threshold(count_threshold);
+        .count_threshold(count_threshold)
+        .homopolymer_compress_minimizers(hpcompress);
     opts.bed_parse_normalize_intervals_ = normalize_bed;
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
     distopts.measure_ = measure;

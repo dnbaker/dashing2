@@ -27,6 +27,11 @@ void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
                 dist = mult * compare(opts, result, lhid, id);
             }
             std::sort(beg, e);
+#if 0
+            std::ptrdiff_t di = e - beg;
+            for(auto i = 0; i < di; ++i)
+                std::fprintf(stderr, "Val %g is rank %d\n", (beg + i)->first, i);
+#endif
             if(size_t(opts.num_neighbors_) < l.size() - 1)
                 l.resize(opts.num_neighbors_);
         } else if(opts.min_similarity_ > 0.) {

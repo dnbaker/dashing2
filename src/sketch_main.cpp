@@ -7,29 +7,6 @@
 
 #define SKETCH_OPTS \
 static option_struct sketch_long_options[] = {\
-    LO_FLAG("canon", 'C', canon, true)\
-    LO_FLAG("cache", 'W', cache, true)\
-    LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
-    LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
-    LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
-    LO_FLAG("128bit", '2', use128, true)\
-    LO_FLAG("long-kmers", '2', use128, true)\
-    LO_FLAG("save-kmers", 's', save_kmers, true)\
-    LO_FLAG("bed", OPTARG_BED, dt, DataType::BED)\
-    LO_FLAG("bigwig", OPTARG_BIGWIG, dt, DataType::BIGWIG)\
-    LO_FLAG("leafcutter", OPTARG_LEAFCUTTER, dt, DataType::LEAFCUTTER)\
-    LO_ARG("outprefix", OPTARG_OUTPREF)\
-    LO_ARG("kmer-length", 'k')\
-    LO_ARG("window-size", 'w')\
-    LO_ARG("countsketch-size", 'c')\
-    LO_ARG("threads", 'p')\
-    LO_ARG("sketchsize", 'S')\
-    LO_ARG("save-kmercounts", 'N')\
-    LO_ARG("save-kmers", 's')\
-    LO_ARG("ffile", 'F')\
-    LO_ARG("qfile", 'Q')\
-    LO_ARG("count-threshold", 'm')\
-    LO_ARG("outfile", 'o')\
     SHARED_OPTS\
 };
 
@@ -78,8 +55,13 @@ void sketch_usage() {
                          "You can also emit full m-mer sets, a count dictionary (key-count map)\n"
                          "-H/--set: Full m-mer set. This generates a sorted hash set for m-mers in the data. If the parser is windowed (-w is set), this may be rather small.\n"
                          "-J/--countdict: Full m-mer countdict. This generates a sorted hash set for m-mers in the data, and additionally saves the associated counts for these m-mers.\n"
-                         //"-G/--seq: Full m-mer sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"
-                         //"          On the other hand, it can require higher memory for large sequence collections\n"
+                         "-G/--seq: Full m-mer sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"
+                         "          On the other hand, it can require higher memory for large sequence collections\n"
+                         "          If you use --parse-by-seq with this and an output path is provided, then the stacked minimizer sequences will be written to\n"
+                         "          that file, with 0xFFFFFFFFFFFFFFFF-valued 64-bit integers appended to each to mark the end of the sequence.\n"
+                         "Dependent option (only for --seq/-G parsing)\n"
+                         "--hp-compress:\n"
+                         "Causes minimizer sequence to be homopolymer-compressed before emission. This makes the sequences insensitive to the lengths of minimizer stretches, which may simplify match finding\n"
                          "\nMetadata Options\n"
                          "If sketching, you can also choose to save k-mers (the IDs corresponding to the k-mer selected), or\n"
                          " and optionally save the counts for these k-mers\n"
@@ -98,7 +80,7 @@ int sketch_main(int argc, char **argv) {
     SketchSpace sketch_space = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false;
-    bool exact_kmer_dist = false;
+    bool exact_kmer_dist = false, hpcompress = false;
     double count_threshold = 0., similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
@@ -113,6 +95,7 @@ int sketch_main(int argc, char **argv) {
     size_t nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
     Measure measure = SIMILARITY;
+    std::ios_base::sync_with_stdio(false);
     // By default, use full hash values, but allow people to enable smaller
     bool normalize_bed = false;
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -120,31 +103,6 @@ int sketch_main(int argc, char **argv) {
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
-        case 'k': k = std::atoi(optarg); break;
-        case 'w': w = std::atoi(optarg); break;
-        case 'W': cache = true; break;
-        case 'B': std::fprintf(stderr, "Using BMH\n"); sketch_space = SPACE_MULTISET; res = FULL_SETSKETCH; break;
-        case 'P': std::fprintf(stderr, "Using PMH\n"); sketch_space = SPACE_PSET; res = FULL_SETSKETCH; break;
-        case 'Z': res = FULL_SETSKETCH; break;
-        case 'o': outfile = optarg; break;
-        case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;
-        case 'C': canon = true; break;
-        case 'p': nt = std::atoi(optarg); break;
-        case 'S': sketchsize = std::atoi(optarg); break;
-        case 'N': save_kmers = save_kmercounts = true; break;
-        case 's': save_kmers = true; break;
-        case 'H': res = FULL_MMER_SET; break;
-        case 'J': res = FULL_MMER_COUNTDICT; break;
-        case 'G': res = FULL_MMER_SEQUENCE; break;
-        case OPTARG_BED_NORMALIZE: normalize_bed = true; break;
-        case '2': use128 = true; break;
-        case 'm': count_threshold = std::atof(optarg); break;
-        case 'F': ffile = optarg; break;
-        case 'Q': qfile = optarg; break;
-        case OPTARG_ISZ: measure = INTERSECTION; break;
-        case OPTARG_OUTPREF: {
-            outprefix = optarg; break;
-        }
         SHARED_FIELDS
         case '?': case 'h': sketch_usage(); return 1;
     }}
@@ -162,6 +120,9 @@ int sketch_main(int argc, char **argv) {
     std::unique_ptr<std::vector<std::string>> qup;
     if(ffile.size()) {
         std::ifstream ifs(ffile);
+        static constexpr size_t bufsize = 1<<18;
+        std::unique_ptr<char []> buf(new char[bufsize]);
+        ifs.rdbuf()->pubsetbuf(buf.get(), bufsize);
         for(std::string l;std::getline(ifs, l);) {
             paths.push_back(l);
         }
@@ -185,8 +146,9 @@ int sketch_main(int argc, char **argv) {
         .save_kmercounts(save_kmercounts)
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
-        .cmd(cmd).count_threshold(count_threshold);
-    std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);
+        .cmd(cmd).count_threshold(count_threshold)
+        .homopolymer_compress_minimizers(hpcompress);
+    DBG_ONLY(std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);)
     if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
             && opts.kmer_result_ == ONE_PERM) {
         opts.kmer_result_ = FULL_SETSKETCH;
