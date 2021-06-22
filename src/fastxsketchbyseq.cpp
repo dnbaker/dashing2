@@ -130,7 +130,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
     }
     for(size_t i = lastindex; i < oldsz; ++i) {
-        std::fprintf(stderr, "%zu/%zu -- hashing sequence\n", i, newsz);
+        //std::fprintf(stderr, "%zu/%zu -- hashing sequence\n", i, newsz);
         //std::fprintf(stderr, "Seq %zu/%s\n", seqp.second, seqp.first);
         sketchers.reset();
         if(sketchers.omh) {
