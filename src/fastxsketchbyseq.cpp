@@ -100,6 +100,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex);
     ret.names_.resize(lastindex);
     ret.sequences_.resize(lastindex);
+    ret.cardinalities_.resize(lastindex);
     if(ret.kmers_.size()) ret.kmers_.resize(opts.sketchsize_ * lastindex);
     if(ret.kmercounts_.size()) ret.kmercounts_.resize(opts.sketchsize_ * lastindex);
     std::fprintf(stderr, "ret kmer size %zu\n", ret.kmers_.size());

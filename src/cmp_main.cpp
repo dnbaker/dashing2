@@ -134,6 +134,7 @@ int cmp_main(int argc, char **argv) {
     int truncate_mode = 0;
     double nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
+    bool hpcompress = false;
     Measure measure = SIMILARITY;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::MACHINE_READABLE;
@@ -169,7 +170,8 @@ int cmp_main(int argc, char **argv) {
         .cache_sketches(cache).cssize(cssize).use128(use128)
         .sketchsize(sketchsize).save_kmers(save_kmers).outprefix(outprefix)
         .save_kmercounts(save_kmercounts).parse_by_seq(parse_by_seq)
-        .count_threshold(count_threshold);
+        .count_threshold(count_threshold)
+        .homopolymer_compress_minimizers(hpcompress);
     opts.bed_parse_normalize_intervals_ = normalize_bed;
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
     distopts.measure_ = measure;

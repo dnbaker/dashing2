@@ -503,11 +503,11 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         std::transform(ret.names_.begin(), ret.names_.end(), ret.names_.begin(), [&names](const auto &x) {return names.front() + ":" + x;});
         return ret;
     }
-    size_t total_seq = std::accumulate(start, start + n, size_t(0), [](auto x, auto &y) {return x + y.nperfile_.size();});
-    ret.nperfile_.resize(total_seq);
+    //ret.nperfile_.resize(total_seq);
     for(size_t i = 0; i < n; ++i) {
         ret.nperfile_.insert(ret.nperfile_.end(), start[i].nperfile_.begin(), start[i].nperfile_.end());
     }
+    size_t total_seq = ret.nperfile_.size();
     size_t total_seqs = 0, total_sig_size = 0;
     std::vector<size_t> offsets(n + 1);
     std::vector<size_t> sig_offsets(n + 1);
@@ -515,6 +515,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     for(size_t i = 0; i < n; ++i) {
         const size_t nseqsi = start[i].names_.size();
         const size_t nregs = start[i].signatures_.size();
+        assert(start[i].names_.size() == start[i].cardinalities_.size());
         total_seqs += nseqsi;
         total_sig_size += nregs;
         offsets[i + 1] = total_seqs;
@@ -544,22 +545,28 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         std::fprintf(stderr, "Copying out signatures for i = %zu\n", i);
         auto &src = start[i];
         assert(src.names_.size() == offsets[i + 1] - offsets[i]);
-        const auto ofs = offsets[i];
+        const auto ofs = offsets[i], sofs = sig_offsets[i];
         std::string fname;
         if(names.size() > i) fname = names[i].substr(0, names[i].find_first_of(' '));
         // Append filename to sequence names to ensure seq names
         std::transform(src.names_.begin(), src.names_.end(), &ret.names_[ofs], [&fname](const auto &x) {
             return x + ':' + fname;
         });
-        std::copy(src.cardinalities_.begin(), src.cardinalities_.end(), &ret.cardinalities_[ofs]);
-        if(seqsz)
-            std::copy(src.sequences_.begin(), src.sequences_.end(), &ret.sequences_[ofs]);
-        if(regsz)
-            std::copy(src.signatures_.begin(), src.signatures_.end(), &ret.signatures_[sig_offsets[i]]);
+        std::fprintf(stderr, "Copy cardinalities of size %zu to %zu/%zu\n", src.cardinalities_.size(), ofs, ret.cardinalities_.size());
+        std::copy(src.cardinalities_.begin(), src.cardinalities_.end(), &ret.cardinalities_.at(ofs));
+        std::fprintf(stderr, "Copy sequences\n");
+        if(seqsz) {
+            std::fprintf(stderr, "Copying %zd sequences to idx %zu/%zu\n", src.sequences_.size(), ofs, ret.sequences_.size());
+            std::copy(src.sequences_.begin(), src.sequences_.end(), &ret.sequences_.at(ofs));
+        }
+        std::fprintf(stderr, "Copy sigs\n");
+        if(!start[i].signatures_.empty())
+            std::copy(src.signatures_.begin(), src.signatures_.end(), &ret.signatures_.at(sofs));
+        std::fprintf(stderr, "Copy kmers\n");
         if(kmersz)
-            std::copy(src.kmers_.begin(), src.kmers_.end(), &ret.kmers_[sig_offsets[i]]);
+            std::copy(src.kmers_.begin(), src.kmers_.end(), &ret.kmers_[sofs]);
         if(kmercountsz)
-            std::copy(src.kmercounts_.begin(), src.kmercounts_.end(), &ret.kmercounts_[sig_offsets[i]]);
+            std::copy(src.kmercounts_.begin(), src.kmercounts_.end(), &ret.kmercounts_[sofs]);
         std::fprintf(stderr, "Copyied out signatures for i = %zu\n", i);
     }
     std::fprintf(stderr, "Returning result\n");

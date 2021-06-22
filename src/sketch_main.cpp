@@ -58,7 +58,10 @@ void sketch_usage() {
                          "-G/--seq: Full m-mer sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"
                          "          On the other hand, it can require higher memory for large sequence collections\n"
                          "          If you use --parse-by-seq with this and an output path is provided, then the stacked minimizer sequences will be written to\n"
-                         "          that file, with 0-valued 64-bit integers append to each to mark the end of the sequence.\n"
+                         "          that file, with 0xFFFFFFFFFFFFFFFF-valued 64-bit integers appended to each to mark the end of the sequence.\n"
+                         "Dependent option (only for --seq/-G parsing)\n"
+                         "--hp-compress:\n"
+                         "Causes minimizer sequence to be homopolymer-compressed before emission. This makes the sequences insensitive to the lengths of minimizer stretches, which may simplify match finding\n"
                          "\nMetadata Options\n"
                          "If sketching, you can also choose to save k-mers (the IDs corresponding to the k-mer selected), or\n"
                          " and optionally save the counts for these k-mers\n"
@@ -77,7 +80,7 @@ int sketch_main(int argc, char **argv) {
     SketchSpace sketch_space = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false;
-    bool exact_kmer_dist = false;
+    bool exact_kmer_dist = false, hpcompress = false;
     double count_threshold = 0., similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
@@ -143,7 +146,8 @@ int sketch_main(int argc, char **argv) {
         .save_kmercounts(save_kmercounts)
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
-        .cmd(cmd).count_threshold(count_threshold);
+        .cmd(cmd).count_threshold(count_threshold)
+        .homopolymer_compress_minimizers(hpcompress);
     DBG_ONLY(std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);)
     if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
             && opts.kmer_result_ == ONE_PERM) {

@@ -25,6 +25,7 @@ enum OptArg{
     OPTARG_ISZ,
     OPTARG_BED_NORMALIZE,
     OPTARG_PROTEIN,
+    OPTARG_HPCOMPRESS,
     OPTARG_DUMMY
 };
 
@@ -66,7 +67,9 @@ enum OptArg{
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
     LO_FLAG("save-kmers", 's', save_kmers, true)\
+    LO_FLAG("hp-compress", 's', save_kmers, true)\
     LO_ARG("regbytes", OPTARG_REGBYTES)\
+    {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
     {"edit-distance", no_argument, 0, 'E'},\
     {"full-setsketch", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
@@ -107,6 +110,9 @@ enum OptArg{
         case OPTARG_ISZ: measure = INTERSECTION; break;\
         case OPTARG_OUTPREF: {\
             outprefix = optarg; break;\
+        } \
+        case OPTARG_HPCOMPRESS: {\
+            hpcompress = true; break;\
         }
 
 

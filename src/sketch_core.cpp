@@ -73,14 +73,12 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         if(even)
             std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
         else {
-            std::fprintf(stderr, "Writing stacked sketches one by one here:\n");
             size_t offset = 0;
-            const uint64_t zero = 0;
+            const uint64_t terminus = uint64_t(-1);
             for(size_t i = 0; i < result.nperfile_.size(); ++i) {
-                std::fprintf(stderr, "Writing nperfile %zu for idx %zu\n",offset, i);
                 std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
                 offset += result.nperfile_.at(i);
-                std::fwrite(&zero, sizeof(zero), 1, ofp);
+                std::fwrite(&terminus, sizeof(terminus), 1, ofp);
             }
         }
         std::fclose(ofp);
