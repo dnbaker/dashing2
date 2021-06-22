@@ -432,6 +432,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 perf_for_substrs([&](auto x) {
                     using DT = decltype(x);
                     DT *ptr = (DT *)dptr;
+                    if(opts.homopolymer_compress_minimizers_ && l > 0 && ptr[l - 1] == x) return;
                     if(l == m) {
                         size_t newm = m << 1;
                         void *newptr = nullptr;
@@ -440,7 +441,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                         dptr = newptr;ptr = (DT *)dptr;
                         m = newm;
                     }
-                    if(opts.homopolymer_compress_minimizers_ && l > 0 && ptr[l - 1] == x) return;
                     ptr[l++] = x;
                 });
                 assert(dptr);
@@ -460,7 +460,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 const size_t opsssz = opss.size();
                 if(opsssz) {
                     //std::fprintf(stderr, "Encode for the opset sketch, %zu is the size for tid %d\n", opss.size(), tid);
-                    assert(opss.size() > tid);
+                    assert(opss.size() > unsigned(tid));
                     assert(opss.at(tid).total_updates() == 0);
                     auto p = &opss[tid];
                     perf_for_substrs([p](auto hv) {p->update(hv);});
@@ -511,7 +511,6 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     size_t total_seqs = 0, total_sig_size = 0;
     std::vector<size_t> offsets(n + 1);
     std::vector<size_t> sig_offsets(n + 1);
-    std::fprintf(stderr, "Computing offset arrays\n");
     for(size_t i = 0; i < n; ++i) {
         const size_t nseqsi = start[i].names_.size();
         const size_t nregs = start[i].signatures_.size();
@@ -521,7 +520,6 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         offsets[i + 1] = total_seqs;
         sig_offsets[i + 1] = total_sig_size;
     }
-    std::fprintf(stderr, "Computed offset arrays\n");
     ret.names_.resize(total_seqs);
     if(std::any_of(start, start + n, [](auto &x) {return x.sequences_.size();})) {
         ret.sequences_.resize(total_seqs);
@@ -538,11 +536,8 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         ret.kmercounts_.resize(total_sig_size);
     }
     const bool seqsz = total_seqs,
-               regsz = !start->signatures_.empty(),
-               //kmersz = !start->kmers_.empty(),
                kmercountsz = !start->kmercounts_.empty();
     for(size_t i = 0; i < n; ++i) {
-        std::fprintf(stderr, "Copying out signatures for i = %zu\n", i);
         auto &src = start[i];
         assert(src.names_.size() == offsets[i + 1] - offsets[i]);
         const auto ofs = offsets[i], sofs = sig_offsets[i];
@@ -552,24 +547,20 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         std::transform(src.names_.begin(), src.names_.end(), &ret.names_[ofs], [&fname](const auto &x) {
             return x + ':' + fname;
         });
-        std::fprintf(stderr, "Copy cardinalities of size %zu to %zu/%zu\n", src.cardinalities_.size(), ofs, ret.cardinalities_.size());
+        //std::fprintf(stderr, "Copy cardinalities of size %zu to %zu/%zu\n", src.cardinalities_.size(), ofs, ret.cardinalities_.size());
         std::copy(src.cardinalities_.begin(), src.cardinalities_.end(), &ret.cardinalities_.at(ofs));
-        std::fprintf(stderr, "Copy sequences\n");
+        //std::fprintf(stderr, "Copy sequences\n");
         if(seqsz) {
-            std::fprintf(stderr, "Copying %zd sequences to idx %zu/%zu\n", src.sequences_.size(), ofs, ret.sequences_.size());
+            //std::fprintf(stderr, "Copying %zd sequences to idx %zu/%zu\n", src.sequences_.size(), ofs, ret.sequences_.size());
             std::copy(src.sequences_.begin(), src.sequences_.end(), &ret.sequences_.at(ofs));
         }
-        std::fprintf(stderr, "Copy sigs\n");
         if(!start[i].signatures_.empty())
             std::copy(src.signatures_.begin(), src.signatures_.end(), &ret.signatures_.at(sofs));
-        std::fprintf(stderr, "Copy kmers\n");
-        if(kmersz)
+        if(!start[i].kmers_.empty())
             std::copy(src.kmers_.begin(), src.kmers_.end(), &ret.kmers_[sofs]);
         if(kmercountsz)
             std::copy(src.kmercounts_.begin(), src.kmercounts_.end(), &ret.kmercounts_[sofs]);
-        std::fprintf(stderr, "Copyied out signatures for i = %zu\n", i);
     }
-    std::fprintf(stderr, "Returning result\n");
     return ret;
 }
 

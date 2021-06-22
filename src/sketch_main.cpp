@@ -148,6 +148,9 @@ int sketch_main(int argc, char **argv) {
         .parse_by_seq(parse_by_seq)
         .cmd(cmd).count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress);
+    if(hpcompress) {
+        if(!opts.homopolymer_compress_minimizers_) throw std::runtime_error("Failed to hpcompress minimizers");
+    }
     DBG_ONLY(std::fprintf(stderr, "opts save kmers: %d\n", opts.save_kmers_);)
     if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
             && opts.kmer_result_ == ONE_PERM) {

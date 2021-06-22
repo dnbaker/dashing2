@@ -67,7 +67,6 @@ enum OptArg{
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
     LO_FLAG("save-kmers", 's', save_kmers, true)\
-    LO_FLAG("hp-compress", 's', save_kmers, true)\
     LO_ARG("regbytes", OPTARG_REGBYTES)\
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
     {"edit-distance", no_argument, 0, 'E'},\

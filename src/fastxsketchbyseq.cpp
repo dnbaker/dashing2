@@ -156,8 +156,8 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             auto &myseq(seqmins[i - lastindex]);
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
-                if(myseq.empty() || !opts.homopolymer_compress_minimizers_ || myseq.back() != x)
-                    myseq.emplace_back(x);
+                if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || myseq.back() != x))
+                    myseq.push_back(x);
             }, ret.sequences_[i].data(), ret.sequences_[i].size());
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
