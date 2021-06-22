@@ -32,7 +32,7 @@ void update(pqueue &x, ska::flat_hash_set<LSHIDType> &xset, const PairT &item, c
     }
     DBG_ONLY(std::fprintf(stderr, "Updating item %g/%u\n", item.first, item.second);)
     if(x.top() < item) {
-        DBG_ONLY(std::fprintf(stderr, "New top before update: %g/Size %zu, with new item %g/%zu added\n", x.front().first, x.size(), item.first, item.second);)
+        DBG_ONLY(std::fprintf(stderr, "New top before update: %g/Size %zu, with new item %g/%u added\n", x.front().first, x.size(), item.first, item.second);)
         std::lock_guard<std::mutex> lock(mut);
         auto old = x.top();
         // If the rank is the same as k - 1, save both

@@ -235,7 +235,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         if(opts.build_sig_matrix_) {
             ret.signatures_.resize(ss * paths.size());
         }
-        if(opts.build_mmer_matrix_ || opts.save_kmers_) {
+        if((opts.build_mmer_matrix_ || opts.save_kmers_) && opts.kmer_result_ != FULL_MMER_SEQUENCE) {
             ret.kmers_.resize(ss * paths.size());
         }
         if(opts.build_count_matrix_) {
@@ -420,6 +420,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     }
                 }
             } else if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
+                ret.kmers_.clear();
                 //std::fprintf(stderr, "Full mmer sequence\n");
                 std::FILE * ofp;
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr) throw std::runtime_error("Failed to open file for writing minimizer sequence");
@@ -507,7 +508,6 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     for(size_t i = 0; i < n; ++i) {
         ret.nperfile_.insert(ret.nperfile_.end(), start[i].nperfile_.begin(), start[i].nperfile_.end());
     }
-    size_t total_seq = ret.nperfile_.size();
     size_t total_seqs = 0, total_sig_size = 0;
     std::vector<size_t> offsets(n + 1);
     std::vector<size_t> sig_offsets(n + 1);
@@ -539,7 +539,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     }
     const bool seqsz = total_seqs,
                regsz = !start->signatures_.empty(),
-               kmersz = !start->kmers_.empty(),
+               //kmersz = !start->kmers_.empty(),
                kmercountsz = !start->kmercounts_.empty();
     for(size_t i = 0; i < n; ++i) {
         std::fprintf(stderr, "Copying out signatures for i = %zu\n", i);

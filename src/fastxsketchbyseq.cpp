@@ -117,10 +117,10 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     }
     ret.cardinalities_.resize(newsz);
     //std::fprintf(stderr, "mmer matrix size %zu. buuild %d, save kmers %d\n", ret.kmers_.size(), opts.build_mmer_matrix_, opts.save_kmers_);
-    if(opts.build_mmer_matrix_ || opts.save_kmers_) {
+    if(opts.kmer_result_ != FULL_MMER_SEQUENCE && (opts.build_mmer_matrix_ || opts.save_kmers_)) {
         ret.kmers_.resize(opts.sketchsize_ * newsz);
     }
-    if(opts.build_count_matrix_ || opts.save_kmercounts_) {
+    if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
         ret.kmercounts_.resize(opts.sketchsize_ * newsz);
     }
     std::fprintf(stderr, "Parsing %s\n", sketchers.enable_protein() ? "Protein": "DNA");
