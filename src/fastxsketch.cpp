@@ -171,11 +171,15 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
     if(opts.parse_by_seq_) {
         std::vector<FastxSketchingResult> res(paths.size());
         ret.nperfile_.resize(paths.size());
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < paths.size(); ++i) {
-            std::fprintf(stderr, "sketching file %s at idx %zu\n", paths[i].data(), i);
-            res[i] = fastx2sketch_byseq(opts, paths[i], kseqs.kseqs_);
-            std::fprintf(stderr, "Sketched %zu/%zu (%s)\n", i + 1, paths.size(), paths[i].data());
+        if(paths.size() == 1) {
+            res.front() = fastx2sketch_byseq(opts, paths.front(), kseqs.kseqs_, true);
+        } else {
+            OMP_PFOR_DYN
+            for(size_t i = 0; i < paths.size(); ++i) {
+                std::fprintf(stderr, "sketching file %s at idx %zu\n", paths[i].data(), i);
+                res[i] = fastx2sketch_byseq(opts, paths[i], kseqs.kseqs_);
+                std::fprintf(stderr, "Sketched %zu/%zu (%s)\n", i + 1, paths.size(), paths[i].data());
+            }
         }
         std::fprintf(stderr, "Merging files\n");
         ret = FastxSketchingResult::merge(res.data(), res.size(), paths);

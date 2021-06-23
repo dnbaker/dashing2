@@ -44,9 +44,9 @@ struct OptSketcher {
         //if(omh) omh->reset();
     }
 };
-void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex);
+void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex, bool parallel=false);
 
-FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs, size_t seqs_per_batch) {
+FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs, bool parallel, size_t seqs_per_batch) {
     FastxSketchingResult ret;
     gzFile ifp;
     kseq_t *myseq = kseqs ? &kseqs[OMP_ELSE(omp_get_thread_num(), 0)]: (kseq_t *)std::calloc(sizeof(kseq_t), 1);
@@ -89,7 +89,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
                 std::fprintf(stderr, "batch index = %zu\n", batch_index);
-                resize_fill(opts, ret, seqs_per_batch, sketching_data, lastindex);
+                resize_fill(opts, ret, seqs_per_batch, sketching_data, lastindex, parallel);
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
             }
@@ -97,7 +97,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
         gzclose(ifp);
     }, path);
     if(!kseqs) kseq_destroy(myseq);
-    if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex);
+    if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, parallel);
     ret.names_.resize(lastindex);
     ret.sequences_.resize(lastindex);
     ret.cardinalities_.resize(lastindex);
@@ -107,7 +107,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     std::fprintf(stderr, "ret names size %zu\n", ret.names_.size());
     return ret;
 }
-void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex) {
+void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex, bool parallel) {
     std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
@@ -129,9 +129,17 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
     }
+    size_t nt = 1;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+#endif
+    if(!parallel) nt = 1;
+    OMP_PRAGMA("omp parallel for num_threads(nt)")
     for(size_t i = lastindex; i < oldsz; ++i) {
-        //std::fprintf(stderr, "%zu/%zu -- hashing sequence\n", i, newsz);
-        //std::fprintf(stderr, "Seq %zu/%s\n", seqp.second, seqp.first);
+        std::fprintf(stderr, "%zu/%zu -- hashing sequence\n", i, oldsz);
         sketchers.reset();
         if(sketchers.omh) {
             std::fprintf(stderr, "omh is set, not hashing: %s/%zu\n", ret.sequences_[i].data(), ret.sequences_[i].size());
@@ -161,7 +169,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             }, ret.sequences_[i].data(), ret.sequences_[i].size());
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
-            std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
+            //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
                 if(sketchers.opss) sketchers.opss->update(x);
