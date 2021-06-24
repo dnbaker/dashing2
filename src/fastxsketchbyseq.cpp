@@ -189,17 +189,15 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             auto &myseq(seqmins[i - lastindex]);
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
-#define isnt_back (sizeof(x) == 8 ? myseq.back() != x: std::memcmp(&myseq[myseq.size() - 2], &x, 16) != 0)
-                if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || isnt_back)) {
+                if(!opts.homopolymer_compress_minimizers_ || myseq.empty() ||
+                    (sizeof(x) == 8 ? myseq.back() != x: std::memcmp(&myseq[myseq.size() - 2], &x, 16) != 0))
+                {
                     if(sizeof(x) == 8) myseq.push_back(x);
                     else {
                         const size_t oldsz = myseq.size();
                         myseq.resize(oldsz + 2);
                         std::memcpy(&myseq[oldsz], &x, 16);
                     }
-                }
-#undef isnt_back
-                } else if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || std::memcmp(&myseq[myseq.size() - 2], &x, 16))) {
                 }
             }, ret.sequences_[i].data(), ret.sequences_[i].size());
             // This handles the case where the sequence is shorter than the window size
@@ -309,8 +307,18 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         for(size_t i = 0; i < seqminsz; ++i) {
             const auto &x(seqmins[i]);
             const OT *ptr = (const OT *)x.data();
-            const size_t xsz = x.size() / (sizeof(RegT) / sizeof(uint64_t));
+            size_t xsz = x.size();
+            if(sizeof(RegT) == 16) xsz >>= 1;
             ret.nperfile_.push_back(xsz);
+            if(sizeof(RegT) == 4) {
+                for(size_t j = 0; j < xsz; ++j) {
+                    RegT v;
+                    uint32_t lv = ((const uint64_t *)ptr)[j];
+                    std::memcpy(&v, &lv, 4);
+                    ret.signatures_.push_back(v);
+                }
+                continue;
+            } // else, insert
             ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + xsz);
         }
     }
