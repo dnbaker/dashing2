@@ -15,6 +15,24 @@ struct OptSketcher {
     bns::Encoder<bns::score::Lex, u128_t> enc128_;
     int k_, w_;
     bool use128_, enable_protein_;
+    OptSketcher&operator=(const OptSketcher &o) {
+        rh_ = o.rh_; rh128_ = o.rh128_; enc_ = o.enc_; enc128_ = o.enc128_; k_ = o.k_; w_ = o.w_; use128_ = o.use128_; enable_protein_ = o.enable_protein_;
+        if(o.ctr) ctr.reset(new Counter(*o.ctr));
+        if(o.bmh) bmh.reset(new BagMinHash(*o.bmh));
+        else if(o.pmh) pmh.reset(new ProbMinHash(*o.pmh));
+        else if(o.opss) opss.reset(new OPSetSketch(o.opss->size()));
+        else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
+        else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
+        return *this;
+    }
+    OptSketcher(const OptSketcher &o): rh_(o.rh_), rh128_(o.rh128_), enc_(o.enc_), enc128_(o.enc128_), k_(o.k_), w_(o.w_), use128_(o.use128_), enable_protein_(o.enable_protein_) {
+        if(o.ctr) ctr.reset(new Counter(*o.ctr));
+        if(o.bmh) bmh.reset(new BagMinHash(*o.bmh));
+        else if(o.pmh) pmh.reset(new ProbMinHash(*o.pmh));
+        else if(o.opss) opss.reset(new OPSetSketch(o.opss->size()));
+        else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
+        else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
+    }
     OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), k_(opts.k_), w_(opts.w_), use128_(opts.use128()), enable_protein_(opts.parse_protein()) {
         if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
             omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
@@ -34,6 +52,7 @@ struct OptSketcher {
         }
     }
     bool enable_protein() const {return enable_protein_;}
+    void enable_protein(bool val) {enable_protein_ = val;}
     void reset() {
         rh_.reset(); rh128_.reset();
         if(ctr) ctr->reset();
@@ -44,39 +63,52 @@ struct OptSketcher {
         //if(omh) omh->reset();
     }
 };
-void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex);
+void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads);
 
-FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs, size_t seqs_per_batch) {
+FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs, bool parallel, size_t seqs_per_batch) {
+    const bool save_ids = opts.save_kmers_ || opts.build_mmer_matrix_;
+    const bool save_idcounts = opts.save_kmercounts_ || opts.build_count_matrix_;
     FastxSketchingResult ret;
     gzFile ifp;
     kseq_t *myseq = kseqs ? &kseqs[OMP_ELSE(omp_get_thread_num(), 0)]: (kseq_t *)std::calloc(sizeof(kseq_t), 1);
     size_t batch_index = 0;
-    OptSketcher sketching_data(opts);
-    sketching_data.rh_ = opts.rh_;
-    sketching_data.rh128_ = opts.rh128_;
-    const bool save_ids = opts.save_kmers_ || opts.build_mmer_matrix_;
-    const bool save_idcounts = opts.save_kmercounts_ || opts.build_count_matrix_;
-    //std::fprintf(stderr, "save ids: %d, save counts %d\n", save_ids, save_idcounts);
+    OptSketcher sketcher(opts);
+    sketcher.rh_ = opts.rh_;
+    sketcher.rh128_ = opts.rh128_;
     if(opts.sspace_ == SPACE_SET) {
         if(opts.one_perm()) {
             //std::fprintf(stderr, "Using OPSS\n");
-            sketching_data.opss.reset(new OPSetSketch(opts.sketchsize_));
-            if(opts.count_threshold_ > 0) sketching_data.opss->set_mincount(opts.count_threshold_);
-        } else sketching_data.fss.reset(new FullSetSketch(opts.sketchsize_, save_ids, save_idcounts));
+            sketcher.opss.reset(new OPSetSketch(opts.sketchsize_));
+            if(opts.count_threshold_ > 0) sketcher.opss->set_mincount(opts.count_threshold_);
+        } else sketcher.fss.reset(new FullSetSketch(opts.sketchsize_, save_ids, save_idcounts));
     } else if(opts.sspace_ == SPACE_MULTISET) {
             std::fprintf(stderr, "Using BMH\n");
-        sketching_data.bmh.reset(new BagMinHash(opts.sketchsize_, save_ids, save_idcounts));
+        sketcher.bmh.reset(new BagMinHash(opts.sketchsize_, save_ids, save_idcounts));
     } else if(opts.sspace_ == SPACE_PSET) {
-        sketching_data.pmh.reset(new ProbMinHash(opts.sketchsize_));
-        std::fprintf(stderr, "Setting sketching_data.pmh: %p\n", (void *)sketching_data.pmh.get());
+        sketcher.pmh.reset(new ProbMinHash(opts.sketchsize_));
+        std::fprintf(stderr, "Setting sketcher.pmh: %p\n", (void *)sketcher.pmh.get());
     } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
-        sketching_data.omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
-        std::fprintf(stderr, "Setting sketching_data.omh: %p\n", (void *)sketching_data.omh.get());
+        sketcher.omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
+        std::fprintf(stderr, "Setting sketcher.omh: %p\n", (void *)sketcher.omh.get());
     } else throw std::runtime_error("Should have been set space, multiset, probset, or edit distance");
     if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET || (opts.sspace_ == SPACE_SET && opts.kmer_result_ == FULL_SETSKETCH && opts.count_threshold_ > 0.)) {
-        sketching_data.ctr.reset(new Counter(opts.cssize()));
+        sketcher.ctr.reset(new Counter(opts.cssize()));
     }
 
+    std::vector<OptSketcher> sketching_data;
+    size_t nt = 1;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+#endif
+    if(!parallel) nt = 1;
+    std::vector<OptSketcher> sv;
+    if(nt > 1) {
+        sketching_data.resize(nt, sketcher);
+    } else sketching_data.emplace_back(std::move(sketcher));
+    //std::fprintf(stderr, "save ids: %d, save counts %d\n", save_ids, save_idcounts);
     size_t lastindex = 0;
     for_each_substr([&](const auto &x) {
         if((ifp = gzopen(x.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to read from ") + x);
@@ -89,7 +121,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
                 std::fprintf(stderr, "batch index = %zu\n", batch_index);
-                resize_fill(opts, ret, seqs_per_batch, sketching_data, lastindex);
+                resize_fill(opts, ret, seqs_per_batch, sketching_data, lastindex, nt);
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
             }
@@ -97,7 +129,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
         gzclose(ifp);
     }, path);
     if(!kseqs) kseq_destroy(myseq);
-    if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex);
+    if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt);
     ret.names_.resize(lastindex);
     ret.sequences_.resize(lastindex);
     ret.cardinalities_.resize(lastindex);
@@ -107,7 +139,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     std::fprintf(stderr, "ret names size %zu\n", ret.names_.size());
     return ret;
 }
-void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, OptSketcher &sketchers, size_t &lastindex) {
+void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nt) {
     std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
@@ -123,15 +155,17 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
         ret.kmercounts_.resize(opts.sketchsize_ * newsz);
     }
-    std::fprintf(stderr, "Parsing %s\n", sketchers.enable_protein() ? "Protein": "DNA");
+    std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");
     std::fprintf(stderr, "About to go through list, %zu sigsize, %zu mmer size %zu mmer count size\n", ret.signatures_.size(), ret.kmers_.size(), ret.kmercounts_.size());
     std::unique_ptr<std::vector<uint64_t>[]> seqmins;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
     }
+    OMP_PRAGMA("omp parallel for num_threads(nt)")
     for(size_t i = lastindex; i < oldsz; ++i) {
-        std::fprintf(stderr, "%zu/%zu -- hashing sequence\n", i, newsz);
-        //std::fprintf(stderr, "Seq %zu/%s\n", seqp.second, seqp.first);
+        const int tid = OMP_ELSE(omp_get_thread_num(), 0);
+        std::fprintf(stderr, "%zu/%zu -- hashing sequence from tid = %d\n", i, oldsz, tid);
+        auto &sketchers(sketchvec[tid]);
         sketchers.reset();
         if(sketchers.omh) {
             std::fprintf(stderr, "omh is set, not hashing: %s/%zu\n", ret.sequences_[i].data(), ret.sequences_[i].size());
@@ -159,9 +193,27 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || myseq.back() != x))
                     myseq.push_back(x);
             }, ret.sequences_[i].data(), ret.sequences_[i].size());
+            // This handles the case where the sequence is shorter than the window size
+            // and the entire sequence yields no minimizer.
+            // We instead take the minimum-hashed value from the b-tree
+            uint64_t v;
+            if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
+                if(opts.k_ > 64 || opts.parse_protein()) {
+                    if(opts.use128()) {
+                        v = sketchers.rh128_.qmap_.begin()->first.el_;
+                    } else {
+                        v = sketchers.rh_.qmap_.begin()->first.el_;
+                    }
+                } else if(opts.use128()) {
+                    v = sketchers.enc128_.max_in_queue().el_;
+                } else {
+                    v = sketchers.enc_.max_in_queue().el_;
+                }
+            }
+            myseq.push_back(v);
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
-            std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
+            //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
                 if(sketchers.opss) sketchers.opss->update(x);
