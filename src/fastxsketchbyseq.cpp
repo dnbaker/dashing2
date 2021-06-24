@@ -209,9 +209,9 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     u128_t v = opts.k_ > 64 || opts.parse_protein() ? sketchers.rh128_.qmap_.begin()->first.el_: sketchers.enc128_.max_in_queue().el_;
                     myseq.push_back(0); myseq.push_back(0);
                     std::memcpy(&myseq[myseq.size() - 2], &v, sizeof(v));
-                } else if(sketchers.rh_.qmap_.n_in_queue()) {
+                } else if(sketchers.rh_.n_in_queue()) {
                     myseq.push_back(sketchers.rh_.qmap_.begin()->first.el_);
-                } else if(sketchers.enc_.qmap_.n_in_queue()) {
+                } else if(sketchers.enc_.n_in_queue()) {
                     myseq.push_back(sketchers.enc_.qmap_.begin()->first.el_);
                 }
             }
