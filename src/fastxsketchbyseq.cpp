@@ -165,7 +165,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic,16)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-        std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);
+        DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)
         auto &sketchers(sketchvec[tid]);
         sketchers.reset();
         if(sketchers.omh) {
@@ -286,16 +286,16 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     std::copy(sketchers.pmh->idcounts().begin(), sketchers.pmh->idcounts().end(), kmercounts.begin());
                 }
             } else throw std::runtime_error("Not yet implemented?");
-            std::fprintf(stderr, "Copying from %p to container of size %zu at %zu\n", (void *)ptr, ret.signatures_.size(), size_t(i * opts.sketchsize_));
+            //std::fprintf(stderr, "Copying from %p to container of size %zu at %zu\n", (void *)ptr, ret.signatures_.size(), size_t(i * opts.sketchsize_));
             std::copy(ptr, ptr + opts.sketchsize_, &ret.signatures_[i * opts.sketchsize_]);
             if(kmer_ptr && ret.kmers_.size()) {
-                std::fprintf(stderr, "Copying k-mers out, kmers size %zu, idx = %zu\n", ret.kmers_.size(), i * opts.sketchsize_);
+                //std::fprintf(stderr, "Copying k-mers out, kmers size %zu, idx = %zu\n", ret.kmers_.size(), i * opts.sketchsize_);
                 std::copy(kmer_ptr, kmer_ptr + opts.sketchsize_, &ret.kmers_[i * opts.sketchsize_]);
-            } else std::fprintf(stderr, "k-mers not saved\n");
+            }// else std::fprintf(stderr, "k-mers not saved\n");
             if(kmercounts.size() && ret.kmercounts_.size()) {
-                std::fprintf(stderr, "Copying k-mer counts out\n");
+                //std::fprintf(stderr, "Copying k-mer counts out\n");
                 std::copy(kmercounts.begin(), kmercounts.end(), &ret.kmercounts_[i * opts.sketchsize_]);
-                std::fprintf(stderr, "Copied k-mer counts out\n");
+                //std::fprintf(stderr, "Copied k-mer counts out\n");
             }
         }
     }
@@ -304,7 +304,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         using OT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
         static_assert(sizeof(RegT) == sizeof(OT), "Must use doubles, sorry");
         for(size_t i = 0; i < seqminsz; ++i) {
-            std::fprintf(stderr, "Copying out items from %zu/%zu\n", i, seqminsz);
+            //std::fprintf(stderr, "Copying out items from %zu/%zu\n", i, seqminsz);
             const auto &x(seqmins[i]);
             const OT *ptr = (const OT *)x.data();
             size_t xsz = x.size();
@@ -319,7 +319,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 }
                 continue;
             } // else, insert
-            std::fprintf(stderr, "About to append to signatures a set of size %zu\n", xsz);
+            //std::fprintf(stderr, "About to append to signatures a set of size %zu\n", xsz);
             ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + xsz);
         }
     }
