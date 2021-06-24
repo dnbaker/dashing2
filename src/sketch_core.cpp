@@ -47,7 +47,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
         }
     }
-    std::fprintf(stderr, "Created result\n");
+    //std::fprintf(stderr, "Created result\n");
     if(paths.size() == 1 && outfile.empty()) {
         const std::string suf =
                 opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
@@ -67,7 +67,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
     bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;}));
     if(outfile.size()) {
         if(result.signatures_.empty()) throw std::runtime_error("Can't write stacked sketches if signatures were not generated");
-        std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());
+        DBG_ONLY(std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());)
         std::FILE *ofp = std::fopen(outfile.data(), "wb");
         if(!ofp) throw std::runtime_error(std::string("Failed to open file at ") + outfile);
         if(even)

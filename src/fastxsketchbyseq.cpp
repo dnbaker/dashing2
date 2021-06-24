@@ -142,7 +142,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     return ret;
 }
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nt) {
-    std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
+    //std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && opts.build_sig_matrix_) {
@@ -157,7 +157,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
         ret.kmercounts_.resize(opts.sketchsize_ * newsz);
     }
-    std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");
+    //std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");
     std::unique_ptr<std::vector<uint64_t>[]> seqmins;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
