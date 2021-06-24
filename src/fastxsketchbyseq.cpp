@@ -204,19 +204,13 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             // and the entire sequence yields no minimizer.
             // We instead take the minimum-hashed value from the b-tree
             if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
-                uint64_t v;
-                if(opts.k_ > 64 || opts.parse_protein()) {
-                    if(opts.use128()) {
-                        v = sketchers.rh128_.qmap_.begin()->first.el_;
-                    } else {
-                        v = sketchers.rh_.qmap_.begin()->first.el_;
-                    }
-                } else if(opts.use128()) {
-                    v = sketchers.enc128_.max_in_queue().el_;
+                if(opts.use128()) {
+                    u128_t v = opts.k_ > 64 || opts.parse_protein() ? sketchers.rh128_.qmap_.begin()->first.el_: sketchers.enc128_.max_in_queue().el_;
+                    myseq.push_back(0); myseq.push_back(0);
+                    std::memcpy(&myseq[myseq.size() - 2], &v, sizeof(v));
                 } else {
-                    v = sketchers.enc_.max_in_queue().el_;
+                    myseq.push_back(opts.k_ > 32 || opts.parse_protein() ? sketchers.rh_.qmap_.begin()->first.el_: sketchers.enc_.max_in_queue().el_);
                 }
-                myseq.push_back(v);
             }
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
