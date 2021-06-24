@@ -115,12 +115,12 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
         gzbuffer(ifp, 1u << 17);
         bns::kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
-            std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);
+            //std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);
             ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);
             const int off = (myseq->name.s[0] == '>');
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
-                std::fprintf(stderr, "batch index = %zu\n", batch_index);
+                //std::fprintf(stderr, "batch index = %zu\n", batch_index);
                 resize_fill(opts, ret, seqs_per_batch, sketching_data, lastindex, nt);
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
@@ -135,8 +135,10 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     ret.cardinalities_.resize(lastindex);
     if(ret.kmers_.size()) ret.kmers_.resize(opts.sketchsize_ * lastindex);
     if(ret.kmercounts_.size()) ret.kmercounts_.resize(opts.sketchsize_ * lastindex);
+#ifndef NDEBUG
     std::fprintf(stderr, "ret kmer size %zu\n", ret.kmers_.size());
     std::fprintf(stderr, "ret names size %zu\n", ret.names_.size());
+#endif
     return ret;
 }
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nt) {
@@ -156,7 +158,6 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         ret.kmercounts_.resize(opts.sketchsize_ * newsz);
     }
     std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");
-    std::fprintf(stderr, "About to go through list, %zu sigsize, %zu mmer size %zu mmer count size\n", ret.signatures_.size(), ret.kmers_.size(), ret.kmercounts_.size());
     std::unique_ptr<std::vector<uint64_t>[]> seqmins;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
@@ -164,15 +165,13 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     OMP_PRAGMA("omp parallel for num_threads(nt)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-        std::fprintf(stderr, "%zu/%zu -- hashing sequence from tid = %d\n", i, oldsz, tid);
+        std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);
         auto &sketchers(sketchvec[tid]);
         sketchers.reset();
         if(sketchers.omh) {
-            std::fprintf(stderr, "omh is set, not hashing: %s/%zu\n", ret.sequences_[i].data(), ret.sequences_[i].size());
             std::vector<uint64_t> res = sketchers.omh->hash(ret.sequences_[i].data(), ret.sequences_[i].size());
             auto destp = &ret.signatures_[i * opts.sketchsize_];
             if constexpr(sizeof(RegT) == sizeof(uint64_t)) { // double
-                std::fprintf(stderr, "Copying 64-bit registers for OMH\n");
                 // Copy as-is
                 std::memcpy(destp, res.data(), res.size() * sizeof(uint64_t));
             } else if constexpr(sizeof(RegT) > sizeof(uint64_t)) { // long double
@@ -190,14 +189,24 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             auto &myseq(seqmins[i - lastindex]);
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
-                if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || myseq.back() != x))
-                    myseq.push_back(x);
+#define isnt_back (sizeof(x) == 8 ? myseq.back() != x: std::memcmp(&myseq[myseq.size() - 2], &x, 16) != 0)
+                if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || isnt_back)) {
+                    if(sizeof(x) == 8) myseq.push_back(x);
+                    else {
+                        const size_t oldsz = myseq.size();
+                        myseq.resize(oldsz + 2);
+                        std::memcpy(&myseq[oldsz], &x, 16);
+                    }
+                }
+#undef isnt_back
+                } else if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || std::memcmp(&myseq[myseq.size() - 2], &x, 16))) {
+                }
             }, ret.sequences_[i].data(), ret.sequences_[i].size());
             // This handles the case where the sequence is shorter than the window size
             // and the entire sequence yields no minimizer.
             // We instead take the minimum-hashed value from the b-tree
-            uint64_t v;
             if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
+                uint64_t v;
                 if(opts.k_ > 64 || opts.parse_protein()) {
                     if(opts.use128()) {
                         v = sketchers.rh128_.qmap_.begin()->first.el_;
@@ -209,8 +218,8 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 } else {
                     v = sketchers.enc_.max_in_queue().el_;
                 }
+                myseq.push_back(v);
             }
-            myseq.push_back(v);
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
             //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
@@ -295,12 +304,14 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     }
     if(seqmins) {
         const size_t seqminsz = oldsz - lastindex;
-        static_assert(sizeof(RegT) == 8, "Must use doubles, sorry");
+        using OT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
+        static_assert(sizeof(RegT) == sizeof(OT), "Must use doubles, sorry");
         for(size_t i = 0; i < seqminsz; ++i) {
             const auto &x(seqmins[i]);
-            const uint64_t *ptr = (const uint64_t *)x.data();
-            ret.nperfile_.push_back(x.size());
-            ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + x.size());
+            const OT *ptr = (const OT *)x.data();
+            const size_t xsz = x.size() / (sizeof(RegT) / sizeof(uint64_t));
+            ret.nperfile_.push_back(xsz);
+            ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + xsz);
         }
     }
     lastindex = oldsz;

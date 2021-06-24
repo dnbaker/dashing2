@@ -7,11 +7,13 @@
 
 namespace dashing2 {
 
+using u128_t = __uint128_t;
+
 namespace hash = sketch::hash;
 template<typename T, size_t pow2=false, typename Hasher = hash::MultiplyAddXoRot<31>>
 struct LazyOnePermSetSketch {
 private:
-    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T>, "Must be integral and unsigned");
+    static_assert((std::is_integral_v<T> && std::is_unsigned_v<T>) || std::is_same_v<T, u128_t>, "Must be integral and unsigned");
     size_t m_;
     // Solution: hash reversibly, track the maximum IDs
     std::vector<T> registers_;
@@ -79,8 +81,16 @@ public:
     T decode(T x) const {
         return hasher_.inverse(x);
     }
-    static INLINE constexpr T shasher_(T x) {
+    static INLINE constexpr uint32_t shasher_(uint32_t x) {
+        return static_cast<uint32_t>(0xd63af43a) ^ ((x >> 15) ^ (x << 17));
+    }
+    static INLINE constexpr uint64_t shasher_(uint64_t x) {
         return static_cast<T>(0xd63af43ad731df95) ^ ((x >> 31) ^ (x << 33));
+    }
+    template<typename OT> static INLINE constexpr OT shasher_(OT x) {
+        if(sizeof(OT) == 4) {return shasher_(uint32_t(x));}
+        else if(sizeof(OT) == 16) {return shasher_(uint64_t(x) ^ shasher_(uint64_t(x >> 64)));}
+        return shasher_(uint64_t(x));
     }
     INLINE void update(const T oid) {
         ++total_updates_;
