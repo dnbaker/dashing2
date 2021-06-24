@@ -35,23 +35,6 @@ private:
 public:
     LazyOnePermSetSketch(const LazyOnePermSetSketch &o): div_(o.div_) {
         *this = o;
-#if 0
-        m_ = o.m_;
-        registers_ = o.registers_;
-        counts_ = o.counts_;
-        mask_ = o.mask_;
-        shift_ = o.shift_;
-        count_threshold_ = o.count_threshold_;
-        total_updates_ = o.total_updates_;
-        hasher_ = o.hasher_;
-        div_ = o.div_;
-        mincount_ = o.mincount_;
-        potentials_ = o.potentials_;
-        card_ = o.card_;
-        if(o.as_sigs_) as_sigs_.reset(new std::decay_t<decltype(as_sigs_)>(*o.as_sigs_));
-        if(o.original_ids_) original_ids_.reset(new std::decay_t<decltype(original_ids_)>(*o.original_ids_));
-        if(o.idcounts_) idcounts_.reset(new std::decay_t<decltype(idcounts_)>(*o.idcounts_));
-#endif
     }
     LazyOnePermSetSketch& operator=(const LazyOnePermSetSketch &o)
     {
