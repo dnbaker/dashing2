@@ -162,7 +162,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
     }
-    OMP_PRAGMA("omp parallel for num_threads(nt)")
+    OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
         std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);

@@ -16,7 +16,7 @@ OBJF=$(patsubst %.o,%.fo,$(OFS))
 OBJDBG=$(patsubst %.o,%.do,$(OFS))
 OBJLTO=$(patsubst %.o,%.lto,$(OFS))
 
-all: dashing2
+all: dashing2 dashing2-f dashing2-ld
 unit: readfx readbw readbed
 obh: echo $(OBJ)
 
@@ -35,17 +35,17 @@ FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
 LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 
 dashing2: $(OBJ) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
 dashing2-lto: $(OBJLTO) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLTO) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-g: $(GLIBOBJ) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-ld: $(OBJLD) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
 dashing2-f: $(OBJF) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
 read%: test/read%.o $(LIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 read%-ld: test/read%.ldo $(LDLIBOBJ)
@@ -56,15 +56,15 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
 	# $(wildcard src/*.h)
 %.o: %.cpp
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
 %.lto: %.cpp
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
 %.do: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto
 %.go: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -pg
 %.ldo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto
 %.fo: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
 
