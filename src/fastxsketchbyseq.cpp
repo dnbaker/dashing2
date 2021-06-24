@@ -215,6 +215,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     myseq.push_back(sketchers.enc_.qmap_.begin()->first.el_);
                 }
             }
+            ret.cardinalities_[i] = myseq.size();
             //std::fprintf(stderr, "Processed items for %zu\n", i);
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
