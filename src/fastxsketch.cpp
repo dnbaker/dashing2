@@ -181,7 +181,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 std::fprintf(stderr, "Sketched %zu/%zu (%s)\n", i + 1, paths.size(), paths[i].data());
             }
         }
-        std::fprintf(stderr, "Merging files\n");
+        //std::fprintf(stderr, "Merging files\n");
         ret = FastxSketchingResult::merge(res.data(), res.size(), paths);
     } else {
         if(opts.sspace_ == SPACE_EDIT_DISTANCE) {

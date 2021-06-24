@@ -47,6 +47,7 @@ enum OptArg{
     LO_ARG("kmer-length", 'k')\
     LO_ARG("outfile", 'o')\
     LO_ARG("count-threshold", 'm')\
+    LO_ARG("threshold", 'm')\
     LO_FLAG("canon", 'C', canon, true)\
     LO_FLAG("cache", 'W', cache, true)\
     LO_FLAG("binary-output", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \

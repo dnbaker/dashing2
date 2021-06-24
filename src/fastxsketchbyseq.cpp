@@ -115,12 +115,12 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
         gzbuffer(ifp, 1u << 17);
         bns::kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
-            std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);
+            //std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);
             ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);
             const int off = (myseq->name.s[0] == '>');
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
-                std::fprintf(stderr, "batch index = %zu\n", batch_index);
+                //std::fprintf(stderr, "batch index = %zu\n", batch_index);
                 resize_fill(opts, ret, seqs_per_batch, sketching_data, lastindex, nt);
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
@@ -135,12 +135,14 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     ret.cardinalities_.resize(lastindex);
     if(ret.kmers_.size()) ret.kmers_.resize(opts.sketchsize_ * lastindex);
     if(ret.kmercounts_.size()) ret.kmercounts_.resize(opts.sketchsize_ * lastindex);
+#ifndef NDEBUG
     std::fprintf(stderr, "ret kmer size %zu\n", ret.kmers_.size());
     std::fprintf(stderr, "ret names size %zu\n", ret.names_.size());
+#endif
     return ret;
 }
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nt) {
-    std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
+    //std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && opts.build_sig_matrix_) {
@@ -155,24 +157,21 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
         ret.kmercounts_.resize(opts.sketchsize_ * newsz);
     }
-    std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");
-    std::fprintf(stderr, "About to go through list, %zu sigsize, %zu mmer size %zu mmer count size\n", ret.signatures_.size(), ret.kmers_.size(), ret.kmercounts_.size());
+    //std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");
     std::unique_ptr<std::vector<uint64_t>[]> seqmins;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
     }
-    OMP_PRAGMA("omp parallel for num_threads(nt)")
+    OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic,16)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-        std::fprintf(stderr, "%zu/%zu -- hashing sequence from tid = %d\n", i, oldsz, tid);
+        DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)
         auto &sketchers(sketchvec[tid]);
         sketchers.reset();
         if(sketchers.omh) {
-            std::fprintf(stderr, "omh is set, not hashing: %s/%zu\n", ret.sequences_[i].data(), ret.sequences_[i].size());
             std::vector<uint64_t> res = sketchers.omh->hash(ret.sequences_[i].data(), ret.sequences_[i].size());
             auto destp = &ret.signatures_[i * opts.sketchsize_];
             if constexpr(sizeof(RegT) == sizeof(uint64_t)) { // double
-                std::fprintf(stderr, "Copying 64-bit registers for OMH\n");
                 // Copy as-is
                 std::memcpy(destp, res.data(), res.size() * sizeof(uint64_t));
             } else if constexpr(sizeof(RegT) > sizeof(uint64_t)) { // long double
@@ -190,27 +189,34 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             auto &myseq(seqmins[i - lastindex]);
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
-                if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || myseq.back() != x))
-                    myseq.push_back(x);
+                if(!opts.homopolymer_compress_minimizers_ || myseq.empty() ||
+                    (sizeof(x) == 8 ? myseq.back() != x: std::memcmp(&myseq[myseq.size() - 2], &x, 16) != 0))
+                {
+                    if(sizeof(x) == 8) myseq.push_back(x);
+                    else {
+                        const size_t oldsz = myseq.size();
+                        myseq.resize(oldsz + 2);
+                        std::memcpy(&myseq[oldsz], &x, 16);
+                    }
+                }
             }, ret.sequences_[i].data(), ret.sequences_[i].size());
             // This handles the case where the sequence is shorter than the window size
             // and the entire sequence yields no minimizer.
             // We instead take the minimum-hashed value from the b-tree
-            uint64_t v;
             if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
-                if(opts.k_ > 64 || opts.parse_protein()) {
-                    if(opts.use128()) {
-                        v = sketchers.rh128_.qmap_.begin()->first.el_;
-                    } else {
-                        v = sketchers.rh_.qmap_.begin()->first.el_;
-                    }
-                } else if(opts.use128()) {
-                    v = sketchers.enc128_.max_in_queue().el_;
-                } else {
-                    v = sketchers.enc_.max_in_queue().el_;
+                //std::fprintf(stderr, "Adding in single item for small seq]\n");
+                if(opts.use128()) {
+                    u128_t v = opts.k_ > 64 || opts.parse_protein() ? sketchers.rh128_.qmap_.begin()->first.el_: sketchers.enc128_.max_in_queue().el_;
+                    myseq.push_back(0); myseq.push_back(0);
+                    std::memcpy(&myseq[myseq.size() - 2], &v, sizeof(v));
+                } else if(sketchers.rh_.qmap_.n_in_queue()) {
+                    myseq.push_back(sketchers.rh_.qmap_.begin()->first.el_);
+                } else if(sketchers.enc_.qmap_.n_in_queue()) {
+                    myseq.push_back(sketchers.enc_.qmap_.begin()->first.el_);
                 }
             }
-            myseq.push_back(v);
+            ret.cardinalities_[i] = myseq.size();
+            //std::fprintf(stderr, "Processed items for %zu\n", i);
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
             //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
@@ -280,27 +286,41 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     std::copy(sketchers.pmh->idcounts().begin(), sketchers.pmh->idcounts().end(), kmercounts.begin());
                 }
             } else throw std::runtime_error("Not yet implemented?");
-            std::fprintf(stderr, "Copying from %p to container of size %zu at %zu\n", (void *)ptr, ret.signatures_.size(), size_t(i * opts.sketchsize_));
+            //std::fprintf(stderr, "Copying from %p to container of size %zu at %zu\n", (void *)ptr, ret.signatures_.size(), size_t(i * opts.sketchsize_));
             std::copy(ptr, ptr + opts.sketchsize_, &ret.signatures_[i * opts.sketchsize_]);
             if(kmer_ptr && ret.kmers_.size()) {
-                std::fprintf(stderr, "Copying k-mers out, kmers size %zu, idx = %zu\n", ret.kmers_.size(), i * opts.sketchsize_);
+                //std::fprintf(stderr, "Copying k-mers out, kmers size %zu, idx = %zu\n", ret.kmers_.size(), i * opts.sketchsize_);
                 std::copy(kmer_ptr, kmer_ptr + opts.sketchsize_, &ret.kmers_[i * opts.sketchsize_]);
-            } else std::fprintf(stderr, "k-mers not saved\n");
+            }// else std::fprintf(stderr, "k-mers not saved\n");
             if(kmercounts.size() && ret.kmercounts_.size()) {
-                std::fprintf(stderr, "Copying k-mer counts out\n");
+                //std::fprintf(stderr, "Copying k-mer counts out\n");
                 std::copy(kmercounts.begin(), kmercounts.end(), &ret.kmercounts_[i * opts.sketchsize_]);
-                std::fprintf(stderr, "Copied k-mer counts out\n");
+                //std::fprintf(stderr, "Copied k-mer counts out\n");
             }
         }
     }
     if(seqmins) {
         const size_t seqminsz = oldsz - lastindex;
-        static_assert(sizeof(RegT) == 8, "Must use doubles, sorry");
+        using OT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
+        static_assert(sizeof(RegT) == sizeof(OT), "Must use doubles, sorry");
         for(size_t i = 0; i < seqminsz; ++i) {
+            //std::fprintf(stderr, "Copying out items from %zu/%zu\n", i, seqminsz);
             const auto &x(seqmins[i]);
-            const uint64_t *ptr = (const uint64_t *)x.data();
-            ret.nperfile_.push_back(x.size());
-            ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + x.size());
+            const OT *ptr = (const OT *)x.data();
+            size_t xsz = x.size();
+            if(sizeof(RegT) == 16) xsz >>= 1;
+            ret.nperfile_.push_back(xsz);
+            if(sizeof(RegT) == 4) {
+                for(size_t j = 0; j < xsz; ++j) {
+                    RegT v;
+                    uint32_t lv = ((const uint64_t *)ptr)[j];
+                    std::memcpy(&v, &lv, 4);
+                    ret.signatures_.push_back(v);
+                }
+                continue;
+            } // else, insert
+            //std::fprintf(stderr, "About to append to signatures a set of size %zu\n", xsz);
+            ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + xsz);
         }
     }
     lastindex = oldsz;
