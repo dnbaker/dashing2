@@ -163,8 +163,9 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     }
     OMP_PRAGMA("omp parallel for num_threads(nt)")
     for(size_t i = lastindex; i < oldsz; ++i) {
-        std::fprintf(stderr, "%zu/%zu -- hashing sequence\n", i, oldsz);
-        auto &sketchers(sketchvec[OMP_ELSE(omp_get_thread_num(), 0)]);
+        const int tid = OMP_ELSE(omp_get_thread_num(), 0);
+        std::fprintf(stderr, "%zu/%zu -- hashing sequence from tid = %d\n", i, oldsz, tid);
+        auto &sketchers(sketchvec[tid]);
         sketchers.reset();
         if(sketchers.omh) {
             std::fprintf(stderr, "omh is set, not hashing: %s/%zu\n", ret.sequences_[i].data(), ret.sequences_[i].size());
@@ -192,6 +193,24 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 if(!opts.homopolymer_compress_minimizers_ || (myseq.empty() || myseq.back() != x))
                     myseq.push_back(x);
             }, ret.sequences_[i].data(), ret.sequences_[i].size());
+            // This handles the case where the sequence is shorter than the window size
+            // and the entire sequence yields no minimizer.
+            // We instead take the minimum-hashed value from the b-tree
+            if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
+                if(opts.k_ > 64 || opts.parse_protein()) {
+                    if(opts.use128()) {
+                        myseq.push_back(sketchers.rh128_.qmap_.begin()->first.el_);
+                    } else {
+                        myseq.push_back(sketchers.rh_.qmap_.begin()->first.el_);
+                    }
+                } else {
+                    if(opts.use128()) {
+                        myseq.push_back(sketchers.enc128_.max_in_queue().el_);
+                    } else {
+                        myseq.push_back(sketchers.enc_.max_in_queue().el_);
+                    }
+                }
+            }
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
             //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());

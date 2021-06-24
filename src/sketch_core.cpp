@@ -73,11 +73,18 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         if(even)
             std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
         else {
+#ifndef NDEBUG
+            auto totaln = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
+            std::fprintf(stderr, "%zu total minimizers, signature size is %zu\n", totaln, result.signatures_.size());
+            const size_t sigsz = result.signatures_.size();
+#endif
             size_t offset = 0;
             const uint64_t terminus = uint64_t(-1);
             for(size_t i = 0; i < result.nperfile_.size(); ++i) {
-                std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
-                offset += result.nperfile_.at(i);
+                if(result.nperfile_[i]) {
+                    std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
+                    offset += result.nperfile_.at(i);
+                }
                 std::fwrite(&terminus, sizeof(terminus), 1, ofp);
             }
         }
