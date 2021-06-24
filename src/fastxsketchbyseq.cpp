@@ -196,21 +196,21 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             // This handles the case where the sequence is shorter than the window size
             // and the entire sequence yields no minimizer.
             // We instead take the minimum-hashed value from the b-tree
+            uint64_t v;
             if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
                 if(opts.k_ > 64 || opts.parse_protein()) {
                     if(opts.use128()) {
-                        myseq.push_back(sketchers.rh128_.qmap_.begin()->first.el_);
+                        v = sketchers.rh128_.qmap_.begin()->first.el_;
                     } else {
-                        myseq.push_back(sketchers.rh_.qmap_.begin()->first.el_);
+                        v = sketchers.rh_.qmap_.begin()->first.el_;
                     }
+                } else if(opts.use128()) {
+                    v = sketchers.enc128_.max_in_queue().el_;
                 } else {
-                    if(opts.use128()) {
-                        myseq.push_back(sketchers.enc128_.max_in_queue().el_);
-                    } else {
-                        myseq.push_back(sketchers.enc_.max_in_queue().el_);
-                    }
+                    v = sketchers.enc_.max_in_queue().el_;
                 }
             }
+            myseq.push_back(v);
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
             //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
