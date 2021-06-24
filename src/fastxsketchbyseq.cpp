@@ -162,7 +162,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
     }
-    OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic)")
+    OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic,16)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
         std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);
@@ -204,14 +204,18 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             // and the entire sequence yields no minimizer.
             // We instead take the minimum-hashed value from the b-tree
             if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
+                //std::fprintf(stderr, "Adding in single item for small seq]\n");
                 if(opts.use128()) {
                     u128_t v = opts.k_ > 64 || opts.parse_protein() ? sketchers.rh128_.qmap_.begin()->first.el_: sketchers.enc128_.max_in_queue().el_;
                     myseq.push_back(0); myseq.push_back(0);
                     std::memcpy(&myseq[myseq.size() - 2], &v, sizeof(v));
-                } else {
-                    myseq.push_back(opts.k_ > 32 || opts.parse_protein() ? sketchers.rh_.qmap_.begin()->first.el_: sketchers.enc_.max_in_queue().el_);
+                } else if(sketchers.rh_.qmap_.n_in_queue()) {
+                    myseq.push_back(sketchers.rh_.qmap_.begin()->first.el_);
+                } else if(sketchers.enc_.qmap_.n_in_queue()) {
+                    myseq.push_back(sketchers.enc_.qmap_.begin()->first.el_);
                 }
             }
+            //std::fprintf(stderr, "Processed items for %zu\n", i);
         } else {
             assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
             //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
@@ -299,6 +303,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         using OT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
         static_assert(sizeof(RegT) == sizeof(OT), "Must use doubles, sorry");
         for(size_t i = 0; i < seqminsz; ++i) {
+            std::fprintf(stderr, "Copying out items from %zu/%zu\n", i, seqminsz);
             const auto &x(seqmins[i]);
             const OT *ptr = (const OT *)x.data();
             size_t xsz = x.size();
@@ -313,6 +318,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 }
                 continue;
             } // else, insert
+            std::fprintf(stderr, "About to append to signatures a set of size %zu\n", xsz);
             ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + xsz);
         }
     }
