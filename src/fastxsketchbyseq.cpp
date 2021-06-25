@@ -206,13 +206,13 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
                 //std::fprintf(stderr, "Adding in single item for small seq]\n");
                 if(opts.use128()) {
-                    u128_t v = opts.k_ > 64 || opts.parse_protein() ? sketchers.rh128_.qmap_.begin()->first.el_: sketchers.enc128_.max_in_queue().el_;
+                    u128_t v = opts.k_ > 64 || opts.parse_protein() ? sketchers.rh128_.max_in_queue().el_: sketchers.enc128_.max_in_queue().el_;
                     myseq.push_back(0); myseq.push_back(0);
                     std::memcpy(&myseq[myseq.size() - 2], &v, sizeof(v));
                 } else if(sketchers.rh_.n_in_queue()) {
-                    myseq.push_back(sketchers.rh_.qmap_.begin()->first.el_);
+                    myseq.push_back(sketchers.rh_.max_in_queue().el_);
                 } else if(sketchers.enc_.n_in_queue()) {
-                    myseq.push_back(sketchers.enc_.qmap_.begin()->first.el_);
+                    myseq.push_back(sketchers.enc_.max_in_queue().el_);
                 }
             }
             ret.cardinalities_[i] = myseq.size();
