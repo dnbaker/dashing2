@@ -47,13 +47,13 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
         }
     }
-    //std::fprintf(stderr, "Created result\n");
     if(paths.size() == 1 && outfile.empty()) {
         const std::string suf =
                 opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
                 opts.sspace_ == SPACE_MULTISET ? ".bmh":
                 opts.sspace_ == SPACE_PSET ? ".pmh" :
                 opts.sspace_ == SPACE_EDIT_DISTANCE ? ".omh": ".unknown_sketch";
+        std::fprintf(stderr, "Only one input path, now doing stuff %s\n", outfile.data());
         outfile = paths.front();
         outfile = outfile.substr(0, outfile.find_first_of(' '));
         // In case the first path has multiple entries, trim to just the first
@@ -64,10 +64,11 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
-    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;}));
+    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.size() && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
     if(outfile.size()) {
+        std::fprintf(stderr, "outfile %s\n", outfile.data());
         if(result.signatures_.empty()) throw std::runtime_error("Can't write stacked sketches if signatures were not generated");
-        DBG_ONLY(std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());)
+        std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());
         std::FILE *ofp = std::fopen(outfile.data(), "wb");
         if(!ofp) throw std::runtime_error(std::string("Failed to open file at ") + outfile);
         if(even)

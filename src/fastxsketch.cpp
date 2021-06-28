@@ -35,8 +35,21 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
     for(size_t i = k; i > 0;ret[--i] = pq.top(), pq.pop());
 }
 
-template<typename T>
+template<typename T, size_t chunk_size = 65536>
 void load_copy(const std::string &path, T *ptr) {
+    if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
+        gzFile fp = gzopen(path.data(), "rb");
+        if(!fp) throw std::runtime_error(std::string("Failed to open file at ") + path);
+        for(int nr;
+            !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
+            ptr += nr / sizeof(T));
+        gzclose(fp);
+        return;
+    } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
+        std::FILE *fp = ::popen((std::string("xz -dc ") + path).data(), "r");
+        for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
+        ::pclose(fp);
+    }
     std::FILE *fp = std::fopen(path.data(), "rb");
     if(!fp) throw std::runtime_error(std::string("Failed to open ") + path);
     struct stat st;
@@ -112,6 +125,26 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     for(size_t i = 0; i < m; ++i)
         s += ptr[i];
     return m / s;
+}
+static inline bool check_compressed(std::string &path) {
+    if(bns::isfile(path))
+        return true;
+    if(bns::isfile(path + ".gz")) {
+        path = path + ".gz";
+        return true;
+    }
+    if(bns::isfile(path + ".xz")) {
+        path = path + ".xz";
+        return true;
+    }
+    return false;
+}
+static inline bool iscomp(const std::string &s) {
+    if(s.size() < 3) return false;
+    if(std::equal(&s[s.size() - 3], &s[s.size()], ".gz")) return true;
+    if(std::equal(&s[s.size() - 3], &s[s.size()], ".xz")) return true;
+    if(std::equal(&s[s.size() - 4], &s[s.size()], ".bz2")) return true;
+    return false;
 }
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
@@ -217,13 +250,16 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     ret = opts.outprefix_ + '/' + ret;
                 }
             }
-            ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
+            if(opts.kmer_result_ <= FULL_SETSKETCH)
+                ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
             ret = ret + std::string(".k") + std::to_string(opts.k_);
             if(opts.w_ > opts.k_) {
                 ret = ret + std::string(".w") + std::to_string(opts.w_);
             }
             if(opts.count_threshold_ > 0) {
-                ret = ret + std::string(".ct_threshold") + std::to_string(opts.count_threshold_);
+                ret = ret + ".ct_threshold";
+                if(std::fmod(opts.count_threshold_, 1.)) ret = ret + std::to_string(opts.count_threshold_);
+                else ret = ret + std::to_string(int(opts.count_threshold_));
             }
             if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_EDIT_DISTANCE) {
                 ret += '.';
@@ -258,13 +294,14 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             ret.destination_files_[myind] = makedest(path);
             auto &destination = ret.destination_files_[myind];
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
-            const std::string destkmer = destination_prefix + ".kmer.u64";
-            const std::string destkmercounts = destination_prefix + ".kmercounts.f64";
-            const bool dkif = bns::isfile(destkmer);
-            const bool dkcif = bns::isfile(destkmercounts);
+            std::string destkmercounts = destination_prefix + ".kmercounts.f64";
+            std::string destkmer = destination_prefix + ".kmer.u64";
+            const bool dkif = check_compressed(destkmer);
+            const bool dkcif = check_compressed(destkmercounts);
+            const bool destisfile = check_compressed(destination);
             if(ret.kmercountfiles_.size() > myind) ret.kmercountfiles_[myind] = destkmercounts;
             if(opts.cache_sketches_ &&
-               bns::isfile(destination) &&
+               destisfile &&
                (!opts.save_kmers_ || dkif) &&
                ((!opts.save_kmercounts_ && opts.kmer_result_ != FULL_MMER_COUNTDICT) || dkcif)
             )
@@ -279,11 +316,35 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     if(ret.kmercounts_.size())
                         load_copy(destkmercounts, &ret.kmercounts_[mss]);
                 } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
-                    if(!bns::isfile(destkmercounts))
+                    if(!dkcif)
                         throw std::runtime_error(std::string("Expected destkmercounts (") + destkmercounts + ") to be a file. Run again?");
-                    mio::mmap_sink ms(destkmercounts);
-                    if(ms.size() % sizeof(double)) throw std::runtime_error(std::string("Wrong size file ") + destkmercounts);
-                    ret.cardinalities_[myind] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
+                    std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
+                    std::string cmd;
+                    const auto dkcsz = destkmercounts.size();
+                    if(!iscomp(destkmercounts)) {
+                        mio::mmap_sink ms(destkmercounts);
+                        if(ms.size() % sizeof(double)) throw std::runtime_error(std::string("Wrong size file ") + destkmercounts);
+                        ret.cardinalities_[myind] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
+                    } else if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".gz")) {
+                        cmd = "gzip -dc ";
+                    } else if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".xz")) {
+                        cmd = "xz -dc ";
+                    } else if(destkmercounts.size() > 4 && std::equal(&destkmercounts[dkcsz - 4], &destkmercounts[dkcsz], ".bz2")) {
+                        cmd = "bzip2 -dc ";
+                    }
+                    cmd = cmd + destkmercounts;
+                    std::FILE *ifp = ::popen(cmd.data(), "r");
+                    if(!ifp) throw std::runtime_error("Failed to perform xz popen call for decompressing k-mer counts");
+                    static constexpr size_t N = 4096;
+                    size_t n = 4096;
+                    std::unique_ptr<double[]> d(new double[N]);
+                    long double s = 0.;
+                    for(;n == N;) {
+                        n = std::fread(d.get(), sizeof(double), N, ifp);
+                        s = std::accumulate(d.get(), &d[n], s);
+                    }
+                    ::pclose(ifp);
+                    ret.cardinalities_[myind] = s;
                 } else if(opts.kmer_result_ == FULL_MMER_SET) {
                     ret.cardinalities_[myind] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
                 }
