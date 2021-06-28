@@ -52,5 +52,12 @@ std::string to_string(CountingType ct) {
     return "UNKNOWN COUNTING";
 }
 
+bool iscomp(const std::string &s) {
+    if(s.size() < 3) return false;
+    if(std::equal(&s[s.size() - 3], &s[s.size()], ".gz")) return true;
+    if(std::equal(&s[s.size() - 3], &s[s.size()], ".xz")) return true;
+    if(std::equal(&s[s.size() - 4], &s[s.size()], ".bz2")) return true;
+    return false;
+}
 
 }

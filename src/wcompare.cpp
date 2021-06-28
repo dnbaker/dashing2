@@ -1,4 +1,5 @@
 #include "wcompare.h"
+#include <memory>
 #include "sketch/kahan.h"
 #include <algorithm>
 
@@ -19,7 +20,6 @@ std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl
         if(MODE) sketch::kahan::update(sum, carry, inc);
         else    sum += inc;
     };
-    // TODO:
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
         if(lptr[lhi] == rptr[rhi]) {
             increment(isz_size, isz_carry, std::min(lnptr[lhi++], rnptr[rhi++]));
@@ -54,6 +54,35 @@ double cosine_compare(const uint64_t *lptr, size_t lhl, [[maybe_unused]] const d
         }
     }
     return dotprod;
+}
+template<typename T>
+std::vector<T> load_file(std::FILE *fp) {
+    std::unique_ptr<T[]> tmp(new T[16384]);
+    std::vector<T> ret;
+    while(!std::feof(fp)) {
+        size_t n = std::fread(tmp.get(), sizeof(T), 16384, fp);
+        const size_t oldsz = ret.size();
+        ret.resize(oldsz + n);
+        std::copy(tmp.get(), &tmp[n], &ret[oldsz]);
+        if(n != 16384)
+            break;
+    }
+    return ret;
+}
+std::pair<double, double>
+weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum) {
+    std::vector<uint64_t> lhv = load_file<uint64_t>(lhk), rhv = load_file<uint64_t>(rhk);
+    std::vector<double> lhcv, rhcv;
+    std::pair<double, double> ret;
+    if(lhn) {
+        lhcv = load_file<double>(lhn);
+        rhcv = load_file<double>(rhn);
+        ret = weighted_compare(lhv.data(), lhv.size(), lhsum, rhv.data(), rhv.size(), rhsum, lhcv.data(), rhcv.data(), 0);
+    } else {
+        ret.first = set_compare(lhv.data(), lhv.size(), rhv.data(), rhv.size());
+        ret.second = lhv.size() + rhv.size() - ret.first;
+    }
+    return ret;
 }
 
 } // namespace dashing2

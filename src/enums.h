@@ -89,5 +89,6 @@ std::string trim_folder(const std::string &s);
 struct Dashing2Options;
 
 std::string to_suffix(const Dashing2Options &opts);
+bool iscomp(const std::string &s);
 
 }

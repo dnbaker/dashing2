@@ -29,6 +29,13 @@ static INLINE uint64_t reg2sig(RegT x) {
 #define OMP_STATIC_SCHED32
 #endif
 
+std::string path2cmd(const std::string &path) {
+    if(std::equal(path.rbegin(), path.rbegin() + 3, "zg.")) return std::string("gzip -dc ") + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 3, "zx.")) return std::string("xz -dc ") + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 4, "2zb.")) return std::string("bzip2 -dc ") + path;
+    return std::string("cat ") + path;
+}
+
 std::tuple<void *, double, double>
 make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs, bool is_edit_distance) {
     std::tuple<void *, double, double> ret = {nullptr, 0., 0.};
@@ -237,8 +244,39 @@ case v: {\
             else if(opts.measure_ == POISSON_LLR) ret = sim2dist(ret);
         }
     } else if(opts.exact_kmer_dist_) {
+#define CORRECT_RES(res, measure, lhc, rhc)\
+            if(measure == INTERSECTION) {\
+                /* do nothing*/ \
+            } else if(measure == SYMMETRIC_CONTAINMENT) {\
+                res = res / std::min(lhc, rhc);\
+            } else if(measure == POISSON_LLR || measure == SIMILARITY) {\
+                res = res / (lhc + rhc - res);\
+            } else if(measure == CONTAINMENT) {\
+                res /= lhc;\
+            }\
+            ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) throw std::runtime_error("Destination files for k-mers empty -- cannot load from disk");
+        const bool lcomp = iscomp(lpath), rcomp = iscomp(rpath);
+        if(lcomp || rcomp) {
+            std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
+            std::string lcmd = path2cmd(lpath);
+            std::string rcmd = path2cmd(rpath);
+            if((lhk = ::popen(lcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'");
+            if((rhk = ::popen(rcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'");
+            if(result.kmercountfiles_.size()) {
+                lcmd = path2cmd(result.kmercountfiles_[i]);
+                rcmd = path2cmd(result.kmercountfiles_[j]);
+                if((lhn = ::popen(lcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'");
+                if((rhn = ::popen(rcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'");
+            }
+            const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
+            auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
+            double res = isz_size;
+            CORRECT_RES(res, opts.measure_, lhc, rhc)
+            ::pclose(lhk); ::pclose(rhk);
+            if(lhn) ::pclose(lhn), ::pclose(rhn);
+        }
         mio::mmap_source lhs(lpath), rhs(rpath);
         std::unique_ptr<mio::mmap_source> lhn, rhn;
         if(result.kmercountfiles_.size()) {
@@ -253,29 +291,11 @@ case v: {\
             double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
             auto [isz_size, union_size] = weighted_compare(lptr, lhl, lhc, rptr, rhl, rhc, lnptr, rnptr);
             double res = isz_size;
-            if(opts.measure_ == INTERSECTION) {
-                // do nothing
-            } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) {
-                res = res / std::min(lhc, rhc);
-            } else if(opts.measure_ == POISSON_LLR || opts.measure_ == SIMILARITY) {
-                res = res / (lhc + rhc - res);
-            } else if(opts.measure_ == CONTAINMENT) {
-                res /= lhc;
-            } else
-                throw 1;
-            ret = res;
+
+            CORRECT_RES(res, opts.measure_, lhc, rhc)
         } else {
             double res = set_compare(lptr, lhl, rptr, rhl);
-            if(opts.measure_ == INTERSECTION) {
-                // do nothing
-            } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) {
-                res = res / std::min(lhl, rhl);
-            } else if(opts.measure_ == POISSON_LLR || opts.measure_ == SIMILARITY) {
-                res = res / (lhl + rhl - res);
-            } else if(opts.measure_ == CONTAINMENT) {
-                res /= lhl;
-            }
-            ret = res;
+            CORRECT_RES(res, opts.measure_, lhl, rhl)
         }
         // Compare exact representations, not compressed shrunk
     }

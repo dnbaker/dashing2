@@ -139,13 +139,6 @@ static inline bool check_compressed(std::string &path) {
     }
     return false;
 }
-static inline bool iscomp(const std::string &s) {
-    if(s.size() < 3) return false;
-    if(std::equal(&s[s.size() - 3], &s[s.size()], ".gz")) return true;
-    if(std::equal(&s[s.size() - 3], &s[s.size()], ".xz")) return true;
-    if(std::equal(&s[s.size() - 4], &s[s.size()], ".bz2")) return true;
-    return false;
-}
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
     if(paths.empty()) throw std::invalid_argument("Can't sketch empty path set");
@@ -480,8 +473,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
                     if(opts.kmer_result_ == FULL_MMER_COUNTDICT || (opts.kmer_result_ == FULL_MMER_SET && opts.save_kmercounts_)) {
-                        tmp = kmerveccounts;
-                        std::fprintf(stderr, "tmp size %zu, kvc size %zu. Writing to file %s\n", tmp.size(), kmerveccounts.size(), destkmercounts.data());
+                        tmp = std::move(kmerveccounts);
+                        std::fprintf(stderr, "kvc size %zu. Writing to file %s\n", tmp.size(), kmerveccounts.size(), destkmercounts.data());
                     } else DO_IF(pmhs) else DO_IF(bmhs) else DO_IF(opss) else DO_IF(fss)
 #undef DO_IF
                     const size_t nb = tmp.size() * sizeof(double);
