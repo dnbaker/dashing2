@@ -318,23 +318,28 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                     if(!dkcif)
                         throw std::runtime_error(std::string("Expected destkmercounts (") + destkmercounts + ") to be a file. Run again?");
-                    std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
+                    //std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
                     std::string cmd;
                     const auto dkcsz = destkmercounts.size();
                     if(!iscomp(destkmercounts)) {
+                        //std::fprintf(stderr, "Attempting to memory-map file at %s\n", destkmercounts.data());
                         mio::mmap_sink ms(destkmercounts);
                         if(ms.size() % sizeof(double)) throw std::runtime_error(std::string("Wrong size file ") + destkmercounts);
                         ret.cardinalities_[myind] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
+                        continue;
                     } else if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".gz")) {
                         cmd = "gzip -dc ";
                     } else if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".xz")) {
                         cmd = "xz -dc ";
                     } else if(destkmercounts.size() > 4 && std::equal(&destkmercounts[dkcsz - 4], &destkmercounts[dkcsz], ".bz2")) {
                         cmd = "bzip2 -dc ";
-                    }
+                    } else __builtin_unreachable();
                     cmd = cmd + destkmercounts;
+#ifndef NDEBUG
+                    std::fprintf(stderr, "Command '%s'\n", cmd.data());
+#endif
                     std::FILE *ifp = ::popen(cmd.data(), "r");
-                    if(!ifp) throw std::runtime_error("Failed to perform xz popen call for decompressing k-mer counts");
+                    if(!ifp) throw std::runtime_error("Failed to perform popen call for decompressing k-mer counts");
                     static constexpr size_t N = 4096;
                     size_t n = 4096;
                     std::unique_ptr<double[]> d(new double[N]);
