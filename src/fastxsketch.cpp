@@ -246,9 +246,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             ret = ret.substr(0, ret.find_first_of(' '));
             if(opts.trim_folder_paths_) {
                 ret = trim_folder(path);
-                if(opts.outprefix_.size()) {
+                if(opts.outprefix_.size())
                     ret = opts.outprefix_ + '/' + ret;
-                }
             }
             if(opts.kmer_result_ <= FULL_SETSKETCH)
                 ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
@@ -267,7 +266,11 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if(opts.ct() != EXACT_COUNTING)
                     ret += std::to_string(opts.cssize_);
             }
-            ret = ret + "." + to_string(opts.sspace_);
+            if(opts.kmer_result_ <= FULL_SETSKETCH) {
+                ret = ret + "." + to_string(opts.sspace_);
+            } else {
+                ret = ret + "." + to_string(opts.kmer_result_);
+            }
             ret = ret + "." + bns::to_string(opts.rht_);
             ret = ret + suffix;
             return ret;
