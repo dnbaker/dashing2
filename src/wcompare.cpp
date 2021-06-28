@@ -73,7 +73,7 @@ std::vector<T> load_file(std::FILE *fp) {
 std::pair<double, double>
 weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum) {
     //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
-#if 1
+#if 0
     std::vector<uint64_t> lhv = load_file<uint64_t>(lhk), rhv = load_file<uint64_t>(rhk);
     std::vector<double> lhcv, rhcv;
     std::pair<double, double> ret;
@@ -101,7 +101,6 @@ weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn,
     long double isz = 0.;
     incb();
     for(;;) {
-        std::fprintf(stderr, "Doing weighted compare, with first k-mers as %zu/%zu\n", size_t(lhv), size_t(rhv));
         if(lhv < rhv) incl();
             // lhv not found, increment lh side
         else if(rhv < lhv) incr();

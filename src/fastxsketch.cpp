@@ -295,9 +295,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             const bool dkif = check_compressed(destkmer);
             const bool dkcif = check_compressed(destkmercounts);
             const bool destisfile = check_compressed(destination);
-            std::fprintf(stderr, "destination kmer file %d\n", dkif);
-            std::fprintf(stderr, "destination count file %d\n", dkcif);
-            std::fprintf(stderr, "destination file %d\n", destisfile);
             if(ret.kmercountfiles_.size() > myind) ret.kmercountfiles_[myind] = destkmercounts;
             if(opts.cache_sketches_ &&
                (destisfile || (opts.kmer_result_ == FULL_MMER_COUNTDICT && dkif)) &&
@@ -354,9 +351,11 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 DBG_ONLY(std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());)
                 continue;
             } else {
+#ifndef NDEBUG
                 std::fprintf(stderr, "We skipped caching because: %d is cache sketches\n", opts.cache_sketches_);
                 std::fprintf(stderr, "destisfile: %d. is countdict %d. is kmerfile %d\n", destisfile, opts.kmer_result_ == FULL_MMER_COUNTDICT, dkif);
                 std::fprintf(stderr, "kc save %d, kmer result %s, dkcif %d\n", opts.save_kmercounts_, to_string(opts.kmer_result_).data(), dkcif);
+#endif
             }
             __RESET(tid);
             auto perf_for_substrs = [&](const auto &func) {
