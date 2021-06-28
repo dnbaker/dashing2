@@ -80,4 +80,4 @@ libBigWig.a: $(wildcard libBigWig/*.c) $(wildcard libBigWig/*.h)
 test: readfx readbw
 
 clean:
-	rm -f dashing2 dashing2-ld dashing2-f libBigWig.a $(OBJ) $(OBJLD) $(OBJF) readfx readfx-f readfx-ld readbw readbw readbw-f readbw-ld
+	rm -f dashing2 dashing2-ld dashing2-f libBigWig.a $(OBJ) $(OBJLD) $(OBJF) readfx readfx-f readfx-ld readbw readbw readbw-f readbw-ld src/*.0 src/*.do

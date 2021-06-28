@@ -49,7 +49,6 @@ enum OptArg{
     LO_ARG("count-threshold", 'm')\
     LO_ARG("threshold", 'm')\
     LO_FLAG("canon", 'C', canon, true)\
-    LO_FLAG("cache", 'W', cache, true)\
     LO_FLAG("binary-output", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
     LO_FLAG("parse-by-seq", OPTARG_PARSEBYSEQ, parse_by_seq, true)\
     LO_FLAG("bagminhash", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
@@ -74,6 +73,7 @@ enum OptArg{
     {"full-setsketch", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
     {"enable-protein", no_argument, 0, OPTARG_PROTEIN},\
+    {"cache", no_argument, 0, 'W'},
 
 
 

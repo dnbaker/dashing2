@@ -2,6 +2,7 @@
 #include <memory>
 #include "sketch/kahan.h"
 #include <algorithm>
+#include <cassert>
 
 namespace dashing2 {
 
@@ -71,6 +72,8 @@ std::vector<T> load_file(std::FILE *fp) {
 }
 std::pair<double, double>
 weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum) {
+    //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
+#if 1
     std::vector<uint64_t> lhv = load_file<uint64_t>(lhk), rhv = load_file<uint64_t>(rhk);
     std::vector<double> lhcv, rhcv;
     std::pair<double, double> ret;
@@ -82,6 +85,36 @@ weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn,
         ret.first = set_compare(lhv.data(), lhv.size(), rhv.data(), rhv.size());
         ret.second = lhv.size() + rhv.size() - ret.first;
     }
+#else
+    uint64_t lhv, rhv;
+    double lhc = 1., rhc = 1.;
+    if(std::feof(lhk) || std::feof(rhk)) {
+        // If one of the sets is empty, return 0 intersection and union size accordingly
+        return {0., lhsum + rhsum};
+    }
+    auto incl = [&]() {
+        assert(lhk);
+        std::fread(&lhv, sizeof(lhv), 1, lhk); if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);
+    };
+    auto incr = [&]() {std::fread(&rhv, sizeof(rhv), 1, rhk); if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);};
+    auto incb = [&]() {incl(); incr();};
+    long double isz = 0.;
+    incb();
+    for(;;) {
+        std::fprintf(stderr, "Doing weighted compare, with first k-mers as %zu/%zu\n", size_t(lhv), size_t(rhv));
+        if(lhv < rhv) incl();
+            // lhv not found, increment lh side
+        else if(rhv < lhv) incr();
+        else {
+            isz += std::min(rhc, lhc);
+            incb();
+        }
+        if(std::feof(lhk) || std::feof(rhk)) break;
+    }
+    std::pair<double, double> ret;
+    ret.first = isz;
+    ret.second = lhsum + rhsum - isz;
+#endif
     return ret;
 }
 

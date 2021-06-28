@@ -130,6 +130,7 @@ LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, si
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const LSHDistType invdenom = 1. / opts.sketchsize_;
     auto sim2dist = [poisson_mult=-1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
+    std::fprintf(stderr, "%zu/%zu\n", i, j);
     if(opts.compressed_ptr_) {
         const bool bbit_c = opts.truncation_method_ > 0;
         std::pair<uint64_t, uint64_t> res{0, 0};
@@ -258,10 +259,14 @@ case v: {\
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) throw std::runtime_error("Destination files for k-mers empty -- cannot load from disk");
         const bool lcomp = iscomp(lpath), rcomp = iscomp(rpath);
+        std::fprintf(stderr, "Exact k-mer distance!\n");
         if(lcomp || rcomp) {
+            std::fprintf(stderr, "One of these is compressed\n");
             std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
             std::string lcmd = path2cmd(lpath);
             std::string rcmd = path2cmd(rpath);
+            std::cerr << lcmd << '\n';
+            std::cerr << rcmd << '\n';
             if((lhk = ::popen(lcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'");
             if((rhk = ::popen(rcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'");
             if(result.kmercountfiles_.size()) {
@@ -271,31 +276,34 @@ case v: {\
                 if((rhn = ::popen(rcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'");
             }
             const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-            auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
+            std::fprintf(stderr, "Points: %p, %p, %p, %p\n", (void *)lhk, (void *)rhk, (void *)lhn, (void *)rhn);
+            auto [isz_size, union_size] = weighted_compare(lhk, rhk, 0, 0, lhc, rhc);
             double res = isz_size;
             CORRECT_RES(res, opts.measure_, lhc, rhc)
             ::pclose(lhk); ::pclose(rhk);
             if(lhn) ::pclose(lhn), ::pclose(rhn);
-        }
-        mio::mmap_source lhs(lpath), rhs(rpath);
-        std::unique_ptr<mio::mmap_source> lhn, rhn;
-        if(result.kmercountfiles_.size()) {
-            lhn.reset(new mio::mmap_source(result.kmercountfiles_[i]));
-            rhn.reset(new mio::mmap_source(result.kmercountfiles_[j]));
-        }
-        if(opts.use128()) throw std::runtime_error("Not yet implemented: 128-bit exact k-mer comparisons");
-        const uint64_t *lptr = (const uint64_t *)lhs.data(), *rptr = (const uint64_t *)rhs.data();
-        const size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
-        if(lhn && rhn) {
-            const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
-            double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-            auto [isz_size, union_size] = weighted_compare(lptr, lhl, lhc, rptr, rhl, rhc, lnptr, rnptr);
-            double res = isz_size;
-
-            CORRECT_RES(res, opts.measure_, lhc, rhc)
         } else {
-            double res = set_compare(lptr, lhl, rptr, rhl);
-            CORRECT_RES(res, opts.measure_, lhl, rhl)
+            std::fprintf(stderr, "Using mmapping\n");
+            mio::mmap_source lhs(lpath), rhs(rpath);
+            std::unique_ptr<mio::mmap_source> lhn, rhn;
+            if(result.kmercountfiles_.size()) {
+                lhn.reset(new mio::mmap_source(result.kmercountfiles_[i]));
+                rhn.reset(new mio::mmap_source(result.kmercountfiles_[j]));
+            }
+            if(opts.use128()) throw std::runtime_error("Not yet implemented: 128-bit exact k-mer comparisons");
+            const uint64_t *lptr = (const uint64_t *)lhs.data(), *rptr = (const uint64_t *)rhs.data();
+            const size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
+            if(lhn && rhn) {
+                const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
+                double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
+                auto [isz_size, union_size] = weighted_compare(lptr, lhl, lhc, rptr, rhl, rhc, lnptr, rnptr);
+                double res = isz_size;
+    
+                CORRECT_RES(res, opts.measure_, lhc, rhc)
+            } else {
+                double res = set_compare(lptr, lhl, rptr, rhl);
+                CORRECT_RES(res, opts.measure_, lhl, rhl)
+            }
         }
         // Compare exact representations, not compressed shrunk
     }

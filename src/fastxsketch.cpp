@@ -295,9 +295,12 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             const bool dkif = check_compressed(destkmer);
             const bool dkcif = check_compressed(destkmercounts);
             const bool destisfile = check_compressed(destination);
+            std::fprintf(stderr, "destination kmer file %d\n", dkif);
+            std::fprintf(stderr, "destination count file %d\n", dkcif);
+            std::fprintf(stderr, "destination file %d\n", destisfile);
             if(ret.kmercountfiles_.size() > myind) ret.kmercountfiles_[myind] = destkmercounts;
             if(opts.cache_sketches_ &&
-               destisfile &&
+               (destisfile || (opts.kmer_result_ == FULL_MMER_COUNTDICT && dkif)) &&
                (!opts.save_kmers_ || dkif) &&
                ((!opts.save_kmercounts_ && opts.kmer_result_ != FULL_MMER_COUNTDICT) || dkcif)
             )
@@ -331,9 +334,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                         cmd = "bzip2 -dc ";
                     } else __builtin_unreachable();
                     cmd = cmd + destkmercounts;
-#ifndef NDEBUG
                     std::fprintf(stderr, "Command '%s'\n", cmd.data());
-#endif
                     std::FILE *ifp = ::popen(cmd.data(), "r");
                     if(!ifp) throw std::runtime_error("Failed to perform popen call for decompressing k-mer counts");
                     static constexpr size_t N = 4096;
@@ -346,11 +347,16 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     }
                     ::pclose(ifp);
                     ret.cardinalities_[myind] = s;
+                    std::fprintf(stderr, "Did popen-based reading for finals ize %g\n", double(s));
                 } else if(opts.kmer_result_ == FULL_MMER_SET) {
                     ret.cardinalities_[myind] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
                 }
                 DBG_ONLY(std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());)
                 continue;
+            } else {
+                std::fprintf(stderr, "We skipped caching because: %d is cache sketches\n", opts.cache_sketches_);
+                std::fprintf(stderr, "destisfile: %d. is countdict %d. is kmerfile %d\n", destisfile, opts.kmer_result_ == FULL_MMER_COUNTDICT, dkif);
+                std::fprintf(stderr, "kc save %d, kmer result %s, dkcif %d\n", opts.save_kmercounts_, to_string(opts.kmer_result_).data(), dkcif);
             }
             __RESET(tid);
             auto perf_for_substrs = [&](const auto &func) {
@@ -473,8 +479,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
                     if(opts.kmer_result_ == FULL_MMER_COUNTDICT || (opts.kmer_result_ == FULL_MMER_SET && opts.save_kmercounts_)) {
+                        std::fprintf(stderr, "kvc size %zu. Writing to file %s\n", kmerveccounts.size(), destkmercounts.data());
                         tmp = std::move(kmerveccounts);
-                        std::fprintf(stderr, "kvc size %zu. Writing to file %s\n", tmp.size(), kmerveccounts.size(), destkmercounts.data());
                     } else DO_IF(pmhs) else DO_IF(bmhs) else DO_IF(opss) else DO_IF(fss)
 #undef DO_IF
                     const size_t nb = tmp.size() * sizeof(double);
