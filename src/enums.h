@@ -46,6 +46,12 @@ enum CountingType {
     CQF_COUNTING // Not implemen
 };
 
+#define THROW_EXCEPTION(...) do {\
+        auto cmd = __VA_ARGS__;\
+        std::cerr << "Exception " << cmd.what() << " from " << std::this_thread::get_id() << '\n';\
+        throw std::move(cmd);\
+    }\ while(0)
+
 
 enum KmerSketchResultType {
     ONE_PERM = 0,       // Faster (3-4x) than Full, comparable accuracy for both cardinality and set similarities

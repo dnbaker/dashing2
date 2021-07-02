@@ -237,7 +237,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         auto makedest = [&](const std::string &path) -> std::string {
             std::string ret(path);
             ret = ret.substr(0, ret.find_first_of(' '));
-            if(opts.trim_folder_paths_) {
+            if(opts.trim_folder_paths_ || opts.outprefix_.size()) {
                 ret = trim_folder(path);
                 if(opts.outprefix_.size())
                     ret = opts.outprefix_ + '/' + ret;
@@ -315,15 +315,16 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     if(!dkcif)
                         throw std::runtime_error(std::string("Expected destkmercounts (") + destkmercounts + ") to be a file. Run again?");
                     //std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
-                    std::string cmd;
-                    const auto dkcsz = destkmercounts.size();
                     if(!iscomp(destkmercounts)) {
                         //std::fprintf(stderr, "Attempting to memory-map file at %s\n", destkmercounts.data());
                         mio::mmap_sink ms(destkmercounts);
                         if(ms.size() % sizeof(double)) throw std::runtime_error(std::string("Wrong size file ") + destkmercounts);
                         ret.cardinalities_[myind] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
                         continue;
-                    } else if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".gz")) {
+                    }
+                    const auto dkcsz = destkmercounts.size();
+                    std::string cmd;
+                    if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".gz")) {
                         cmd = "gzip -dc ";
                     } else if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".xz")) {
                         cmd = "xz -dc ";
@@ -344,7 +345,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     }
                     ::pclose(ifp);
                     ret.cardinalities_[myind] = s;
-                    std::fprintf(stderr, "Did popen-based reading for finals ize %g\n", double(s));
                 } else if(opts.kmer_result_ == FULL_MMER_SET) {
                     ret.cardinalities_[myind] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
                 }
