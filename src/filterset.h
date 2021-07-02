@@ -1,6 +1,7 @@
 #ifndef DASHING2_FILTERSET_H__
 #define DASHING2_FILTERSET_H__
 #include "sketch/sseutil.h"
+#include "sketch/hash.h"
 #include "sketch/div.h"
 #include "sketch/macros.h"
 #include "aesctr/wy.h"
@@ -27,6 +28,7 @@ static constexpr int ceilog2(size_t n) {
     }
     return -1;
 }
+using namespace sketch::hash;
 
 
 class FilterSet {
@@ -38,8 +40,17 @@ class FilterSet {
 #ifndef M_LN2
     static constexpr double M_LN2 = 0.6931471805599453;
 #endif
-    using RNG = wy::WyRand<uint64_t, 2>;
+    using RNG = wy::WyRand<uint64_t, 0>;
+    CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>>
+        fshasher_;
     static constexpr size_t bits_per_reg = sizeof(T) * CHAR_BIT;
+    uint64_t hash(uint64_t x) const {return fshasher_(x);}
+    uint64_t hash(u128_t x) const {return fshasher_(uint64_t(x)) - fshasher_(uint64_t(x>>64));}
+    template<typename T>
+    uint64_t hash(T x) {
+        if constexpr(sizeof(T) <= 8) return hash(uint64_t(x));
+        else return hash(u128_t(x));
+    }
 public:
     std::string to_string() const {
         if(is_bf()) {
@@ -57,6 +68,18 @@ public:
         bfexp_ = o.bfexp_;
         k_ = o.k_;
         return *this;
+    }
+    FilterSet(double bfexp=-1., int k=-1): bfexp_(bfexp), k_(k) {
+    }
+    void add(u128_t item) {
+        data_.push_back(item >> 64);
+        data_.push_back(item);
+    }
+    void add(uint64_t item) {
+        data_.push_back(item);
+    }
+    void finalize() {
+        reset(data_.begin(), data_.end(), bfexp_, k_ > 0 ? k_: -1);
     }
     template<typename IT>
     FilterSet(IT beg, IT end, double bfexp=-1., int ktouse=-1): bfexp_(bfexp) {
@@ -76,7 +99,7 @@ public:
             schism::Schismatic<uint64_t> mod_(mem * 64);
             // Maybe we batch this in the future?
             for(;beg != end; ++beg) {
-                RNG mt(*beg);
+                RNG mt(hash(*beg));
                 for(int i = 0; i < k_; ++i) {
                     auto v = mt();
                     const size_t rem = mod_.mod(v);
@@ -87,7 +110,8 @@ public:
             }
         } else {
             data_.reserve(nelem);
-            std::copy(beg, end, std::back_inserter(data_));
+            if(&*beg != &data_[0])
+                std::copy(beg, end, std::back_inserter(data_));
             std::sort(data_.begin(), data_.end());
             // Maybe replace with a faster sorter
         }
