@@ -204,8 +204,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
              opts.save_kmercounts_ = true; // Always save counts for PMinHash and BagMinHash
         }
-        if(paths.size() == 1)
-            std::fprintf(stderr, "Currently, only one thread is used per file in sketching. This may be slow if only one file is being processed.\n");
         ret.destination_files_.resize(paths.size());
         if(opts.save_kmers_) {
             ret.kmerfiles_.resize(paths.size());
@@ -301,7 +299,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     if(ret.kmercounts_.size())
                         load_copy(destkmercounts, &ret.kmercounts_[mss]);
                 } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
-                    //std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
+                    std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
 #if 0
                     if(!iscomp(destkmercounts)) {
                         //std::fprintf(stderr, "Attempting to memory-map file at %s\n", destkmercounts.data());

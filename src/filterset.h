@@ -97,9 +97,45 @@ public:
     static constexpr int SHIFT = ceilog2(sizeof(T) * CHAR_BIT);
     static constexpr uint64_t MASK = (size_t(1) << SHIFT) - 1;
     size_t nbits() const {return tablesize() << SHIFT;}
+#if 0
+private:
+    std::vector<std::tuple<uint64_t, uint64_t, RNG>> tmpvs;
+    std::mutex mut;
+public:
+    std::vector<uint64_t> in_set(uint64_t *beg, uint64_t *end) {
+        std::lock_guard<std::mutex> lock(mut);
+        std::ptrdiff_t n = end - beg;
+        if(n == 0) return {};
+        if(n < 0) throw std::invalid_argument("Iterators are not ordered correctly.");
+        std::vector<uint64_t> ret(((end - beg) + 63) / 64);
+        if(is_bf()) {
+            if(tmpvs.capacity() < size_t(n)) tmpvs.resize(n);
+            for(ptrdiff_t i = 0; i < n; ++i) {
+                const auto v = beg[i];
+                std::get<1>(tmpvs[i]) = i;
+                std::get<2>(tmpvs[i]) = RNG(v);
+                std::get<0>(tmpvs[i]) = i;
+            }
+            std::sort(tmpvs.begin(), tmpvs.end());
+            auto tmpp = tmpids.data();
+            auto tvpp = tmpvs.data();
+            std::transform(beg, end, rngs.begin(), RNG);
+            std::transform(rngs.begin(), rngs.end(), tmpvs.begin(), [mp=&mod_](auto x) {return mp->mod(x);});
+            std::transform(beg, end, tmpvs.data(), [mp=&mod_](auto x) {return mp->mod(RNG(x)());});
+            std::iota(tmpp, tmpp + n, size_t(0));
+            std::sort(tmpp, tmpp, [&](auto x, auto y) {return tmpvs[x] < tmpvs[y];});
+            for(size_t i = 0; i < n; ++i) {
+                
+            }
+            std::sort(&tmpvs[0], &tmpvs[n]);
+        } else {
+        }
+        return ret;
+    }
+#endif
     bool in_set(T x) const {
         if(is_bf()) {
-            // TODO: batch to sort for efficiency
+            // TODO: batch to sort for efficiency -- see above drafting
             RNG rng(x);
             schism::Schismatic<uint64_t> mod_(nbits());
             // Maybe this can even be SIMDIfied?
@@ -123,6 +159,8 @@ public:
         return it != e && *it == x;
     }
 };
+
+FilterSet from_fastx(const std::string &path);
 
 }
 
