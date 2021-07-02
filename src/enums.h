@@ -47,10 +47,10 @@ enum CountingType {
 };
 
 #define THROW_EXCEPTION(...) do {\
-        auto cmd = __VA_ARGS__;\
-        std::cerr << "Exception " << cmd.what() << " from " << std::this_thread::get_id() << '\n';\
-        throw std::move(cmd);\
-    }\ while(0)
+        auto exception__ = __VA_ARGS__;\
+        std::cerr << "Exception " << exception__.what() << " from " << std::this_thread::get_id() << '\n';\
+        throw exception__;\
+    } while(0)
 
 
 enum KmerSketchResultType {

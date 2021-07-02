@@ -67,10 +67,10 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
     bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.size() && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
     if(outfile.size()) {
         std::fprintf(stderr, "outfile %s\n", outfile.data());
-        if(result.signatures_.empty()) throw std::runtime_error("Can't write stacked sketches if signatures were not generated");
+        if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Can't write stacked sketches if signatures were not generated"));
         std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());
         std::FILE *ofp = std::fopen(outfile.data(), "wb");
-        if(!ofp) throw std::runtime_error(std::string("Failed to open file at ") + outfile);
+        if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
         if(even)
             std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
         else {
@@ -92,10 +92,10 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         std::fclose(ofp);
         if(result.names_.size()) {
             if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
-                throw std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt");
+                THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
             for(size_t i = 0; i < result.names_.size(); ++i) {
                 const auto &n(result.names_[i]);
-                if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) throw std::runtime_error("Failed to write names to file");
+                if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) THROW_EXCEPTION(std::runtime_error("Failed to write names to file"));
                 if(result.cardinalities_.size()) {
                     std::fprintf(ofp, "\t%0.12g", result.cardinalities_[i]);
                 }

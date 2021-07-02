@@ -62,6 +62,24 @@ void for_each_substr(const F &func, const std::string &s, const int sep=' ') {
     }
 }
 
+static inline bool check_compressed(std::string &path, int &ft) {
+    if(bns::isfile(path)) {
+        ft = 0;
+        return true;
+    }
+    if(bns::isfile(path + ".gz")) {
+        ft = 1;
+        path = path + ".gz";
+        return true;
+    }
+    if(bns::isfile(path + ".xz")) {
+        ft = 2;
+        path = path + ".xz";
+        return true;
+    }
+    return false;
+}
+
 struct Dashing2Options {
 
     // K-mer options

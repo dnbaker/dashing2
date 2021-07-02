@@ -111,15 +111,14 @@ double cosine_compare_(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE
     //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
     T lhv, rhv;
     CT lhc = 1., rhc = 1.;
-    if(std::feof(lhk) || std::feof(rhk)) {
-        return 0.;
-    }
-    auto incl = [&]() {std::fread(&lhv, sizeof(lhv), 1, lhk); if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);}
+    if(std::feof(lhk) || std::feof(rhk)) return 0.;
+
+    auto incl = [&]() {std::fread(&lhv, sizeof(lhv), 1, lhk); if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);};
     auto incr = [&]() {std::fread(&rhv, sizeof(rhv), 1, rhk); if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);};
     auto incb = [&]() {incl(); incr();};
-    long double isz = 0.L, carry = 0.L:;
+    auto isz = 0.L;
     incb();
-    for(;;) {
+    for(auto carry = 0.L;;) {
         if(lhv < rhv) incl();
             // lhv not found, increment lh side
         else if(rhv < lhv) incr();

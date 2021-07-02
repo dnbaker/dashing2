@@ -7,8 +7,9 @@ namespace dashing2 {
 
 #define checked_fwrite(fp, ptr, nb) \
     do {\
-        if(unsigned long long lrc = std::fwrite(static_cast<const void *>(ptr), 1, nb, fp); lrc != static_cast<size_t>(nb)) \
-            throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered write of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead writing " + std::to_string(lrc) + " bytes");\
+        if(unsigned long long lrc = std::fwrite(static_cast<const void *>(ptr), 1, nb, fp); lrc != static_cast<size_t>(nb)) {\
+            THROW_EXCEPTION(std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered write of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead writing " + std::to_string(lrc) + " bytes"));\
+        }\
     } while(0)
 
 void FastxSketchingResult::print() {
@@ -39,7 +40,7 @@ template<typename T, size_t chunk_size = 65536>
 void load_copy(const std::string &path, T *ptr) {
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
         gzFile fp = gzopen(path.data(), "rb");
-        if(!fp) throw std::runtime_error(std::string("Failed to open file at ") + path);
+        if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
         for(int nr;
             !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
             ptr += nr / sizeof(T));
@@ -51,15 +52,15 @@ void load_copy(const std::string &path, T *ptr) {
         ::pclose(fp);
     }
     std::FILE *fp = std::fopen(path.data(), "rb");
-    if(!fp) throw std::runtime_error(std::string("Failed to open ") + path);
+    if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + path));
     struct stat st;
     if(::fstat(::fileno(fp), &st))
-        throw std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp)));
+        THROW_EXCEPTION(std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp))));
     DBG_ONLY(std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), size_t(st.st_size));)
     size_t nb = std::fread(ptr, 1, st.st_size, fp);
     if(nb != size_t(st.st_size)) {
         std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, size_t(st.st_size), nb);
-        throw std::runtime_error("Error in reading from file");
+        THROW_EXCEPTION(std::runtime_error("Error in reading from file"));
     }
     std::fclose(fp);
 }
@@ -101,7 +102,7 @@ struct KSeqHolder {
     kseq_t *kseqs_;
     size_t n_;
     KSeqHolder(size_t n): kseqs_(static_cast<kseq_t *>(std::calloc(n, sizeof(kseq_t)))), n_(n) {
-        if(!kseqs_) throw std::bad_alloc();
+        if(!kseqs_) THROW_EXCEPTION(std::bad_alloc());
         for(auto p = kseqs_; p < kseqs_ + n_; ++p)
             ks_resize(&p->seq, 1<<20);
     }
@@ -126,22 +127,9 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
         s += ptr[i];
     return m / s;
 }
-static inline bool check_compressed(std::string &path) {
-    if(bns::isfile(path))
-        return true;
-    if(bns::isfile(path + ".gz")) {
-        path = path + ".gz";
-        return true;
-    }
-    if(bns::isfile(path + ".xz")) {
-        path = path + ".xz";
-        return true;
-    }
-    return false;
-}
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
-    if(paths.empty()) throw std::invalid_argument("Can't sketch empty path set");
+    if(paths.empty()) THROW_EXCEPTION(std::invalid_argument("Can't sketch empty path set"));
     std::vector<std::pair<size_t, uint64_t>> filesizes = get_filesizes(paths);
     const size_t nt = std::max(opts.nthreads(), 1u);
     const size_t ss = opts.sketchsize();
@@ -181,7 +169,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             omhs.reserve(nt);
             for(size_t i = 0; i < nt; omhs.emplace_back(ss, opts.k_), ++i);
         } else {
-            throw std::invalid_argument("Space edit distance is only available in parse-by-seq mode, as it is only defined on strings rather than string collections.");
+            THROW_EXCEPTION(std::invalid_argument("Space edit distance is only available in parse-by-seq mode, as it is only defined on strings rather than string collections."));
         }
     }
     while(ctrs.size() < nt) ctrs.emplace_back(opts.cssize());
@@ -211,7 +199,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         ret = FastxSketchingResult::merge(res.data(), res.size(), paths);
     } else {
         if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
-            throw std::runtime_error("edit distance is only available in parse by seq mode");
+            THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));
         }
         if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
              opts.save_kmercounts_ = true; // Always save counts for PMinHash and BagMinHash
@@ -225,7 +213,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         if(opts.save_kmercounts_ || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
             ret.kmercountfiles_.resize(paths.size());
         }
-        ret.cardinalities_.resize(paths.size());
+        ret.cardinalities_.resize(paths.size(), -1.);
 #ifndef NDEBUG
         for(size_t i = 0; i < ret.names_.size(); ++i) {
             std::fprintf(stderr, "name %zu is %s\n", i, ret.names_[i].data());
@@ -292,9 +280,10 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
             std::string destkmercounts = destination_prefix + ".kmercounts.f64";
             std::string destkmer = destination_prefix + ".kmer.u64";
-            const bool dkif = check_compressed(destkmer);
-            const bool dkcif = check_compressed(destkmercounts);
-            const bool destisfile = check_compressed(destination);
+            int dkt, dct, dft;
+            const bool dkif = check_compressed(destkmer, dkt);
+            const bool dkcif = check_compressed(destkmercounts, dct);
+            const bool destisfile = check_compressed(destination, dft);
             if(ret.kmercountfiles_.size() > myind) ret.kmercountfiles_[myind] = destkmercounts;
             if(opts.cache_sketches_ &&
                (destisfile || (opts.kmer_result_ == FULL_MMER_COUNTDICT && dkif)) &&
@@ -311,14 +300,13 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                         load_copy(destkmer, &ret.kmers_[mss]);
                     if(ret.kmercounts_.size())
                         load_copy(destkmercounts, &ret.kmercounts_[mss]);
-                } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
-                    if(!dkcif)
-                        throw std::runtime_error(std::string("Expected destkmercounts (") + destkmercounts + ") to be a file. Run again?");
+                } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                     //std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
+#if 0
                     if(!iscomp(destkmercounts)) {
                         //std::fprintf(stderr, "Attempting to memory-map file at %s\n", destkmercounts.data());
                         mio::mmap_sink ms(destkmercounts);
-                        if(ms.size() % sizeof(double)) throw std::runtime_error(std::string("Wrong size file ") + destkmercounts);
+                        if(ms.size() % sizeof(double)) THROW_EXCEPTION(std::runtime_error(std::string("Wrong size file ") + destkmercounts));
                         ret.cardinalities_[myind] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
                         continue;
                     }
@@ -334,7 +322,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     cmd = cmd + destkmercounts;
                     std::fprintf(stderr, "Command '%s'\n", cmd.data());
                     std::FILE *ifp = ::popen(cmd.data(), "r");
-                    if(!ifp) throw std::runtime_error("Failed to perform popen call for decompressing k-mer counts");
+                    if(!ifp) THROW_EXCEPTION(std::runtime_error("Failed to perform popen call for decompressing k-mer counts"));
                     static constexpr size_t N = 4096;
                     size_t n = 4096;
                     std::unique_ptr<double[]> d(new double[N]);
@@ -345,8 +333,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     }
                     ::pclose(ifp);
                     ret.cardinalities_[myind] = s;
-                } else if(opts.kmer_result_ == FULL_MMER_SET) {
+                else if(opts.kmer_result_ == FULL_MMER_SET)
                     ret.cardinalities_[myind] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
+#endif
                 }
                 DBG_ONLY(std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());)
                 continue;
@@ -411,7 +400,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     assert(fss.size());
                     ctr.finalize(fss[tid], opts.count_threshold_);
                     ret.cardinalities_[myind] = fss[tid].getcard();
-                } else throw std::runtime_error("Unexpected space for counter-based m-mer encoding");
+                } else THROW_EXCEPTION(std::runtime_error("Unexpected space for counter-based m-mer encoding"));
                     // Make bottom-k if we generated full k-mer sets or k-mer count dictionaries, and copy then over
                 if(kmervec64.size() || kmervec128.size()) {
                     //std::fprintf(stderr, "If we gathered full k-mers, and we asked for signatures, let's store bottom-k hashes in the signature space\n");
@@ -425,7 +414,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     }
                 }
                 std::FILE * ofp = std::fopen(destination.data(), "wb");
-                if(!ofp) throw std::runtime_error(std::string("Failed to open std::FILE * at") + destination);
+                if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
                 const void *buf = nullptr;
                 size_t nb;
                 const RegT *srcptr = nullptr;
@@ -460,8 +449,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                                       opts.kmer_result_ == ONE_PERM ? opss[tid].ids().data() :
                                       opts.kmer_result_ == FULL_SETSKETCH ? fss[tid].ids().data():
                                           static_cast<uint64_t *>(nullptr);
-                    if(!ptr) throw 2;
-                    if((ofp = std::fopen(destkmer.data(), "wb")) == nullptr) throw std::runtime_error("Failed to write k-mer file");
+                    if(!ptr) THROW_EXCEPTION(std::runtime_error("This shouldn't happen"));
+                    if((ofp = std::fopen(destkmer.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
                     //std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 
                     checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
@@ -474,7 +463,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     //std::fprintf(stderr, "About to save kmer counts manually\n");
                     assert(ret.kmercountfiles_.size());
                     ret.kmercountfiles_.at(i) = destkmercounts;
-                    if((ofp = std::fopen(destkmercounts.data(), "wb")) == nullptr) throw std::runtime_error("Failed to write k-mer counts");
+                    if((ofp = std::fopen(destkmercounts.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
                     std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
                     if(opts.kmer_result_ == FULL_MMER_COUNTDICT || (opts.kmer_result_ == FULL_MMER_SET && opts.save_kmercounts_)) {
@@ -494,11 +483,11 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 ret.kmers_.clear();
                 //std::fprintf(stderr, "Full mmer sequence\n");
                 std::FILE * ofp;
-                if((ofp = std::fopen(destination.data(), "wb")) == nullptr) throw std::runtime_error("Failed to open file for writing minimizer sequence");
+                if((ofp = std::fopen(destination.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open file for writing minimizer sequence"));
                 void *dptr = nullptr;
                 size_t m = 1 << 20;
                 size_t l = 0;
-                if(posix_memalign(&dptr, 16, (1 + opts.use128()) * m * sizeof(uint64_t))) throw std::bad_alloc();
+                if(posix_memalign(&dptr, 16, (1 + opts.use128()) * m * sizeof(uint64_t))) THROW_EXCEPTION(std::bad_alloc());
 
                 perf_for_substrs([&](auto x) {
                     using DT = decltype(x);
@@ -507,7 +496,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     if(l == m) {
                         size_t newm = m << 1;
                         void *newptr = nullptr;
-                        if(posix_memalign((void **)&newptr, 16, newm * sizeof(DT))) throw std::bad_alloc();
+                        if(posix_memalign((void **)&newptr, 16, newm * sizeof(DT))) THROW_EXCEPTION(std::bad_alloc());
                         std::copy(ptr, ptr + m, (DT *)newptr);
                         dptr = newptr;ptr = (DT *)dptr;
                         m = newm;
@@ -526,8 +515,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 //std::fprintf(stderr, "kmer result is oneperm or setsketch. Dest: %s\n", destination.data());
                 std::FILE * ofp;
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr)
-                    throw std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence");
-                if(opss.empty() && fss.empty()) throw std::runtime_error("Both opss and fss are empty\n");
+                    THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
+                if(opss.empty() && fss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
                 const size_t opsssz = opss.size();
                 if(opsssz) {
                     //std::fprintf(stderr, "Encode for the opset sketch, %zu is the size for tid %d\n", opss.size(), tid);
@@ -559,13 +548,14 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     std::copy(ids, ids + ss, &ret.kmers_[mss]);
                 if(counts && ret.kmercounts_.size())
                     std::copy(counts, counts + ss, &ret.kmercounts_[mss]);
-            } else throw std::runtime_error("Unexpected: Not FULL_MMER_SEQUENCE, FULL_MMER_SET, ONE_PERM, FULL_SETSKETCH, SPACE_MULTISET, or SPACE_PSET");
+            } else THROW_EXCEPTION(std::runtime_error("Unexpected: Not FULL_MMER_SEQUENCE, FULL_MMER_SET, ONE_PERM, FULL_SETSKETCH, SPACE_MULTISET, or SPACE_PSET"));
         } // parallel paths loop
         ret.names_ = paths;
     }
     return ret;
 }
-SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const std::vector<std::string> &names={}) {
+
+SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const std::vector<std::string> &names=std::vector<std::string>()) {
     std::fprintf(stderr, "About to merge from %p of size %zu, names has size %zu\n", (void *)start, n, names.size());
     SketchingResult ret;
     ret.options_ = start->options_;

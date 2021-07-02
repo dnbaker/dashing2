@@ -90,7 +90,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         sketcher.omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
         std::fprintf(stderr, "Setting sketcher.omh: %p\n", (void *)sketcher.omh.get());
-    } else throw std::runtime_error("Should have been set space, multiset, probset, or edit distance");
+    } else THROW_EXCEPTION(std::runtime_error("Should have been set space, multiset, probset, or edit distance"));
     if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET || (opts.sspace_ == SPACE_SET && opts.kmer_result_ == FULL_SETSKETCH && opts.count_threshold_ > 0.)) {
         sketcher.ctr.reset(new Counter(opts.cssize()));
     }
@@ -111,7 +111,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     //std::fprintf(stderr, "save ids: %d, save counts %d\n", save_ids, save_idcounts);
     size_t lastindex = 0;
     for_each_substr([&](const auto &x) {
-        if((ifp = gzopen(x.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to read from ") + x);
+        if((ifp = gzopen(x.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to read from ") + x));
         gzbuffer(ifp, 1u << 17);
         bns::kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
@@ -285,7 +285,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     kmercounts.resize(opts.sketchsize_);
                     std::copy(sketchers.pmh->idcounts().begin(), sketchers.pmh->idcounts().end(), kmercounts.begin());
                 }
-            } else throw std::runtime_error("Not yet implemented?");
+            } else THROW_EXCEPTION(std::runtime_error("Not yet implemented?"));
             //std::fprintf(stderr, "Copying from %p to container of size %zu at %zu\n", (void *)ptr, ret.signatures_.size(), size_t(i * opts.sketchsize_));
             std::copy(ptr, ptr + opts.sketchsize_, &ret.signatures_[i * opts.sketchsize_]);
             if(kmer_ptr && ret.kmers_.size()) {
@@ -302,25 +302,18 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     if(seqmins) {
         const size_t seqminsz = oldsz - lastindex;
         using OT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
-        static_assert(sizeof(RegT) == sizeof(OT), "Must use doubles, sorry");
+        static_assert(sizeof(RegT) == sizeof(OT), "Size of hash registers must match that being sketched");
         for(size_t i = 0; i < seqminsz; ++i) {
             //std::fprintf(stderr, "Copying out items from %zu/%zu\n", i, seqminsz);
             const auto &x(seqmins[i]);
             const OT *ptr = (const OT *)x.data();
             size_t xsz = x.size();
-            if(sizeof(RegT) == 16) xsz >>= 1;
+            if constexpr(sizeof(RegT) == 16) xsz >>= 1;
             ret.nperfile_.push_back(xsz);
-            if(sizeof(RegT) == 4) {
-                for(size_t j = 0; j < xsz; ++j) {
-                    RegT v;
-                    uint32_t lv = ((const uint64_t *)ptr)[j];
-                    std::memcpy(&v, &lv, 4);
-                    ret.signatures_.push_back(v);
-                }
-                continue;
-            } // else, insert
-            //std::fprintf(stderr, "About to append to signatures a set of size %zu\n", xsz);
-            ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + xsz);
+            if constexpr(sizeof(RegT) == 4)
+                std::copy((const uint64_t *)ptr, (const uint64_t *)ptr + xsz, std::back_inserter(ret.signatures_));
+            else
+                ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + xsz);
         }
     }
     lastindex = oldsz;

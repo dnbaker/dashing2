@@ -39,13 +39,15 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                     }
                 }
             }
-        } else throw std::runtime_error("cmp expects a packed sketch matrix or multiple paths");
+        } else {
+            THROW_EXCEPTION(std::runtime_error("cmp expects a packed sketch matrix or multiple paths"););
+        }
         assert(result.names_.size());
         //size_t nregs = st.st_size / result.names_.size() / sizeof(RegT);
         std::FILE *fp = std::fopen(pf.data(), "w");
-        if(!fp) throw std::runtime_error(std::string("Failed to open ") + pf);
+        if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + pf));
         result.signatures_.resize(st.st_size / sizeof(RegT));
-        if(std::fread(result.signatures_.data(), st.st_size, 1, fp) != 1u) throw std::runtime_error(std::string("Failed to write block of size ") + std::to_string(st.st_size));
+        if(std::fread(result.signatures_.data(), st.st_size, 1, fp) != 1u) THROW_EXCEPTION(std::runtime_error(std::string("Failed to write block of size ") + std::to_string(st.st_size)));
         std::fclose(fp);
     } else { // Else, we have to load sketches from each file
         result.nperfile_.resize(paths.size());
@@ -80,7 +82,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             }
             std::fclose(ifp);
             if(std::string p(path + ".kmerhashes.u64"); bns::isfile(p)) {
-                if((ifp = std::fopen(p.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Could not open path ") + p);
+                if((ifp = std::fopen(p.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Could not open path ") + p));
                 if(std::fread(&result.kmers_[csizes[i]], sizeof(uint64_t), fsizes[i], ifp) != fsizes[i]) {
                     std::fprintf(stderr, "Failed to read at path %s\n", p.data());
                     std::fclose(ifp);
@@ -89,7 +91,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                 std::fclose(ifp);
             }
             if(std::string p(path + ".kmercounts.f64"); bns::isfile(p)) {
-                if((ifp = std::fopen(p.data(), "rb")) == nullptr) throw 2;
+                if((ifp = std::fopen(p.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open kmer count file"));
                 if(std::fread(&result.kmercounts_[csizes[i]], sizeof(double), fsizes[i], ifp) != fsizes[i]) {
                     std::fprintf(stderr, "Failed to read k-mer counts at path %s\n", p.data());
                     std::fclose(ifp);

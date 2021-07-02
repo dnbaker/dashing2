@@ -41,9 +41,9 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
     std::tuple<void *, double, double> ret = {nullptr, 0., 0.};
     if(fd >= sizeof(RegT)) return ret;
     size_t mem = fd * sigs.size();
-    if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) throw std::runtime_error("Can't do nibble registers without an even number of signatures");
+    if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
     auto &compressed_reps = std::get<0>(ret);
-    if(posix_memalign((void **)&compressed_reps, 64, mem)) throw std::bad_alloc();
+    if(posix_memalign((void **)&compressed_reps, 64, mem)) THROW_EXCEPTION(std::bad_alloc());
     const size_t nsigs = sigs.size();
     assert(fd != 0.5 || sigs.size() % 2 == 0);
     if(is_edit_distance) {
@@ -93,7 +93,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
             maxreg = std::max(maxreg, sigs[i]);
         }
         double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
-        if(q < 0) throw 2;
+        assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
         std::fprintf(stderr, "Truncated via setsketch, a = %Lg and b = %Lg\n", a, b);
         std::get<1>(ret) = a;
@@ -257,7 +257,7 @@ case v: {\
             }\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
-        if(lpath.empty() || rpath.empty()) throw std::runtime_error("Destination files for k-mers empty -- cannot load from disk");
+        if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
         const bool lcomp = iscomp(lpath), rcomp = iscomp(rpath);
         std::fprintf(stderr, "Exact k-mer distance!\n");
         if(lcomp || rcomp) {
@@ -267,13 +267,13 @@ case v: {\
             std::string rcmd = path2cmd(rpath);
             std::cerr << lcmd << '\n';
             std::cerr << rcmd << '\n';
-            if((lhk = ::popen(lcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'");
-            if((rhk = ::popen(rcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'");
+            if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
+            if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'"));
             if(result.kmercountfiles_.size()) {
                 lcmd = path2cmd(result.kmercountfiles_[i]);
                 rcmd = path2cmd(result.kmercountfiles_[j]);
-                if((lhn = ::popen(lcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'");
-                if((rhn = ::popen(rcmd.data(), "r")) == nullptr) throw std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'");
+                if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
+                if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
             }
             const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
             std::fprintf(stderr, "Points: %p, %p, %p, %p\n", (void *)lhk, (void *)rhk, (void *)lhn, (void *)rhn);
@@ -290,7 +290,7 @@ case v: {\
                 lhn.reset(new mio::mmap_source(result.kmercountfiles_[i]));
                 rhn.reset(new mio::mmap_source(result.kmercountfiles_[j]));
             }
-            if(opts.use128()) throw std::runtime_error("Not yet implemented: 128-bit exact k-mer comparisons");
+            if(opts.use128()) THROW_EXCEPTION(std::runtime_error("Not yet implemented: 128-bit exact k-mer comparisons"));
             const uint64_t *lptr = (const uint64_t *)lhs.data(), *rptr = (const uint64_t *)rhs.data();
             const size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
             if(lhn && rhn) {
@@ -298,7 +298,6 @@ case v: {\
                 double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
                 auto [isz_size, union_size] = weighted_compare(lptr, lhl, lhc, rptr, rhl, rhc, lnptr, rnptr);
                 double res = isz_size;
-    
                 CORRECT_RES(res, opts.measure_, lhc, rhc)
             } else {
                 double res = set_compare(lptr, lhl, rptr, rhl);
@@ -313,7 +312,7 @@ case v: {\
 void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t ns = result.names_.size();
     std::FILE *ofp = opts.outfile_path_.empty() ? stdout: std::fopen(opts.outfile_path_.data(), "w");
-    if(!ofp) throw std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_);
+    if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
     std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
     std::deque<std::pair<std::unique_ptr<float[]>, size_t>> datq;
@@ -353,7 +352,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
                     std::fputc('\n', ofp);
                 } else if(opts.output_format_ == MACHINE_READABLE) {
                     if(std::fwrite(datq.front().first.get(), sizeof(float), nwritten, ofp) != nwritten)
-                        throw std::runtime_error(std::string("Failed to write row ") + std::to_string(datq.front().second) + " to disk");
+                        THROW_EXCEPTION(std::runtime_error(std::string("Failed to write row ") + std::to_string(datq.front().second) + " to disk"));
                 } // else throw std::runtime_error("This should never happen");
                 std::lock_guard<std::mutex> guard(datq_lock);
                 datq.pop_front();
@@ -364,7 +363,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
         // TODO: batch queries together for cache efficiency (distmat::parallel_fill for an example)
         size_t nelem = asym ? ns: ns - i - 1;
         std::unique_ptr<float[]> dat(new float[nelem]);
-        auto datp = dat.get() - (asym ? 0: i + 1);
+        float *datp = &dat[asym ? size_t(0): i + 1];
         OMP_PFOR_DYN
         for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
             datp[start] = compare(opts, result, i, start);
@@ -376,7 +375,41 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     if(sub.joinable()) sub.join();
     if(ofp != stdout) std::fclose(ofp);
 }
-void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
+void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
+    if(opts.kmer_result_ >= FULL_MMER_SET && result.cardinalities_.size() && result.cardinalities_.front() < 0.) {
+        const size_t n = result.cardinalities_.size();
+        if(opts.parse_by_seq_)
+            THROW_EXCEPTION(std::runtime_error("Not yet supported"));
+        OMP_PFOR
+        for(size_t i = 0; i < n; ++i) {
+            int ft;
+            int isf = check_compressed(result.names_[i], ft);
+            std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand")
+                + result.names_[i];
+            std::FILE *ifp = ::popen(cmd.data(), "r");
+            std::string fn = opts.kmer_result_ == FULL_MMER_SET ? result.kmerfiles_[i]: result.destination_files_[i];
+            if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE) {
+                if(!check_compressed(fn, ft)) throw std::runtime_error("Missing kmerfile or destination file");
+                std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand") + fn;
+                if(!(ifp = ::popen(cmd.data(), "r")))
+                    THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
+                size_t c = 0;
+                for(uint64_t x;std::fread(&x, sizeof(x), 1, ifp) == 1u;++c)
+                result.cardinalities_[i] = c;
+            } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
+                if(!check_compressed(result.kmercountfiles_[i], ft)) throw std::runtime_error("Missing kmercountfile");
+                std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand")
+                    + result.kmercountfiles_[i];
+                if(!(ifp = ::popen(cmd.data(), "r")))
+                    THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
+                double x, c, s;
+                for(x = c = s = 0.;std::fread(&x, sizeof(x), 1, ifp) == 1u;sketch::kahan::update(s, c, x));
+                result.cardinalities_[i] = s;
+            }
+            if(ifp) ::pclose(ifp);
+        }
+    }
+    // Calculate cardinalities if they haven't been
     VERBOSE_ONLY(
     std::fprintf(stderr, "Beginning cmp_core with options: \n");
         if(opts.sspace_ == SPACE_SET) {
@@ -391,7 +424,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
         std::fprintf(stderr, "Result type: %s\n", to_string(opts.kmer_result_).data());
     )
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
-        if(result.signatures_.empty()) throw std::runtime_error("Empty signatures; trying to compress registers but don't have any");
+        if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_, opts.sspace_ == SPACE_EDIT_DISTANCE);
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
@@ -438,7 +471,7 @@ void cmp_core(Dashing2DistOptions &opts, const SketchingResult &result) {
         for(size_t idx = 0; idx < order.size(); ++idx) {
             //auto oid = order[idx];
         }
-        throw std::runtime_error("Not implemented: Deduplication");
+        THROW_EXCEPTION(std::runtime_error("Not implemented: Deduplication"));
     }
 }
 
