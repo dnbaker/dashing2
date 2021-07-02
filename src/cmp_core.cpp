@@ -130,7 +130,6 @@ LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, si
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const LSHDistType invdenom = 1. / opts.sketchsize_;
     auto sim2dist = [poisson_mult=-1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
-    std::fprintf(stderr, "%zu/%zu\n", i, j);
     if(opts.compressed_ptr_) {
         const bool bbit_c = opts.truncation_method_ > 0;
         std::pair<uint64_t, uint64_t> res{0, 0};
@@ -310,6 +309,7 @@ case v: {\
     return ret;
 }
 void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
+    std::fprintf(stderr, "Beginning emit_all_pairs\n");
     const size_t ns = result.names_.size();
     std::FILE *ofp = opts.outfile_path_.empty() ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
@@ -343,12 +343,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
                     std::fwrite(fn.data(), 1, fn.size(), ofp);
                     const size_t nw4 = (nwritten / 4) * 4;
-                    size_t i;
-                    for(i = 0; i < nw4; i += 4) {
-                        std::fprintf(ofp, "\t%0.9g\t%0.9g\t%0.9g\t%0.9g", datp[i], datp[i + 1], datp[i + 2], datp[i + 3]);
-                    }
-                    for(; i < nwritten; ++i)
-                        std::fprintf(ofp, "\t%0.9g", datp[i]);
+                    for(size_t i = 0; i < nwritten;std::fprintf(ofp, "\t%0.9g", datp[i++]));
                     std::fputc('\n', ofp);
                 } else if(opts.output_format_ == MACHINE_READABLE) {
                     if(std::fwrite(datq.front().first.get(), sizeof(float), nwritten, ofp) != nwritten)
