@@ -115,7 +115,6 @@ int sketch_main(int argc, char **argv) {
         if(s) nt = std::max(std::atoi(s), 1);
     }
     OMP_ONLY(omp_set_num_threads(nt));
-    std::fprintf(stderr, "rest: %s\n", to_string(res).data());
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
     if(ffile.size()) {
