@@ -53,7 +53,6 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 opts.sspace_ == SPACE_MULTISET ? ".bmh":
                 opts.sspace_ == SPACE_PSET ? ".pmh" :
                 opts.sspace_ == SPACE_EDIT_DISTANCE ? ".omh": ".unknown_sketch";
-        std::fprintf(stderr, "Only one input path, now doing stuff %s\n", outfile.data());
         outfile = paths.front();
         outfile = outfile.substr(0, outfile.find_first_of(' '));
         // In case the first path has multiple entries, trim to just the first

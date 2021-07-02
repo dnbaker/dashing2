@@ -342,7 +342,6 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
                     std::string fn(seqn);
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
                     std::fwrite(fn.data(), 1, fn.size(), ofp);
-                    const size_t nw4 = (nwritten / 4) * 4;
                     for(size_t i = 0; i < nwritten;std::fprintf(ofp, "\t%0.9g", datp[i++]));
                     std::fputc('\n', ofp);
                 } else if(opts.output_format_ == MACHINE_READABLE) {
@@ -358,7 +357,7 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
         // TODO: batch queries together for cache efficiency (distmat::parallel_fill for an example)
         size_t nelem = asym ? ns: ns - i - 1;
         std::unique_ptr<float[]> dat(new float[nelem]);
-        float *datp = &dat[asym ? size_t(0): i + 1];
+        const auto datp = dat.get() - (asym ? size_t(0): i + 1);
         OMP_PFOR_DYN
         for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
             datp[start] = compare(opts, result, i, start);
