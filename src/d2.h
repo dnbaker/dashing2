@@ -158,6 +158,7 @@ struct Dashing2Options {
         OMP_ONLY(omp_set_num_threads(nt);)
         return *this;
     }
+    void filterset(std::string path, bool is_kmer);
     bool parse_protein() const {return rh_.enctype_ == bns::PROTEIN;}
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
