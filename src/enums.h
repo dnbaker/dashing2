@@ -46,6 +46,12 @@ enum CountingType {
     CQF_COUNTING // Not implemen
 };
 
+#define THROW_EXCEPTION(...) do {\
+        auto exception__ = __VA_ARGS__;\
+        std::cerr << "Exception " << exception__.what() << " from " << std::this_thread::get_id() << '\n';\
+        throw exception__;\
+    } while(0)
+
 
 enum KmerSketchResultType {
     ONE_PERM = 0,       // Faster (3-4x) than Full, comparable accuracy for both cardinality and set similarities
@@ -89,5 +95,6 @@ std::string trim_folder(const std::string &s);
 struct Dashing2Options;
 
 std::string to_suffix(const Dashing2Options &opts);
+bool iscomp(const std::string &s);
 
 }

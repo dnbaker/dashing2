@@ -15,6 +15,7 @@ OBJLD=$(patsubst %.o,%.ldo,$(OFS))
 OBJF=$(patsubst %.o,%.fo,$(OFS))
 OBJDBG=$(patsubst %.o,%.do,$(OFS))
 OBJLTO=$(patsubst %.o,%.lto,$(OFS))
+OBJ0=$(patsubst %.o,%.0,$(OFS))
 
 all: dashing2 dashing2-f dashing2-ld
 unit: readfx readbw readbed
@@ -29,6 +30,7 @@ endif
 
 OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp src/bwreduce.cpp
 LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))
+LIB0=$(patsubst %.cpp,%.0,$(OBJFS))
 DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS))
 GLIBOBJ=$(patsubst %.cpp,%.go,$(OBJFS))
 FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
@@ -36,8 +38,8 @@ LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 
 dashing2: $(OBJ) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
-dashing2-lto: $(OBJLTO) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLTO) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
+dashing2-0: $(OBJ0) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-g: $(GLIBOBJ) libBigWig.a
@@ -57,6 +59,8 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	# $(wildcard src/*.h)
 %.o: %.cpp
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
+%.0: %.cpp
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O1
 %.lto: %.cpp
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
 %.do: %.cpp $(wildcard src/*.h)
@@ -76,4 +80,4 @@ libBigWig.a: $(wildcard libBigWig/*.c) $(wildcard libBigWig/*.h)
 test: readfx readbw
 
 clean:
-	rm -f dashing2 dashing2-ld dashing2-f libBigWig.a $(OBJ) $(OBJLD) $(OBJF) readfx readfx-f readfx-ld readbw readbw readbw-f readbw-ld
+	rm -f dashing2 dashing2-ld dashing2-f libBigWig.a $(OBJ) $(OBJLD) $(OBJF) readfx readfx-f readfx-ld readbw readbw readbw-f readbw-ld src/*.0 src/*.do src/*.fo src/*.go src/*.ldo

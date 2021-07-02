@@ -29,7 +29,7 @@ std::string to_suffix(const Dashing2Options &opts) {
     std::string ret = (opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) ?
         (opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):  opts.sspace_ == SPACE_MULTISET ? ".bmh": opts.sspace_ == SPACE_PSET ? ".pmh": ".unknown")
         : (opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_COUNTDICT) ? ".kmerset" : opts.kmer_result_ == FULL_MMER_SEQUENCE ? ".mmerseq": ".unknown_kmer";
-    if(opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_SET) {
+    if(opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
         static constexpr std::array<const char *, 2> lut{"64", "128"};
         ret += lut[opts.use128()];
     }
@@ -52,5 +52,12 @@ std::string to_string(CountingType ct) {
     return "UNKNOWN COUNTING";
 }
 
+bool iscomp(const std::string &s) {
+    if(s.size() < 3) return false;
+    if(std::equal(&s[s.size() - 3], &s[s.size()], ".gz")) return true;
+    if(std::equal(&s[s.size() - 3], &s[s.size()], ".xz")) return true;
+    if(std::equal(&s[s.size() - 4], &s[s.size()], ".bz2")) return true;
+    return false;
+}
 
 }

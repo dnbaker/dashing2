@@ -47,7 +47,6 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
         }
     }
-    //std::fprintf(stderr, "Created result\n");
     if(paths.size() == 1 && outfile.empty()) {
         const std::string suf =
                 opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
@@ -64,12 +63,13 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
-    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;}));
+    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.size() && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
     if(outfile.size()) {
-        if(result.signatures_.empty()) throw std::runtime_error("Can't write stacked sketches if signatures were not generated");
-        DBG_ONLY(std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());)
+        std::fprintf(stderr, "outfile %s\n", outfile.data());
+        if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Can't write stacked sketches if signatures were not generated"));
+        std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());
         std::FILE *ofp = std::fopen(outfile.data(), "wb");
-        if(!ofp) throw std::runtime_error(std::string("Failed to open file at ") + outfile);
+        if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
         if(even)
             std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
         else {
@@ -91,10 +91,10 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         std::fclose(ofp);
         if(result.names_.size()) {
             if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
-                throw std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt");
+                THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
             for(size_t i = 0; i < result.names_.size(); ++i) {
                 const auto &n(result.names_[i]);
-                if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) throw std::runtime_error("Failed to write names to file");
+                if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) THROW_EXCEPTION(std::runtime_error("Failed to write names to file"));
                 if(result.cardinalities_.size()) {
                     std::fprintf(ofp, "\t%0.12g", result.cardinalities_[i]);
                 }
@@ -117,6 +117,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         } else std::fprintf(stderr, "Not saving k-mers because result kmers is empty\n");
         if(result.kmercounts_.size()) {
             const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
+            std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());
             if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {
                 if(std::fwrite(result.kmercounts_.data(), nb, 1, ofp) != size_t(1))
                     std::fprintf(stderr, "Failed to write k-mer counts to disk properly, silent failing\n");

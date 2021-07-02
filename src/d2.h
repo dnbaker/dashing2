@@ -62,6 +62,24 @@ void for_each_substr(const F &func, const std::string &s, const int sep=' ') {
     }
 }
 
+static inline bool check_compressed(std::string &path, int &ft) {
+    if(bns::isfile(path)) {
+        ft = 0;
+        return true;
+    }
+    if(bns::isfile(path + ".gz")) {
+        ft = 1;
+        path = path + ".gz";
+        return true;
+    }
+    if(bns::isfile(path + ".xz")) {
+        ft = 2;
+        path = path + ".xz";
+        return true;
+    }
+    return false;
+}
+
 struct Dashing2Options {
 
     // K-mer options
@@ -140,6 +158,7 @@ struct Dashing2Options {
         OMP_ONLY(omp_set_num_threads(nt);)
         return *this;
     }
+    void filterset(std::string path, bool is_kmer);
     bool parse_protein() const {return rh_.enctype_ == bns::PROTEIN;}
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}

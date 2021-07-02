@@ -1,8 +1,11 @@
 #include "wcompare.h"
+#include <memory>
 #include "sketch/kahan.h"
 #include <algorithm>
+#include <cassert>
 
 namespace dashing2 {
+using u128_t = __uint128_t;
 
 struct PushBackCounter
 {
@@ -19,7 +22,6 @@ std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl
         if(MODE) sketch::kahan::update(sum, carry, inc);
         else    sum += inc;
     };
-    // TODO:
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
         if(lptr[lhi] == rptr[rhi]) {
             increment(isz_size, isz_carry, std::min(lnptr[lhi++], rnptr[rhi++]));
@@ -55,5 +57,84 @@ double cosine_compare(const uint64_t *lptr, size_t lhl, [[maybe_unused]] const d
     }
     return dotprod;
 }
+template<typename T>
+std::vector<T> load_file(std::FILE *fp) {
+    std::unique_ptr<T[]> tmp(new T[16384]);
+    std::vector<T> ret;
+    while(!std::feof(fp)) {
+        size_t n = std::fread(tmp.get(), sizeof(T), 16384, fp);
+        const size_t oldsz = ret.size();
+        ret.resize(oldsz + n);
+        std::copy(tmp.get(), &tmp[n], &ret[oldsz]);
+        if(n != 16384)
+            break;
+    }
+    return ret;
+}
+std::pair<double, double>
+weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum) {
+    //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
+    uint64_t lhv, rhv;
+    double lhc = 1., rhc = 1.;
+    if(std::feof(lhk) || std::feof(rhk)) {
+        // If one of the sets is empty, return 0 intersection and union size accordingly
+        return {0., lhsum + rhsum};
+    }
+    auto incl = [&]() {
+        assert(lhk);
+        std::fread(&lhv, sizeof(lhv), 1, lhk); if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);
+    };
+    auto incr = [&]() {std::fread(&rhv, sizeof(rhv), 1, rhk); if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);};
+    auto incb = [&]() {incl(); incr();};
+    long double isz = 0.;
+    incb();
+    for(;;) {
+        if(lhv < rhv) incl();
+            // lhv not found, increment lh side
+        else if(rhv < lhv) incr();
+        else {
+            isz += std::min(rhc, lhc);
+            incb();
+        }
+        if(std::feof(lhk) || std::feof(rhk)) break;
+    }
+    std::pair<double, double> ret;
+    ret.first = isz;
+    ret.second = lhsum + rhsum - isz;
+    return ret;
+}
+
+
+template<typename T, typename CT>
+double cosine_compare_(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn) {
+    // Returns cosine similariy between the vectors
+    //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
+    T lhv, rhv;
+    CT lhc = 1., rhc = 1.;
+    if(std::feof(lhk) || std::feof(rhk)) return 0.;
+
+    auto incl = [&]() {std::fread(&lhv, sizeof(lhv), 1, lhk); if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);};
+    auto incr = [&]() {std::fread(&rhv, sizeof(rhv), 1, rhk); if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);};
+    auto incb = [&]() {incl(); incr();};
+    auto isz = 0.L;
+    incb();
+    for(auto carry = 0.L;;) {
+        if(lhv < rhv) incl();
+            // lhv not found, increment lh side
+        else if(rhv < lhv) incr();
+        else {
+            sketch::kahan::update(isz, carry, static_cast<long double>(rhc) * static_cast<long double>(lhc));
+            incb();
+        }
+        if(std::feof(lhk) || std::feof(rhk)) break;
+    }
+    return isz;
+}
+
+double cosine_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, bool use128keys=false, bool usef32counts=false) {
+    const auto ptr = use128keys ? usef32counts ? &cosine_compare_<u128_t, float>: &cosine_compare_<u128_t, double>: usef32counts ? &cosine_compare_<uint64_t, float>: &cosine_compare_<uint64_t, double>;
+    return ptr(lhk, rhk, lhn, rhn);
+}
+
 
 } // namespace dashing2

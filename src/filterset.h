@@ -1,6 +1,7 @@
 #ifndef DASHING2_FILTERSET_H__
 #define DASHING2_FILTERSET_H__
 #include "sketch/sseutil.h"
+#include "sketch/hash.h"
 #include "sketch/div.h"
 #include "sketch/macros.h"
 #include "aesctr/wy.h"
@@ -27,6 +28,7 @@ static constexpr int ceilog2(size_t n) {
     }
     return -1;
 }
+using namespace sketch::hash;
 
 
 class FilterSet {
@@ -38,8 +40,17 @@ class FilterSet {
 #ifndef M_LN2
     static constexpr double M_LN2 = 0.6931471805599453;
 #endif
-    using RNG = wy::WyRand<uint64_t, 2>;
+    using RNG = wy::WyRand<uint64_t, 0>;
+    CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>>
+        fshasher_;
     static constexpr size_t bits_per_reg = sizeof(T) * CHAR_BIT;
+    uint64_t hash(uint64_t x) const {return fshasher_(x);}
+    uint64_t hash(u128_t x) const {return fshasher_(uint64_t(x)) - fshasher_(uint64_t(x>>64));}
+    template<typename T>
+    uint64_t hash(T x) {
+        if constexpr(sizeof(T) <= 8) return hash(uint64_t(x));
+        else return hash(u128_t(x));
+    }
 public:
     std::string to_string() const {
         if(is_bf()) {
@@ -57,6 +68,18 @@ public:
         bfexp_ = o.bfexp_;
         k_ = o.k_;
         return *this;
+    }
+    FilterSet(double bfexp=-1., int k=-1): bfexp_(bfexp), k_(k) {
+    }
+    void add(u128_t item) {
+        data_.push_back(item >> 64);
+        data_.push_back(item);
+    }
+    void add(uint64_t item) {
+        data_.push_back(item);
+    }
+    void finalize() {
+        reset(data_.begin(), data_.end(), bfexp_, k_ > 0 ? k_: -1);
     }
     template<typename IT>
     FilterSet(IT beg, IT end, double bfexp=-1., int ktouse=-1): bfexp_(bfexp) {
@@ -76,7 +99,7 @@ public:
             schism::Schismatic<uint64_t> mod_(mem * 64);
             // Maybe we batch this in the future?
             for(;beg != end; ++beg) {
-                RNG mt(*beg);
+                RNG mt(hash(*beg));
                 for(int i = 0; i < k_; ++i) {
                     auto v = mt();
                     const size_t rem = mod_.mod(v);
@@ -87,7 +110,8 @@ public:
             }
         } else {
             data_.reserve(nelem);
-            std::copy(beg, end, std::back_inserter(data_));
+            if(&*beg != &data_[0])
+                std::copy(beg, end, std::back_inserter(data_));
             std::sort(data_.begin(), data_.end());
             // Maybe replace with a faster sorter
         }
@@ -97,9 +121,45 @@ public:
     static constexpr int SHIFT = ceilog2(sizeof(T) * CHAR_BIT);
     static constexpr uint64_t MASK = (size_t(1) << SHIFT) - 1;
     size_t nbits() const {return tablesize() << SHIFT;}
+#if 0
+private:
+    std::vector<std::tuple<uint64_t, uint64_t, RNG>> tmpvs;
+    std::mutex mut;
+public:
+    std::vector<uint64_t> in_set(uint64_t *beg, uint64_t *end) {
+        std::lock_guard<std::mutex> lock(mut);
+        std::ptrdiff_t n = end - beg;
+        if(n == 0) return {};
+        if(n < 0) throw std::invalid_argument("Iterators are not ordered correctly.");
+        std::vector<uint64_t> ret(((end - beg) + 63) / 64);
+        if(is_bf()) {
+            if(tmpvs.capacity() < size_t(n)) tmpvs.resize(n);
+            for(ptrdiff_t i = 0; i < n; ++i) {
+                const auto v = beg[i];
+                std::get<1>(tmpvs[i]) = i;
+                std::get<2>(tmpvs[i]) = RNG(v);
+                std::get<0>(tmpvs[i]) = i;
+            }
+            std::sort(tmpvs.begin(), tmpvs.end());
+            auto tmpp = tmpids.data();
+            auto tvpp = tmpvs.data();
+            std::transform(beg, end, rngs.begin(), RNG);
+            std::transform(rngs.begin(), rngs.end(), tmpvs.begin(), [mp=&mod_](auto x) {return mp->mod(x);});
+            std::transform(beg, end, tmpvs.data(), [mp=&mod_](auto x) {return mp->mod(RNG(x)());});
+            std::iota(tmpp, tmpp + n, size_t(0));
+            std::sort(tmpp, tmpp, [&](auto x, auto y) {return tmpvs[x] < tmpvs[y];});
+            for(size_t i = 0; i < n; ++i) {
+                
+            }
+            std::sort(&tmpvs[0], &tmpvs[n]);
+        } else {
+        }
+        return ret;
+    }
+#endif
     bool in_set(T x) const {
         if(is_bf()) {
-            // TODO: batch to sort for efficiency
+            // TODO: batch to sort for efficiency -- see above drafting
             RNG rng(x);
             schism::Schismatic<uint64_t> mod_(nbits());
             // Maybe this can even be SIMDIfied?
@@ -123,6 +183,8 @@ public:
         return it != e && *it == x;
     }
 };
+
+FilterSet from_fastx(const std::string &path);
 
 }
 

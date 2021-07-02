@@ -10,7 +10,7 @@ namespace dashing2 {
 using u128_t = __uint128_t;
 
 namespace hash = sketch::hash;
-template<typename T, size_t pow2=false, typename Hasher = hash::MultiplyAddXoRot<31>>
+template<typename T, size_t pow2=false, typename Hasher = sketch::hash::CEHasher>
 struct LazyOnePermSetSketch {
 private:
     static_assert((std::is_integral_v<T> && std::is_unsigned_v<T>) || std::is_same_v<T, u128_t>, "Must be integral and unsigned");

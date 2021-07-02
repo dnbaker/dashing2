@@ -5,7 +5,7 @@ namespace dashing2 {
 
 namespace hash = sketch::hash;
 struct FHasher {
-    using FastRevHash = hash::FusedReversible3<hash::InvMul, hash::RotL33, hash::MultiplyAddXoRot<16>>;
+    using FastRevHash = hash::CEHasher;
     FastRevHash rhasher_;
     FHasher() {}
     INLINE uint64_t operator()(u128_t x) const {

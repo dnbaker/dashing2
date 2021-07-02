@@ -36,14 +36,14 @@ LFResult LFResult::merge_results(const LFResult *start, size_t n) {
 }
 static constexpr size_t GZ_BUFFER_SIZE = 524288;
 LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
-    if(opts.sspace_ > SPACE_PSET) throw std::invalid_argument("Can't do edit distance for Splice junction files");
+    if(opts.sspace_ > SPACE_PSET) THROW_EXCEPTION(std::invalid_argument("Can't do edit distance for Splice junction files"));
     LFResult ret;
     ret.filenames() = {path};
     std::unique_ptr<char[]> gzbuf(new char[GZ_BUFFER_SIZE]);
     gzFile ifp;
-    if((ifp = gzopen(path.data(), "rb")) == nullptr) throw std::runtime_error(std::string("Failed to open input file ") + path);
+    if((ifp = gzopen(path.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open input file ") + path));
     char *line;
-    if(!(line = gzgets(ifp, gzbuf.get(), GZ_BUFFER_SIZE))) throw 1;
+    if(!(line = gzgets(ifp, gzbuf.get(), GZ_BUFFER_SIZE))) THROW_EXCEPTION(std::runtime_error("Failed to read line from gzFile... is it empty?"));
 
     for(char *s = std::strchr(line, ' ') + 1;s;) {
         char *s2 = std::strchr(s, ' ');
@@ -91,16 +91,17 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
             double num = std::strtoul(lend + 1, &lend, 10);
             if(num == 0) continue;
             unsigned long denom = std::strtoul(lend + 1, &lend, 10);
-            if(opts.bed_parse_normalize_intervals_) num /= denom;
-            if(bmhs)
-                (*bmhs)[sample_id].update(splice_hash, num);
-            else if(pmhs)
-                (*pmhs)[sample_id].update(splice_hash, num);
-            else if(ss)
+            if(ss) 
                 (*ss)[sample_id].update(splice_hash);
             else if(opss)
                 (*opss)[sample_id].update(splice_hash);
-            else throw 1;
+            else {
+                if(opts.bed_parse_normalize_intervals_) num /= denom;
+                if(bmhs)
+                    (*bmhs)[sample_id].update(splice_hash, num);
+                else //if(pmhs)
+                    (*pmhs)[sample_id].update(splice_hash, num);
+            }
         }
     }
     gzclose(ifp);
