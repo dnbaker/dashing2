@@ -7,7 +7,7 @@
 
 namespace dashing2 {
 
-using u128_t = __uint128_t;
+//using u128_t = __uint128_t;
 
 namespace hash = sketch::hash;
 template<typename T, size_t pow2=false, typename Hasher = sketch::hash::CEHasher>
