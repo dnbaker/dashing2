@@ -114,10 +114,6 @@ int main(int argc, char **argv) {
     std::fwrite(indptr.data(), sizeof(indptr[0]), indptr.size(), fp);
     std::fclose(fp);
 
-    for(const auto &pair: mapper)
-        std::fprintf(fp, "%zu:%zu\n", size_t(pair.first), size_t(pair.second));
-    std::fclose(fp);
-
     fp = std::fopen("parsed.remap", "w");
     for(const auto &pair: mapper)
         std::fprintf(fp, "%zu:%zu\n", size_t(pair.first), size_t(pair.second));
