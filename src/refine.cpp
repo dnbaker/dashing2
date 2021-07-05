@@ -5,38 +5,37 @@ void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
     //LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     // 1. Perform full distance computations over the LSH-selected candidates
+    if(opts.refine_exact_ && !opts.exact_kmer_dist_) {
+        if(opts.kmer_result_ <= FULL_SETSKETCH) {
+            std::free(opts.compressed_ptr_), opts.compressed_ptr_ = 0;
+        } else {
+            opts.exact_kmer_dist_ = true;
+        }
+    }
     OMP_PFOR_DYN
     for(size_t i = 0; i < lists.size(); ++i) {
         const size_t lhid = i;
         auto &l = lists[i];
-        // Remove self from the list
-        // We'll add self-connections later
-        if(auto it = std::find_if(l.begin(), l.end(), [lhid](auto x) {return x.second == lhid;}); it != l.end()) {
-            std::fprintf(stderr, "Found self unexpectedly in list: %zu at %zd\n", i, it - l.begin());
-        }
-        //l.erase(std::remove_if(l.begin(), l.end(), [](auto x) {return x.second == i;}));
+        // Selves are not in the list; We'll add self-connections later
         auto beg = l.begin(), e = l.end();
         const size_t lsz = l.size();
         std::fprintf(stderr, "Processing seqset %zu/%s\n", i, result.names_[i].data());
         if(opts.num_neighbors_ > 0 && size_t(opts.num_neighbors_) < lsz) {
             // -- as above, for the KNN-format
+#ifndef NDEBUG
             std::fprintf(stderr, "lsz: %zu. nn: %u\n", lsz, opts.num_neighbors_);
             std::fprintf(stderr, "Filtering for top-%d neighbors\n", opts.num_neighbors_);
+#endif
             for(size_t j = 0; j < lsz; ++j) {
                 auto &[dist, id] = l[j];
                 dist = mult * compare(opts, result, lhid, id);
             }
             std::sort(beg, e);
-#if 0
-            std::ptrdiff_t di = e - beg;
-            for(auto i = 0; i < di; ++i)
-                std::fprintf(stderr, "Val %g is rank %d\n", (beg + i)->first, i);
-#endif
             if(size_t(opts.num_neighbors_) < l.size() - 1)
                 l.resize(opts.num_neighbors_);
         } else if(opts.min_similarity_ > 0.) {
             // -- as above, for the NN_GRAPH_THRESHOLD format
-            std::fprintf(stderr, "Filtering for minimum similarity\n");
+            //std::fprintf(stderr, "Filtering for minimum similarity\n");
             // This stopping after 5 consecutive beyond-threshold points is purely heuristic
             // and may change.
             size_t failures = 0;
