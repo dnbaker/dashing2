@@ -245,14 +245,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if(opts.ct() != EXACT_COUNTING)
                     ret += std::to_string(opts.cssize_);
             }
-            if(opts.kmer_result_ <= FULL_SETSKETCH) {
-                ret = ret + "." + to_string(opts.sspace_);
-            } else {
-                ret = ret + "." + to_string(opts.kmer_result_);
-            }
-            ret = ret + "." + bns::to_string(opts.rht_);
-            ret = ret + suffix;
-            return ret;
+            ret += ".";
+            ret += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(opts.kmer_result_);
+            return ret + "." + bns::to_string(opts.rht_) + suffix;
         };
         if(opts.build_sig_matrix_) {
             ret.signatures_.resize(ss * paths.size());
@@ -300,40 +295,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                         load_copy(destkmercounts, &ret.kmercounts_[mss]);
                 } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                     std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
-#if 0
-                    if(!iscomp(destkmercounts)) {
-                        //std::fprintf(stderr, "Attempting to memory-map file at %s\n", destkmercounts.data());
-                        mio::mmap_sink ms(destkmercounts);
-                        if(ms.size() % sizeof(double)) THROW_EXCEPTION(std::runtime_error(std::string("Wrong size file ") + destkmercounts));
-                        ret.cardinalities_[myind] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
-                        continue;
-                    }
-                    const auto dkcsz = destkmercounts.size();
-                    std::string cmd;
-                    if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".gz")) {
-                        cmd = "gzip -dc ";
-                    } else if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".xz")) {
-                        cmd = "xz -dc ";
-                    } else if(destkmercounts.size() > 4 && std::equal(&destkmercounts[dkcsz - 4], &destkmercounts[dkcsz], ".bz2")) {
-                        cmd = "bzip2 -dc ";
-                    } else __builtin_unreachable();
-                    cmd = cmd + destkmercounts;
-                    std::fprintf(stderr, "Command '%s'\n", cmd.data());
-                    std::FILE *ifp = ::popen(cmd.data(), "r");
-                    if(!ifp) THROW_EXCEPTION(std::runtime_error("Failed to perform popen call for decompressing k-mer counts"));
-                    static constexpr size_t N = 4096;
-                    size_t n = 4096;
-                    std::unique_ptr<double[]> d(new double[N]);
-                    long double s = 0.;
-                    for(;n == N;) {
-                        n = std::fread(d.get(), sizeof(double), N, ifp);
-                        s = std::accumulate(d.get(), &d[n], s);
-                    }
-                    ::pclose(ifp);
-                    ret.cardinalities_[myind] = s;
-                else if(opts.kmer_result_ == FULL_MMER_SET)
-                    ret.cardinalities_[myind] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
-#endif
                 }
                 DBG_ONLY(std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());)
                 continue;
