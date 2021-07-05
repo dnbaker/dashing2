@@ -36,7 +36,8 @@ auto parse_file(std::FILE *ifp) {
     std::vector<uint8_t> startms, stopms;
     std::atomic<uint64_t> idcounter;
     std::vector<uint16_t> counts;
-    std::vector<uint64_t> indptr{0};
+    std::vector<uint64_t> indptr;
+    indptr.push_back(0);
     ska::flat_hash_map<std::string, uint32_t> contignames;
     idcounter.store(0);
     char *lptr = nullptr;
