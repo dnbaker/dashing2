@@ -83,12 +83,12 @@ auto parse_file(std::FILE *ifp) {
         }
         indptr.push_back(nids);
     }
-    return std::make_tuple(contigids, contignames, counts, ids, indptr);
+    return std::make_tuple(contigids, contignames, counts, ids, indptr, ln);
 }
 
 int main(int argc, char **argv) {
     std::FILE *fp = std::fopen(argc == 1 ? "/dev/stdin": argv[1], "r");
-    auto [cids, cnames, counts, ids, indptr] = parse_file(fp);
+    auto [cids, cnames, counts, ids, indptr, nf] = parse_file(fp);
     std::fclose(fp);
 
     ska::flat_hash_map<uint64_t, uint16_t> mapper;
@@ -121,6 +121,7 @@ int main(int argc, char **argv) {
     for(const auto &pair: mapper)
         std::fprintf(fp, "%zu:%zu\n", size_t(pair.first), size_t(pair.second));
     std::fclose(fp);
+    std::fprintf(stderr, "Shape: %zu;%zu nnz\n", mapper.size(), nf, counts.size());
 
     return 0;
 }
