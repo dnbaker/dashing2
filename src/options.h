@@ -26,6 +26,7 @@ enum OptArg{
     OPTARG_BED_NORMALIZE,
     OPTARG_PROTEIN,
     OPTARG_HPCOMPRESS,
+    OPTARG_REFINEEXACT,
     OPTARG_DUMMY
 };
 
@@ -69,6 +70,7 @@ enum OptArg{
     LO_FLAG("save-kmers", 's', save_kmers, true)\
     LO_ARG("regbytes", OPTARG_REGBYTES)\
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
+    {"refine-exact", no_argument, 0, OPTARG_REFINEEXACT},\
     {"edit-distance", no_argument, 0, 'E'},\
     {"full-setsketch", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
@@ -82,8 +84,9 @@ enum OptArg{
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
 #define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atoi(optarg); break;}
 #define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN; break;}
+#define REFINEEXACT_FIELD case OPTARG_REFINEEXACT: {refine_exact = true; break;}
 
-#define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD FASTCMP_FIELD PROT_FIELD \
+#define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD FASTCMP_FIELD PROT_FIELD REFINEEXACT_FIELD \
         case 'E': sketch_space = SPACE_EDIT_DISTANCE; break;\
         case 'C': canon = true; break;\
         case 'p': nt = std::atoi(optarg); break;\
@@ -134,7 +137,9 @@ static constexpr const char *siglen =
         "--fastcmp [arg]\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are set-sketch compressed\n"\
         "For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
         "\t If --bbit-sigs is enabled, this random signatures truncated to [arg] bytes will be replaced.\n"\
-        "\t The tradeoff is that you may get better accuracy in set space comparisons at the expense of information regarding the sizes of the sets\n"
+        "\t The tradeoff is that you may get better accuracy in set space comparisons at the expense of information regarding the sizes of the sets\n"\
+        "--exact-kmer-dist\tThis uses exact k-mer distances instead of approximate methods\n"\
+        "--refine-exact\tThis causes the candidate KNN graph to be refined to a final KNN graph using full distances.\tIf using sketches, then full hash registers are used.\nOtherwise, exact k-mer comparison functions are used.\n"
 
 
 }

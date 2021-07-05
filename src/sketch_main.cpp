@@ -81,6 +81,7 @@ int sketch_main(int argc, char **argv) {
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false;
     bool exact_kmer_dist = false, hpcompress = false;
+    bool refine_exact = false;
     double count_threshold = 0., similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
@@ -164,7 +165,7 @@ int sketch_main(int argc, char **argv) {
     SketchingResult result = sketch_core(opts, paths, outfile);
     result.nqueries(nq); // TODO: use nqueries to perform asymmetric comparisons
     if(cmpout.size()) {
-        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
+        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
         distopts.measure_ = measure;
         cmp_core(distopts, result);
     }
