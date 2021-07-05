@@ -45,7 +45,7 @@ auto parse_file(std::FILE *ifp) {
     size_t ln = 0;
     ssize_t rc;
 	for(ssize_t rc; (rc = ::getline(&lptr, &linesz, ifp)) >= 0;++ln) {
-        if(ln % 1 == 65536) std::fprintf(stderr, "Processed %zu lines, last rc is %zd\n", ln, rc);
+        if(ln % 65536 == 0) std::fprintf(stderr, "Processed %zu lines, last rc is %zd\n", ln, rc);
         const uint64_t myid = idcounter++;
         
         char *p = std::strchr(lptr, '\t');
@@ -81,7 +81,7 @@ auto parse_file(std::FILE *ifp) {
             ids.push_back(id);
             ++nids;
         }
-        indptr.push_back(nids);
+        indptr.push_back(nids + indptr.back());
     }
     return std::make_tuple(contigids, contignames, counts, ids, indptr);
 }
