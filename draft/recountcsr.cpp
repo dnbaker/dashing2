@@ -29,7 +29,6 @@ int str2ms(const char *s) {
 }
 
 auto parse_file(std::FILE *ifp) {
-    std::fprintf(stderr, "Starting\n");
     std::vector<uint32_t> contigids;
     std::vector<uint64_t> ids;
     std::vector<uint32_t> starts, stops;
