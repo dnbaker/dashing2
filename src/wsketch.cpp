@@ -4,12 +4,43 @@
 #include "sketch/bmh.h"
 namespace dashing2 {
 
+template<typename BMH, typename FT, typename IT, typename IndPtrT=uint64_t>
+std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indices, const IndPtrT *indptr, size_t nr, size_t m) {
+    std::vector<SimpleMHRet> ret(nr);
+    std::atomic<size_t> total_processed;
+    total_processed.store(0);
+    auto t1 = std::chrono::high_resolution_clock::now();
+    //OMP_PFOR_DYN
+    for(size_t i = 0; i < nr; ++i) {
+        std::fprintf(stderr, "%zu/%zu\n", i, nr);
+        ++total_processed;
+        BMH h(m, true);
+        const size_t b = indptr[i], e = indptr[i + 1];
+        for(size_t j = b; j < e; ++j) {
+            h.add(j - b, weights[j]);
+        }
+        h.finalize();
+        std::vector<uint64_t> ids(m);
+        auto &hids = h.ids();
+        std::transform(hids.begin(), hids.end(), ids.begin(), [ind=indices + b](auto x) {return ind[x];});
+        std::get<0>(ret[i]) = h.template to_sigs<RegT>();
+        std::get<1>(ret[i]) = hids;
+        std::get<2>(ret[i]) = ids;
+        std::get<3>(ret[i]) = h.total_weight();
+        if(total_processed.load() % 8 == 0) {
+            std::chrono::duration<double, std::milli> diff(std::chrono::high_resolution_clock::now() - t1);
+            std::fprintf(stderr, "Processed %zu/%zu in %gms; Expected %zu seconds left...\n", total_processed.load(), nr, diff.count(), size_t(std::ceil(diff.count() / 1e6 * (nr / (total_processed.load() + 1)))));
+        }
+    }
+    return ret;
+}
+
 template<typename BMH, typename FT, typename IT>
 SimpleMHRet minwise_det(const FT *weights, const IT *indices, size_t n, size_t m) {
     BMH h(m, true);
     for(size_t i = 0; i < n; ++i) {
         // We use the offset as a first ID, and then we convert these to the
-        // relevant IDs sampled at the end
+         // relevant IDs sampled at the end
         h.add(i, weights[i]);
     }
     std::vector<uint64_t> ids(m);
@@ -26,26 +57,50 @@ SimpleMHRet minhash(const FT *weights, const IT *indices, size_t n, size_t m, bo
     return minwise_det<BagMinHash>(weights, indices, n, m);
 }
 
-#define SIG(T1, T2, P1, P2) \
-SimpleMHRet minhash##T1##T2(const P1 *weights, const P2 *indices, size_t n, size_t m, bool usepmh=true);
+#if 0
+void fillindptr(std::FILE *fp, std::vector<size_t> &ip, size_t ipbytes=8) {
+#define PERF(NB, T) \
+    if(ipbytes == NB) { \
+        ip = {0}; \
+        T v; \
+        while(!std::feof(fp) && std::fread(&v, sizeof(v), 1, fp) == 1)\
+            ip.push_back(v); \
+        return;\
+    }
+    PERF(8, uint64_t)
+    PERF(4, uint32_t)
+    throw std::runtime_error("Unexpected indptr size not 32 or 64 bits");
+}
 
-#define DMH(T1, T2, P1, P2) \
+SimpleMHRet minhash_csr(std::FILE *datap, std::FILE *indicesp, std::FILE *indptrp, size_t ipbytes=8) {
+    fillindptr(indptrp, indptr, ipbytes);
+    T v;
+    I i;
+    for(;!std::feof(datap);) {
+        if(std::feof(indicesp)) throw std::runtime_error("Indices reached EOF before data; incorrect size?");
+        if(std::fread(&v, sizeof(v), 1, datap) != 1u) throw 1;
+        if(std::fread(&i, sizeof(i), 1, datap) != 1u) throw 2;
+    }
+}
+
+#endif
+
+#define SIG(T1, T2, P1, P2) \
+SimpleMHRet minhash##T1##T2(const P1 *weights, const P2 *indices, size_t n, size_t m, bool usepmh=true);\
 SimpleMHRet minhash##T1##T2(const P1 *weights, const P2 *indices, size_t n, size_t m, bool usepmh) { \
     return minhash(weights, indices, n, m, usepmh);}\
 
-#define BODY(MACRO) \
-MACRO(f64, u64, double, uint64_t)\
-MACRO(f64, u32, double, uint32_t)\
-MACRO(f32, u64, float, uint64_t)\
-MACRO(f32, u32, float, uint32_t)
+SIG(f64, u64, double, uint64_t)\
+SIG(f64, u32, double, uint32_t)\
+SIG(f32, u64, float, uint64_t)\
+SIG(f32, u32, float, uint32_t)
 
-BODY(SIG) BODY(DMH)
 #undef SIG
-#undef DMH
 
 struct FReader{
     std::string path_;
     std::FILE *fp_;
+    bool pclose = true;
     FReader(std::string path): path_(path), fp_(nullptr) {
         std::string c = "cat ";
         if(endswith(path, ".gz"))
@@ -54,32 +109,75 @@ struct FReader{
             c = "xz -dc ";
         else if(endswith(path, ".bz2"))
             c = "bzip2 -dc ";
-        if((fp_ = ::popen((c + path).data(), "r")) == nullptr)
-            THROW_EXCEPTION(std::runtime_error(std::string("Failed to run cmd '") + c + path + "'"));
+        else {
+            pclose = false;
+            fp_ = std::fopen(path_.data(), "r");
+            return;
+        }
+        c += path;
+        std::fprintf(stderr, "Using cmd = '%s'\n", c.data());
+        if((fp_ = ::popen(c.data(), "r")) == nullptr)
+            THROW_EXCEPTION(std::runtime_error(std::string("Failed to run cmd '") + c + "'"));
     }
     template<typename VT>
     std::vector<VT> getvec() {
+        std::fprintf(stderr, "Getting type of size %zu from %s\n", sizeof(VT), path_.data());
         std::vector<VT> ret;
-        int rc = 0;
-        while(!std::feof(fp_)) {
-            VT v;
-            if(std::fread(&v, sizeof(v), 1, fp_) != 1u) {rc = 1; break;}
-            ret.push_back(v);
-        }
-        if(rc) throw std::runtime_error("Failed to read from file in expected increments");
+        for(VT v; std::fread(&v, sizeof(v), 1, fp_) == 1u;ret.push_back(v));
+        std::fprintf(stderr, "ret size is %zu\n", ret.size());
         return ret;
     }
     static inline bool endswith(std::string lhs, std::string rhs) {
         return std::equal(rhs.begin(), rhs.end(), &lhs[lhs.size() - rhs.size()]);
     }
     void clear() {
-        if(fp_) {::pclose(fp_); fp_ = nullptr;}
+        if(fp_) {if(pclose) ::pclose(fp_); else std::fclose(fp_); fp_ = nullptr;}
     }
     ~FReader() {
         if(fp_) {clear();}
     }
 };
 
+std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath, std::string indptrpath, size_t sksz, bool usepmh, bool usef32=false, bool wordids=false, bool ip32=false) {
+    // usef32 means use float32 instead of float64 for weights
+    // default is f64
+    // For IDs, default is 64 bits
+    // 
+    std::vector<SimpleMHRet> ret;
+    FReader lhs(cpath), rhs(idpath), ips(indptrpath);
+#define PERF(TL, TR, IR) do {auto lvec = lhs.getvec<TL>();\
+            std::fprintf(stderr, "Loaded vec lhs %zu\n", lvec.size());\
+            auto rvec = rhs.getvec<TR>(); \
+            std::fprintf(stderr, "Loaded vec rhs %zu\n", rvec.size());\
+            auto cvec = ips.getvec<IR>();\
+            std::fprintf(stderr, "Loaded vec ohs %zu\n", cvec.size());\
+            assert(lvec.size() == rvec.size());\
+            auto nr = cvec.size() - 1;\
+            if(usepmh) ret = minhash_rowwise_csr<ProbMinHash>(lvec.data(), rvec.data(), cvec.data(), nr, sksz);\
+            ret = minhash_rowwise_csr<BagMinHash>(lvec.data(), rvec.data(), cvec.data(), nr, sksz);\
+        } while(0)
+#define PERF2(LT) do {\
+        if(wordids) {\
+            if(ip32) {\
+                PERF(LT, uint32_t, uint32_t);\
+            } else {\
+                PERF(LT, uint32_t, uint64_t);\
+            }\
+        } else if(ip32) {\
+            PERF(LT, uint64_t, uint32_t);\
+        } else {\
+            PERF(LT, uint64_t, uint64_t);\
+        }\
+    } while(0)
+    if(usef32) {
+        PERF2(float);
+    } else {
+        PERF2(double);
+    }
+    return ret;
+#undef PERF
+#undef PERF2
+}
 SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bool usepmh, bool usef32=false, bool wordids=false) {
     // usef32 means use float32 instead of float64 for weights
     // default is f64
@@ -109,10 +207,12 @@ SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bo
 
 int wsketchusage() {
     std::fprintf(stderr, "Sketch raw IDs, with optional weights added\n"
-                         "Usage: dashing2 binsketch [input.bin] [input.weights.bin]\n"
+                         "Usage: dashing2 wsketch [input.bin] [input.weights.bin] <Optional: indptr.bin for CSR data>\n"
+                         "-S: set sketch size\n"
                          "-u: Read 32-bit identifiers from input.bin rather than 64-bit (Default: 64-bit integers)\n"
                          "-f: Read 32-bit floating point weights from [input.weights.bin] (Default: double)\n"
-                         "-B: Sketch with BagMinHash (Default: Uses ProbMinhash)\n"
+                         "-P: Read 32-bit indptr integers [indptr.bin] (Default: uint64_t)\n"
+                         "-B: Sketch with BagMinHash (Default: Uses ProbMinHash)\n"
                          "-o: outprefix. If unset, uses [input.bin]\n"
             );
     return 1;
@@ -127,29 +227,47 @@ void write_container(const T &vec, std::string path, size_t nb = 0) {
 int wsketch_main(int argc, char **argv) {
     int sketchsize = 1024;
     bool bmhsketch = true;
-    bool u32 = false, f32 = false;
+    bool u32 = false, f32 = false, ip32 = false;
     std::string outpref;
     for(int c;(c = getopt(argc, argv, "o:B:S:uf")) >= 0;) { switch(c) {
         case 'S': sketchsize = std::atoi(optarg); break;
         case 'B': bmhsketch = true; break;
         case 'u': u32 = true; break; case 'f': f32 = true; break;
+        case 'P': ip32 = true; break;
         case 'o': outpref = optarg; break;
         case 'h': return wsketchusage();
     }}
-    if(argc + 2 != optind) {
-        std::fprintf(stderr, "Required: two positional arguments. All flags must come before positional arguments.\n");
+    auto diff = argc - optind;
+    if(diff < 2 || diff > 3) {
+        std::fprintf(stderr, "Required: two or three positional arguments. All flags must come before positional arguments. Diff: %d\n", diff);
+        std::fprintf(stderr, "If two are provided, then 1-D weighted minhashing is performed on the compressed vector. If three are passed, then this result is treated as a CSR-format matrix and then emits a matrix of sketches.\n");
         std::fprintf(stderr, "Example: 'dashing2 wsketch -o g1.k31.k64 g1.fastq.k31.kmerset64 g1.fastq.k31.kmercounts.f64'.\n");
         return wsketchusage();
     }
     if(outpref.empty()) outpref = argv[optind];
+    if(argc + 3 == optind) {
+        std::fprintf(stderr, "Loading from files\n");
+        auto mhrs = wmh_from_file_csr(argv[optind], argv[optind + 1], argv[optind + 2], sketchsize, !bmhsketch, f32, u32, ip32);
+        std::fprintf(stderr, "Sketched\n");
+        std::FILE *fp = std::fopen((outpref + ".sampled.indices.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64").data(), "wb");
+        for(size_t i = 0; i < mhrs.size(); ++i) {
+            std::fwrite(std::get<2>(mhrs[i]).data(), sizeof(uint64_t), std::get<2>(mhrs[i]).size(), fp);
+        }
+        std::fclose(fp);
+        fp = std::fopen((outpref + ".sampled.info.txt").data(), "wb");
+        for(size_t i = 0; i < mhrs.size(); ++i) {
+            std::fprintf(stderr, "%zu\t%g\n", i, std::get<3>(mhrs[i]));
+        }
+        std::fclose(fp);
+        return 0;
+    }
     SimpleMHRet mh(wmh_from_file(argv[optind], argv[optind + 1], sketchsize, !bmhsketch, f32, u32));
-    auto &[sigs, indices, ids, total_weight] = mh;
-    std::string isamples = outpref + ".sampled.indices.u64";
-    
+    auto [sigs, indices, ids, total_weight] = mh.tup();
+
     write_container(indices, outpref + ".sampled.indices.u64");
     write_container(sigs, outpref + std::string(".sampled.hashes.f") + (sizeof(RegT) == 4  ? "32" : sizeof(RegT) == 8 ? "64": sizeof(RegT) == 16 ? "128": "UNKNOWN"));
     write_container(ids, outpref + ".sampled.ids.u64");
-    write_container(std::string("Total weight: ") + std::to_string(total_weight),
+    write_container(std::string("Total weight: ") + std::to_string(total_weight) + ";" + argv[optind] + ";" + argv[optind + 1] + ';' + (f32 ? 'f': 'd') + ';' + (u32 ? 'W': 'L'),
                     outpref + ".sampled.tw.txt");
     return 0;
 }

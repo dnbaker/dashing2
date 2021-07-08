@@ -8,8 +8,21 @@ namespace dashing2 {
 using std::uint64_t;
 
 
-using SimpleMHRet = std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, double>;
-#pragma message("SimpleMHRet")
+struct SimpleMHRet: public std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, double> {
+    using Tup =  std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, double>;
+    Tup &tup() {return *static_cast<Tup *>(this);}
+#if 0
+    SimpleMHRet &operator=(Tup &&o) {
+        Tup::operator=(o);
+        return *this;
+    }
+    SimpleMHRet &operator=(const Tup &o) {
+        Tup::operator=(o);
+        return *this;
+    }
+#endif
+    //SimpleMHRet merge(SimpleMHRet *src, size_t n);
+};
 
 SimpleMHRet minhashf64u64(const double *, const uint64_t *, size_t, size_t, bool usepmh);
 SimpleMHRet minhashf64u32(const double *, const uint32_t *, size_t, size_t, bool usepmh);
