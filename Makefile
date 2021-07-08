@@ -14,6 +14,7 @@ OBJ=$(OFS)
 OBJLD=$(patsubst %.o,%.ldo,$(OFS))
 OBJF=$(patsubst %.o,%.fo,$(OFS))
 OBJDBG=$(patsubst %.o,%.do,$(OFS))
+OBJADD=$(patsubst %.o,%.sano,$(OFS))
 OBJLTO=$(patsubst %.o,%.lto,$(OFS))
 OBJ0=$(patsubst %.o,%.0,$(OFS))
 
@@ -42,6 +43,8 @@ dashing2-0: $(OBJ0) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a
+dashing2-add: $(OBJADD) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJADD) -o $@ $(LIB) $(EXTRA) libBigWig.a -fsanitize=address
 dashing2-g: $(GLIBOBJ) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-ld: $(OBJLD) libBigWig.a
@@ -65,6 +68,8 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
 %.do: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto
+%.sano: %.cpp $(wildcard src/*.h)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto -fsanitize=address
 %.go: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -pg
 %.ldo: %.cpp $(wildcard src/*.h)
