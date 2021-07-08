@@ -268,8 +268,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             const size_t mss = ss * myind;
             auto &path = paths[myind];
             //std::fprintf(stderr, "parsing from path = %s\n", path.data());
-            ret.destination_files_[myind] = makedest(path);
             auto &destination = ret.destination_files_[myind];
+            destination = makedest(path);
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
             std::string destkmercounts = destination_prefix + ".kmercounts.f64";
             std::string destkmer = destination_prefix + ".kmer.u64";

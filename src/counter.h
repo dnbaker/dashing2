@@ -31,6 +31,11 @@ struct Counter {
     }
     void reset();
     bool empty() const;
+#if 0
+    void populate(std::string lhs, std::string rhs, bool is128=false, char ktype='L', char ctype='d') {
+         // TODO: allow this to read these values from disk instead of re-calculating if present
+    }
+#endif
     void add(u128_t x, double inc) {
         switch(ct()) {
             case COUNTSKETCH_COUNTING: case COUNTMIN_COUNTING: {
