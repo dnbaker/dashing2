@@ -294,19 +294,17 @@ int wsketch_main(int argc, char **argv) {
         std::fclose(fp);
         return 0;
     } else {
-        std::fprintf(stderr, "argc + %d = optind\n", optind - argc);
-        throw 1;
+        SimpleMHRet mh(wmh_from_file(argv[optind], argv[optind + 1], sketchsize, !bmhsketch, f32, u32));
+        std::fprintf(stderr, "MH is gotten\n");
+        auto [sigs, indices, ids, total_weight] = mh.tup();
+    
+        write_container(indices, outpref + ".sampled.indices.u64");
+        write_container(sigs, outpref + std::string(".sampled.hashes.f") + (sizeof(RegT) == 4  ? "32" : sizeof(RegT) == 8 ? "64": sizeof(RegT) == 16 ? "128": "UNKNOWN"));
+        write_container(ids, outpref + ".sampled.ids.u64");
+        write_container(std::string("Total weight: ") + std::to_string(total_weight) + ";" + argv[optind] + ";" + argv[optind + 1] + ';' + (f32 ? 'f': 'd') + ';' + (u32 ? 'W': 'L'),
+                        outpref + ".sampled.tw.txt");
+        return 0;
     }
-    SimpleMHRet mh(wmh_from_file(argv[optind], argv[optind + 1], sketchsize, !bmhsketch, f32, u32));
-    std::fprintf(stderr, "MH is gotten\n");
-    auto [sigs, indices, ids, total_weight] = mh.tup();
-
-    write_container(indices, outpref + ".sampled.indices.u64");
-    write_container(sigs, outpref + std::string(".sampled.hashes.f") + (sizeof(RegT) == 4  ? "32" : sizeof(RegT) == 8 ? "64": sizeof(RegT) == 16 ? "128": "UNKNOWN"));
-    write_container(ids, outpref + ".sampled.ids.u64");
-    write_container(std::string("Total weight: ") + std::to_string(total_weight) + ";" + argv[optind] + ";" + argv[optind + 1] + ';' + (f32 ? 'f': 'd') + ';' + (u32 ? 'W': 'L'),
-                    outpref + ".sampled.tw.txt");
-    return 0;
 }
 
 
