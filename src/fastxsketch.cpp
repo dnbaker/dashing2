@@ -245,14 +245,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if(opts.ct() != EXACT_COUNTING)
                     ret += std::to_string(opts.cssize_);
             }
-            if(opts.kmer_result_ <= FULL_SETSKETCH) {
-                ret = ret + "." + to_string(opts.sspace_);
-            } else {
-                ret = ret + "." + to_string(opts.kmer_result_);
-            }
-            ret = ret + "." + bns::to_string(opts.rht_);
-            ret = ret + suffix;
-            return ret;
+            ret += ".";
+            ret += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(opts.kmer_result_);
+            return ret + "." + bns::to_string(opts.rht_) + suffix;
         };
         if(opts.build_sig_matrix_) {
             ret.signatures_.resize(ss * paths.size());
@@ -273,8 +268,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             const size_t mss = ss * myind;
             auto &path = paths[myind];
             //std::fprintf(stderr, "parsing from path = %s\n", path.data());
-            ret.destination_files_[myind] = makedest(path);
             auto &destination = ret.destination_files_[myind];
+            destination = makedest(path);
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
             std::string destkmercounts = destination_prefix + ".kmercounts.f64";
             std::string destkmer = destination_prefix + ".kmer.u64";
@@ -300,40 +295,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                         load_copy(destkmercounts, &ret.kmercounts_[mss]);
                 } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                     std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
-#if 0
-                    if(!iscomp(destkmercounts)) {
-                        //std::fprintf(stderr, "Attempting to memory-map file at %s\n", destkmercounts.data());
-                        mio::mmap_sink ms(destkmercounts);
-                        if(ms.size() % sizeof(double)) THROW_EXCEPTION(std::runtime_error(std::string("Wrong size file ") + destkmercounts));
-                        ret.cardinalities_[myind] = std::accumulate((const double *)ms.data(),(const double *)&ms[ms.size()], 0.);
-                        continue;
-                    }
-                    const auto dkcsz = destkmercounts.size();
-                    std::string cmd;
-                    if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".gz")) {
-                        cmd = "gzip -dc ";
-                    } else if(std::equal(&destkmercounts[dkcsz - 3], &destkmercounts[dkcsz], ".xz")) {
-                        cmd = "xz -dc ";
-                    } else if(destkmercounts.size() > 4 && std::equal(&destkmercounts[dkcsz - 4], &destkmercounts[dkcsz], ".bz2")) {
-                        cmd = "bzip2 -dc ";
-                    } else __builtin_unreachable();
-                    cmd = cmd + destkmercounts;
-                    std::fprintf(stderr, "Command '%s'\n", cmd.data());
-                    std::FILE *ifp = ::popen(cmd.data(), "r");
-                    if(!ifp) THROW_EXCEPTION(std::runtime_error("Failed to perform popen call for decompressing k-mer counts"));
-                    static constexpr size_t N = 4096;
-                    size_t n = 4096;
-                    std::unique_ptr<double[]> d(new double[N]);
-                    long double s = 0.;
-                    for(;n == N;) {
-                        n = std::fread(d.get(), sizeof(double), N, ifp);
-                        s = std::accumulate(d.get(), &d[n], s);
-                    }
-                    ::pclose(ifp);
-                    ret.cardinalities_[myind] = s;
-                else if(opts.kmer_result_ == FULL_MMER_SET)
-                    ret.cardinalities_[myind] = bns::filesize(path.data()) / (opts.use128() ? 16: 8);
-#endif
                 }
                 DBG_ONLY(std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());)
                 continue;
@@ -347,8 +308,10 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             __RESET(tid);
             auto perf_for_substrs = [&](const auto &func) {
                 for_each_substr([&](const std::string &subpath) {
-                    //std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
-                    auto lfunc = [&](auto x) {if(!opts.fs_ || !opts.fs_->in_set(x)) func(x);};
+                    auto lfunc = [&](auto x) {
+                        if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass())
+                            func(x);
+                    };
 #define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
                     if(!opts.parse_protein() && (opts.w_ > opts.k_ || opts.k_ <= 64)) {
                         if(opts.k_ < 32) {

@@ -1,11 +1,12 @@
-#include "wcompare.h"
 #include <memory>
 #include "sketch/kahan.h"
 #include <algorithm>
 #include <cassert>
+#include "wcompare.h"
+#include "enums.h"
 
 namespace dashing2 {
-using u128_t = __uint128_t;
+//using u128_t = __uint128_t;
 
 struct PushBackCounter
 {

@@ -122,6 +122,7 @@ int cmp_main(int argc, char **argv) {
     KmerSketchResultType res = ONE_PERM;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false, presketched = false;
     bool exact_kmer_dist = false;
+    bool refine_exact = false; // This uses sketching for K-NN graph generation, then uses exact distances for NN refinement
     double count_threshold = 0., similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
@@ -135,6 +136,7 @@ int cmp_main(int argc, char **argv) {
     int topk_threshold = -1;
     int truncate_mode = 0;
     double nbytes_for_fastdists = sizeof(RegT);
+    double downsample_frac = 1.;
     bool parse_by_seq = false;
     bool hpcompress = false;
     Measure measure = SIMILARITY;
@@ -175,7 +177,8 @@ int cmp_main(int argc, char **argv) {
         .count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress);
     opts.bed_parse_normalize_intervals_ = normalize_bed;
-    Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist);
+    opts.downsample(downsample_frac);
+    Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
     distopts.measure_ = measure;
     SketchingResult result;
     if(presketched) {

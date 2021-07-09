@@ -7,7 +7,7 @@
 
 namespace dashing2 {
 
-using u128_t = __uint128_t;
+//using u128_t = __uint128_t;
 
 namespace hash = sketch::hash;
 template<typename T, size_t pow2=false, typename Hasher = sketch::hash::CEHasher>
@@ -185,7 +185,7 @@ public:
         std::copy(counts_.begin(), counts_.end(), p->data());
         return *p;
     }
-    static constexpr size_t get_modv() {return std::numeric_limits<T>::max();}
+    static constexpr T get_modv() {return std::numeric_limits<T>::max();}
     size_t total_updates() const {return total_updates_;}
     size_t size() const {return m_;}
 };

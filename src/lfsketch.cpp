@@ -75,10 +75,10 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     } else if(opts.sspace_ == SPACE_PSET) {
         pmhs.reset(new std::vector<ProbMinHash>(nsamples, ProbMinHash(opts.sketchsize_)));
     }
-    auto t = std::chrono::high_resolution_clock::now();
-    size_t ln = 0;
+    //auto t = std::chrono::high_resolution_clock::now();
+    //size_t ln = 0;
     for(char *line;(line = gzgets(ifp, gzbuf.get(), GZ_BUFFER_SIZE)) != nullptr;) {
-        if(++ln % 1024 == 0) std::fprintf(stderr, "%zu lines read in %gms\n", ln, std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t).count());
+        //if(++ln % 1024 == 0) std::fprintf(stderr, "%zu lines read in %gms\n", ln, std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t).count());
         char *lend = line;
         int ncolons = 0;
         while(*lend && ncolons < 3) ncolons += (*lend++ == ':');
@@ -91,10 +91,8 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
             double num = std::strtoul(lend + 1, &lend, 10);
             if(num == 0) continue;
             unsigned long denom = std::strtoul(lend + 1, &lend, 10);
-            if(ss) 
-                (*ss)[sample_id].update(splice_hash);
-            else if(opss)
-                (*opss)[sample_id].update(splice_hash);
+            if(ss) (*ss)[sample_id].update(splice_hash);
+            else if(opss) (*opss)[sample_id].update(splice_hash);
             else {
                 if(opts.bed_parse_normalize_intervals_) num /= denom;
                 if(bmhs)

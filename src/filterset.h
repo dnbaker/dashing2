@@ -7,6 +7,7 @@
 #include "aesctr/wy.h"
 #include "aligned_vector.h"
 #include "interpbound.h"
+#include "enums.h"
 #include <climits>
 #include <cmath>
 
@@ -149,7 +150,6 @@ public:
             std::iota(tmpp, tmpp + n, size_t(0));
             std::sort(tmpp, tmpp, [&](auto x, auto y) {return tmpvs[x] < tmpvs[y];});
             for(size_t i = 0; i < n; ++i) {
-                
             }
             std::sort(&tmpvs[0], &tmpvs[n]);
         } else {
@@ -157,6 +157,26 @@ public:
         return ret;
     }
 #endif
+    bool in_set(u128_t x) const {
+        if(is_bf()) {
+            // TODO: batch to sort for efficiency -- see above drafting
+            RNG rng((x >> 64) - (x & u128_t(0xFFFFFFFFFFFFFFFF)));
+            schism::Schismatic<uint64_t> mod_(nbits());
+            // Maybe this can even be SIMDIfied?
+            for(int i = 0; i < k_; ++i) {
+                const size_t v = rng();
+                const size_t rem = mod_.mod(v);
+                //std::fprintf(stderr, "Getting hash %zu from rem %zu - %d at index %zu at bit %d\n", v, rem, i, (rem >> SHIFT), (rem & MASK));
+                if((data_[rem >> SHIFT] & (uint64_t(1) << (rem & MASK))) == 0) {
+                    //std::fprintf(stderr, "Data %zu at bit %d is 0\n", rem >> SHIFT, (rem & MASK));
+                    return false;
+                }
+            }
+            return true;
+        }
+        const  u128_t *p = (const u128_t *)data_.data(), *e = p + (data_.size() / 2), *it = std::lower_bound(p, e, x);
+        return it != e && *it == x;
+    }
     bool in_set(T x) const {
         if(is_bf()) {
             // TODO: batch to sort for efficiency -- see above drafting
@@ -176,9 +196,7 @@ public:
         }
         //std::fprintf(stderr, "Testing with hash set lookup, and %s\n", std::is_sorted(data_.begin(), data_.end()) ? "is sorted": "is not sorted");
         // Replace with interpolation search in the future
-        const T *p = data_.data(),
-                *e = p + data_.size(),
-                *it = std::lower_bound(p, e, x);
+        const T *p = data_.data(), *e = p + data_.size(), *it = std::lower_bound(p, e, x);
         // Equivalent, but no logging
         return it != e && *it == x;
     }

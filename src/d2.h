@@ -108,6 +108,9 @@ struct Dashing2Options {
     std::string outprefix_;
     std::string spacing_;
     std::string cmd_;
+    double kmer_downsample_frac_ = 1.;
+    uint64_t sampler_rng_;
+    uint64_t sampler_threshold_;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
@@ -119,10 +122,6 @@ struct Dashing2Options {
     std::unique_ptr<FilterSet> fs_;
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_, canon), rh_(k, canon, rht, w), rh128_(k, canon, rht, w), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
-#if 0
-    RollingHasher(unsigned k=21, bool canon=false,
-                   RollingHashingType enc=DNA, long long int wsz = -1, uint64_t seed1=1337, uint64_t seed2=137):
-#endif
         std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, %s target, space = %s, datatype = %s\n", k, w, rht == bns::DNA ? "DNA": "Protein", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
         if(nt <= 0) {
             DBG_ONLY(std::fprintf(stderr, "[%s:%s:%d] num threads < 0, checking OMP_NUM_THREADS\n", __FILE__, __func__, __LINE__);)
@@ -148,6 +147,16 @@ struct Dashing2Options {
     D2O2(count_threshold)
 #undef D2O
 #undef D2O2
+    void downsample(double f) {
+        if(f < 0. || f > 1.) throw std::runtime_error("Can't downsample to anything > 1 or < 0");
+        kmer_downsample_frac_ = f;
+        std::memcpy(&sampler_rng_, &f, 8);
+        sampler_threshold_ = std::ceil(uint64_t(-1) * f);
+    }
+    INLINE bool downsample_pass() {
+        return kmer_downsample_frac_ == 1. ||
+               wy::wyhash64_stateless(&sampler_rng_) < sampler_threshold_;
+    }
     // Getters and setters for all of the above
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
