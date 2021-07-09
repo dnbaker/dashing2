@@ -247,7 +247,7 @@ SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, in
 
 int wsketchusage() {
     std::fprintf(stderr, "Sketch raw IDs, with optional weights added\n"
-                         "Usage: dashing2 wsketch [input.bin] [input.weights.bin] <Optional: indptr.bin for CSR data>\n"
+                         "Usage: dashing2 wsketch [input.bin] <Optional: input.weights.bin> <Optional: indptr.bin for CSR data>\n"
                          "If only one path is provided, it treated as indices, and sketched via SetSketch; IE, everything is sketched with equal weight.\n"
                          "If two paths are provided, the second is treated as a weight vector, and the multiset is sketched via ProbMinHash or BagMinHash.\n"
                          "If three paths are provided, the second is treated as a weight vector, and the last is used as indptr; this yields a stacked set of sketches corresponding to the input matrix.\n"
@@ -261,6 +261,14 @@ int wsketchusage() {
                          "-o: outprefix. If unset, uses [input.bin]\n"
                          "-p: Set number of threads (processes)\n"
             );
+        std::fprintf(stderr, "If two are provided, then 1-D weighted minhashing is performed on the compressed vector. If three are passed, then this result is treated as a CSR-format matrix and then emits a matrix of sketches.\n");
+        std::fprintf(stderr, "To unweighted sparse matrices (omitting the data field), use CSR-style sketching but replace the weights file with '-'");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64 g1.fastq.k31.kmerset64 g1.fastq.k31.kmercounts.f64'.\n");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64 g1.fastq.k31.kmerset64 # sketches k-mers only'.\n");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat g1.fastq.k31.data64 fq.fastq.k31.indices64 # sketches weighted k-mer sets'.\n");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat g1.fastq.k31.data64 fq.fastq.k31.indices64 fq.fastq.k31.indptr64 # sketches weighted sets from CSR-format and emits these sketches stacked'.\n");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat - fq.fastq.k31.indices64 fq.fastq.k31.indptr64 # sketches sets from packed sets and emits these sketches stacked.");
+        std::fprintf(stderr, "The use of '-' causes the weights for all points to be uniform.\n");
     return 1;
 }
 template<typename T>
@@ -296,15 +304,7 @@ int wsketch_main(int argc, char **argv) {
     OMP_ONLY(omp_set_num_threads(std::max(nthreads, 1));)
     auto diff = argc - optind;
     if(diff < 1 || diff > 3) {
-        std::fprintf(stderr, "Required: two or three positional arguments. All flags must come before positional arguments. Diff: %d\n", diff);
-        std::fprintf(stderr, "If two are provided, then 1-D weighted minhashing is performed on the compressed vector. If three are passed, then this result is treated as a CSR-format matrix and then emits a matrix of sketches.\n");
-        std::fprintf(stderr, "To unweighted sparse matrices (omitting the data field), use CSR-style sketching but replace the weights file with '-'");
-        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64 g1.fastq.k31.kmerset64 g1.fastq.k31.kmercounts.f64'.\n");
-        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64 g1.fastq.k31.kmerset64 # sketches k-mers only'.\n");
-        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat g1.fastq.k31.data64 fq.fastq.k31.indices64 # sketches weighted k-mer sets'.\n");
-        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat g1.fastq.k31.data64 fq.fastq.k31.indices64 fq.fastq.k31.indptr64 # sketches weighted sets from CSR-format and emits these sketches stacked'.\n");
-        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat - fq.fastq.k31.indices64 fq.fastq.k31.indptr64 # sketches sets from packed sets and emits these sketches stacked.");
-        std::fprintf(stderr, "The use of '-' causes the weights for all points to be uniform.\n");
+        std::fprintf(stderr, "Required: between one and three positional arguments. All flags must come before positional arguments. Diff: %d\n", diff);
         return wsketchusage();
     }
     if(outpref.empty()) {
