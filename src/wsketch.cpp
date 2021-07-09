@@ -142,10 +142,10 @@ struct FReader{
     }
     template<typename VT>
     std::vector<VT> getvec() {
-        std::fprintf(stderr, "Getting type of size %zu from %s\n", sizeof(VT), path_.data());
+        //std::fprintf(stderr, "%s Getting type of size %zu from %s\n", __PRETTY_FUNCTION__, sizeof(VT), path_.data());
         std::vector<VT> ret;
         for(VT v; std::fread(&v, sizeof(v), 1, fp_) == 1u;ret.push_back(v));
-        std::fprintf(stderr, "ret size is %zu\n", ret.size());
+        //std::fprintf(stderr, "ret size is %zu\n", ret.size());
         return ret;
     }
     static inline bool endswith(std::string lhs, std::string rhs) {
@@ -169,7 +169,6 @@ std::vector<T> fromfile(std::string path) {
 }
 
 std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath, std::string indptrpath, size_t sksz, int usepmh, int usef32=0, bool wordids=false, bool ip32=false) {
-    // usef32 means use float32 instead of float64 for weights
     // default is f64
     // For IDs, default is 64 bits
     //
@@ -179,10 +178,11 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
             std::vector<TL> lvec;\
             std::vector<TR> rvec;\
             std::vector<IR> cvec;\
-            threads.emplace_back([&]() {if(cpath.size() && cpath != "-") lvec = fromfile<TL>(cpath);});\
+            threads.emplace_back([&]() {if(!cpath.empty() || cpath != "-") lvec = fromfile<TL>(cpath);});\
             threads.emplace_back([&]() {rvec = fromfile<TR>(idpath);});\
             threads.emplace_back([&]() {cvec = fromfile<IR>(indptrpath);});\
             for(auto &t: threads) t.join();\
+            threads.clear();\
             const auto nr = cvec.size() - 1;\
             assert(lvec.size() == rvec.size());\
             const TL *lp = lvec.size() ? lvec.data(): (const TL *)nullptr;\
@@ -200,7 +200,6 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
         } else if(ip32) {\
             PERF(LT, uint64_t, uint32_t);\
         } else {\
-            std::fprintf(stderr, "Doing 64-64\n");\
             PERF(LT, uint64_t, uint64_t);\
         }\
     } while(0)
@@ -215,7 +214,8 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
 #undef PERF
 #undef PERF2
 }
-SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bool usepmh, int usef32, bool wordids) {
+SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, int usepmh, int usef32, bool wordids) {
+
     // usef32 means use float32 instead of float64 for weights
     // default is f64
     // For IDs, default is 64 bits
@@ -310,7 +310,8 @@ int wsketch_main(int argc, char **argv) {
     if(outpref.empty()) {
         outpref = argv[optind];
     }
-    if(argc + 3 == optind) {
+    if(diff == 3) {
+        std::fprintf(stderr, "Getting CSR hashes\n");
         auto mhrs = wmh_from_file_csr(argv[optind], argv[optind + 1], argv[optind + 2], sketchsize, sketchtype, f32, u32, ip32);
         std::FILE *fp = std::fopen((outpref + ".sampled.indices.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64").data(), "wb");
         for(size_t i = 0; i < mhrs.size(); ++i) {
@@ -325,11 +326,12 @@ int wsketch_main(int argc, char **argv) {
         return 0;
     }
     SimpleMHRet mh;
-    if(argc - 1 == optind) {
+    for(int i = 0; i < argc; ++i) std::fprintf(stderr, "Arg %d/%d is %s (optind = %d)\n", i, argc, argv[i], optind);
+    if(diff == 1) {
         mh = SimpleMHRet(wmh_from_file(argv[optind], std::string(), sketchsize, sketchtype, f32, u32));
-    } else {
+    } else if(diff == 2) {
         mh = SimpleMHRet(wmh_from_file(argv[optind], argv[optind + 1], sketchsize, sketchtype, f32, u32));
-    }
+    } else throw 1;
     auto [sigs, indices, ids, total_weight] = mh.tup();
 
     write_container(indices, outpref + ".sampled.indices.u64");
@@ -338,7 +340,7 @@ int wsketch_main(int argc, char **argv) {
     std::ofstream ofs(outpref + ".sampled.tw.txt");
     std::string msg = std::string("Total weight: ") + std::to_string(total_weight) + ";" + argv[optind];
     if(optind + 1 < argc) msg += std::string(";") + argv[optind + 1];
-    msg += ';' + (f32 ? 'f': 'd') + ';' + (u32 ? 'W': 'L');
+    msg += ';' + (f32 == 1 ? 'f' : f32 == 0 ?'d': 'H') + ';' + (u32 ? 'W': 'L');
     ofs <<  msg << '\n';
     return 0;
 }
