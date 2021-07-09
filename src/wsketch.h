@@ -11,7 +11,10 @@ using std::uint64_t;
 struct SimpleMHRet: public std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, double> {
     using Tup =  std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, double>;
     Tup &tup() {return *static_cast<Tup *>(this);}
-#if 0
+    auto &sigs() {return std::get<0>(*this);}
+    auto &hashes() {return std::get<1>(*this);}
+    auto &ids() {return std::get<2>(*this);}
+    auto &total_weight() {return std::get<3>(*this);}
     SimpleMHRet &operator=(Tup &&o) {
         Tup::operator=(o);
         return *this;
@@ -20,8 +23,6 @@ struct SimpleMHRet: public std::tuple<std::vector<RegT>, std::vector<uint64_t>, 
         Tup::operator=(o);
         return *this;
     }
-#endif
-    //SimpleMHRet merge(SimpleMHRet *src, size_t n);
 };
 
 SimpleMHRet minhashf64u64(const double *, const uint64_t *, size_t, size_t, int usepmh);

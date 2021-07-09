@@ -75,8 +75,8 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     } else if(opts.sspace_ == SPACE_PSET) {
         pmhs.reset(new std::vector<ProbMinHash>(nsamples, ProbMinHash(opts.sketchsize_)));
     }
-    auto t = std::chrono::high_resolution_clock::now();
-    size_t ln = 0;
+    //auto t = std::chrono::high_resolution_clock::now();
+    //size_t ln = 0;
     for(char *line;(line = gzgets(ifp, gzbuf.get(), GZ_BUFFER_SIZE)) != nullptr;) {
         //if(++ln % 1024 == 0) std::fprintf(stderr, "%zu lines read in %gms\n", ln, std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t).count());
         char *lend = line;

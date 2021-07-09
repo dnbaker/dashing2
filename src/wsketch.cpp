@@ -14,7 +14,9 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
     std::atomic<size_t> total_processed;
     total_processed.store(0);
     auto t1 = std::chrono::high_resolution_clock::now();
-    //OMP_PFOR_DYN
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(dynamic, 16)
+#endif
     for(size_t i = 0; i < nr; ++i) {
         std::fprintf(stderr, "%zu/%zu\n", i, nr);
         ++total_processed;
@@ -24,16 +26,20 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
             h.update(j - b, weights ? weights[j]: FT(1));
         }
         if constexpr(!std::is_same_v<BMH, FullSetSketch>) h.finalize();
+        std::get<3>(ret[i]) = total_weight(h);
         std::vector<uint64_t> ids(m);
         auto &hids = h.ids();
         std::transform(hids.begin(), hids.end(), ids.begin(), [ind=indices + b](auto x) {return ind[x];});
         std::get<0>(ret[i]) = h.template to_sigs<RegT>();
         std::get<1>(ret[i]) = hids;
         std::get<2>(ret[i]) = ids;
-        std::get<3>(ret[i]) = total_weight(h);
-        if(total_processed.load() % 8 == 0) {
+        if(total_processed.load() % 65536 == 0) {
             std::chrono::duration<double, std::milli> diff(std::chrono::high_resolution_clock::now() - t1);
-            std::fprintf(stderr, "Processed %zu/%zu in %gms; Expected %zu seconds left...\n", total_processed.load(), nr, diff.count(), size_t(std::ceil(diff.count() / 1e6 * (nr / (total_processed.load() + 1)))));
+            auto left = nr - total_processed.load();
+            auto sperit = diff.count() / (total_processed.load() + 1);
+            auto timeleft = left * sperit;
+            std::fprintf(stderr, "%g of total done, expected %gms time left\n", double(left) / nr, timeleft);
+            std::fprintf(stderr, "Processed %zu/%zu in %gms; Expected < %zu seconds left...\n", total_processed.load(), nr, diff.count(), size_t(std::ceil(timeleft / 1e3)));
         }
     }
     return ret;
@@ -42,7 +48,7 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
 
 template<typename BMH, typename FT, typename IT>
 SimpleMHRet minwise_det(const FT *weights, const IT *indices, size_t n, size_t m) {
-    std::fprintf(stderr, "Made mw det, w = %p, i = %p, size = %u\n", (void *)weights, (void *)indices, sizeof(IT));
+    std::fprintf(stderr, "Made mw det, w = %p, i = %p, size = %zu\n", (void *)weights, (void *)indices, sizeof(IT));
     BMH h(m, true);
     for(size_t i = 0; i < n; ++i) {
         // We use the offset as a first ID, and then we convert these to the
@@ -55,13 +61,15 @@ SimpleMHRet minwise_det(const FT *weights, const IT *indices, size_t n, size_t m
     auto &hids = h.ids();
     std::transform(hids.begin(), hids.end(), ids.begin(), [ind=indices](auto x) {return ind[x];});
     SimpleMHRet ret;
-    std::get<0>(ret) = h.template to_sigs<RegT>();
-    std::get<1>(ret) = hids; std::get<2>(ret) = ids; std::get<3>(ret) = total_weight(h);
+    ret.sigs() = h.template to_sigs<RegT>();
+    ret.hashes() = hids;
+    ret.ids() = ids;
+    ret.total_weight() = total_weight(h);
     return ret;
 }
 template<typename FT, typename IT>
 SimpleMHRet minhash(const FT *weights, const IT *indices, size_t n, size_t m, int usepmh) {
-    std::fprintf(stderr, "Made mw det, w = %p, i = %p, size = %u, %d pmh\n", (void *)weights, (void *)indices, sizeof(IT), usepmh);
+    std::fprintf(stderr, "Made mw det, w = %p, i = %p, size = %zu, %d pmh\n", (void *)weights, (void *)indices, sizeof(IT), usepmh);
     if(usepmh == 1)
         return minwise_det<ProbMinHash>(weights, indices, n, m);
     if(usepmh == 0) return minwise_det<BagMinHash>(weights, indices, n, m);
@@ -149,21 +157,32 @@ struct FReader{
     }
 };
 
-std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath, std::string indptrpath, size_t sksz, int usepmh, bool usef32=false, bool wordids=false, bool ip32=false) {
+template<typename T>
+std::vector<T> fromfile(std::string path) {
+    std::FILE *fp = std::fopen(&path[0], "rb");
+    std::vector<T> ret;
+    for(T v;std::fread(&v, sizeof(T), 1, fp) == 1;ret.push_back(v));
+    std::fclose(fp);
+    return ret;
+}
+
+std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath, std::string indptrpath, size_t sksz, int usepmh, int usef32=0, bool wordids=false, bool ip32=false) {
     // usef32 means use float32 instead of float64 for weights
     // default is f64
     // For IDs, default is 64 bits
     //
     std::vector<SimpleMHRet> ret;
-    FReader lhs(cpath), rhs(idpath), ips(indptrpath);
-#define PERF(TL, TR, IR) do {auto lvec = lhs.getvec<TL>();\
-            std::fprintf(stderr, "Loaded vec lhs %zu\n", lvec.size());\
-            auto rvec = rhs.getvec<TR>(); \
-            std::fprintf(stderr, "Loaded vec rhs %zu\n", rvec.size());\
-            auto cvec = ips.getvec<IR>();\
-            std::fprintf(stderr, "Loaded vec ohs %zu\n", cvec.size());\
+    std::vector<std::thread> threads;
+#define PERF(TL, TR, IR) do {\
+            std::vector<TL> lvec;\
+            std::vector<TR> rvec;\
+            std::vector<IR> cvec;\
+            threads.emplace_back([&]() {lvec = fromfile<TL>(cpath);});\
+            threads.emplace_back([&]() {rvec = fromfile<TR>(idpath);});\
+            threads.emplace_back([&]() {cvec = fromfile<IR>(indptrpath);});\
+            for(auto &t: threads) t.join();\
+            const auto nr = cvec.size() - 1;\
             assert(lvec.size() == rvec.size());\
-            auto nr = cvec.size() - 1;\
             if(usepmh == 1) ret = minhash_rowwise_csr<ProbMinHash>(lvec.data(), rvec.data(), cvec.data(), nr, sksz);\
             else if(usepmh == 0) ret = minhash_rowwise_csr<BagMinHash>(lvec.data(), rvec.data(), cvec.data(), nr, sksz);\
             else ret = minhash_rowwise_csr<FullSetSketch>(lvec.data(), rvec.data(), cvec.data(), nr, sksz);\
@@ -178,11 +197,14 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
         } else if(ip32) {\
             PERF(LT, uint64_t, uint32_t);\
         } else {\
+            std::fprintf(stderr, "Doing 64-64\n");\
             PERF(LT, uint64_t, uint64_t);\
         }\
     } while(0)
-    if(usef32) {
+    if(usef32 == 1) {
         PERF2(float);
+    } else if(usef32 == -1) {
+        PERF2(uint16_t);
     } else {
         PERF2(double);
     }
@@ -190,7 +212,7 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
 #undef PERF
 #undef PERF2
 }
-SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bool usepmh, bool usef32, bool wordids) {
+SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bool usepmh, int usef32, bool wordids) {
     // usef32 means use float32 instead of float64 for weights
     // default is f64
     // For IDs, default is 64 bits
@@ -208,8 +230,10 @@ SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bo
             PERF(LT, uint64_t);\
         } \
     } while(0)
-    if(usef32) {
+    if(usef32 == 1) {
         PERF2(float);
+    } else if(usef32 == -1) {
+        PERF2(uint16_t);
     } else {
         PERF2(double);
     }
@@ -225,12 +249,14 @@ int wsketchusage() {
                          "If two paths are provided, the second is treated as a weight vector, and the multiset is sketched via ProbMinHash or BagMinHash.\n"
                          "If three paths are provided, the second is treated as a weight vector, and the last is used as indptr; this yields a stacked set of sketches corresponding to the input matrix.\n"
                          "-S: set sketch size\n"
-                         "-u: Read 32-bit identifiers from input.bin rather than 64-bit (Default: 64-bit integers)\n"
                          "-f: Read 32-bit floating point weights from [input.weights.bin] (Default: double)\n"
+                         "-H: Read 16-bit data weights from [input.weight.bin] (Default: float64)\n"
+                         "-u: Read 32-bit identifiers from input.bin rather than 64-bit (Default: 64-bit integers)\n"
                          "-P: Read 32-bit indptr integers [indptr.bin] (Default: uint64_t)\n"
                          "-B: Sketch with BagMinHash (Default: Uses ProbMinHash)\n"
                          "-q: Sketch with SetSketch (Default: Uses ProbMinHash unless no weights are provided.)\n"
                          "-o: outprefix. If unset, uses [input.bin]\n"
+                         "-p: Set number of threads (processes)\n"
             );
     return 1;
 }
@@ -243,18 +269,25 @@ void write_container(const T &vec, std::string path, size_t nb = 0) {
 }
 int wsketch_main(int argc, char **argv) {
     int sketchsize = 1024;
-    bool bmhsketch = 0;
-    bool u32 = false, f32 = false, ip32 = false;
+    int bmhsketch = 0;
+    bool u32 = false;
+    int f32 = 0;
+    bool ip32 = false;
     std::string outpref;
-    for(int c;(c = getopt(argc, argv, "o:B:S:uf")) >= 0;) { switch(c) {
+    int nthreads = 1;
+    for(int c;(c = getopt(argc, argv, "p:o:S:PqBHPufh?")) >= 0;) { switch(c) {
+        case 'p': nthreads = std::atoi(optarg); break;
         case 'S': sketchsize = std::atoi(optarg); break;
         case 'B': bmhsketch = 1; break;
         case 'q': bmhsketch = -1; break;
-        case 'u': u32 = true; break; case 'f': f32 = true; break;
-        case 'P': ip32 = true; break;
+        case 'u': u32 = true; break;
+        case 'f': f32 = true; break;
+        case 'H': f32 = -1; break;
         case 'o': outpref = optarg; break;
-        case 'h': return wsketchusage();
+        case 'P': ip32 = true; break;
+        case '?': case 'h': return wsketchusage();
     }}
+    OMP_ONLY(omp_set_num_threads(std::max(nthreads, 1));)
     auto diff = argc - optind;
     if(diff < 1 || diff > 3) {
         std::fprintf(stderr, "Required: two or three positional arguments. All flags must come before positional arguments. Diff: %d\n", diff);
@@ -262,9 +295,7 @@ int wsketch_main(int argc, char **argv) {
         std::fprintf(stderr, "Example: 'dashing2 wsketch -o g1.k31.k64 g1.fastq.k31.kmerset64 g1.fastq.k31.kmercounts.f64'.\n");
         return wsketchusage();
     }
-    std::fprintf(stderr, "Got here\n");
     if(outpref.empty()) {
-        std::fprintf(stderr, "Setting outpref\n");
         outpref = argv[optind];
     }
     if(argc + 3 == optind) {
@@ -278,10 +309,12 @@ int wsketch_main(int argc, char **argv) {
         std::fclose(fp);
         fp = std::fopen((outpref + ".sampled.info.txt").data(), "wb");
         for(size_t i = 0; i < mhrs.size(); ++i) {
-            std::fprintf(stderr, "%zu\t%g\n", i, std::get<3>(mhrs[i]));
+            std::fprintf(fp, "%zu\t%g\n", i, std::get<3>(mhrs[i]));
         }
         std::fclose(fp);
         return 0;
+    } else {
+        std::fprintf(stderr, "argc + %d = optind\n", optind - argc);
     }
     std::fprintf(stderr, "Got here\n");
     SimpleMHRet mh;
