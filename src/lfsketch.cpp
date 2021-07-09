@@ -91,10 +91,8 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
             double num = std::strtoul(lend + 1, &lend, 10);
             if(num == 0) continue;
             unsigned long denom = std::strtoul(lend + 1, &lend, 10);
-            if(ss) 
-                (*ss)[sample_id].update(splice_hash);
-            else if(opss)
-                (*opss)[sample_id].update(splice_hash);
+            if(ss) (*ss)[sample_id].update(splice_hash);
+            else if(opss) (*opss)[sample_id].update(splice_hash);
             else {
                 if(opts.bed_parse_normalize_intervals_) num /= denom;
                 if(bmhs)
