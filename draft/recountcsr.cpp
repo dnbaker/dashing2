@@ -47,7 +47,7 @@ auto parse_file(std::FILE *ifp) {
 	for(ssize_t rc; (rc = ::getline(&lptr, &linesz, ifp)) >= 0;++ln) {
         if(ln % 65536 == 0) std::fprintf(stderr, "Processed %zu lines, last rc is %zd\n", ln, rc);
         const uint64_t myid = idcounter++;
-        
+
         char *p = std::strchr(lptr, '\t');
         assert(p);
         char *p2 = std::strchr(p + 1, '\t');

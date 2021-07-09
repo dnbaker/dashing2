@@ -150,7 +150,6 @@ public:
             std::iota(tmpp, tmpp + n, size_t(0));
             std::sort(tmpp, tmpp, [&](auto x, auto y) {return tmpvs[x] < tmpvs[y];});
             for(size_t i = 0; i < n; ++i) {
-                
             }
             std::sort(&tmpvs[0], &tmpvs[n]);
         } else {

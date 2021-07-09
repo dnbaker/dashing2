@@ -4,6 +4,10 @@
 #include "sketch/bmh.h"
 namespace dashing2 {
 
+template<typename T>
+double total_weight(const T &x) {return x.total_weight();}
+template<>
+double total_weight(const FullSetSketch &x) {return x.total_updates();}
 template<typename BMH, typename FT, typename IT, typename IndPtrT=uint64_t>
 std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indices, const IndPtrT *indptr, size_t nr, size_t m) {
     std::vector<SimpleMHRet> ret(nr);
@@ -19,10 +23,10 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
         BMH h(m, true);
         const size_t b = indptr[i], e = indptr[i + 1];
         for(size_t j = b; j < e; ++j) {
-            h.add(j - b, weights[j]);
+            h.update(j - b, weights ? weights[j]: FT(1));
         }
-        std::get<3>(ret[i]) = h.total_weight();
-        h.finalize();
+        if constexpr(!std::is_same_v<BMH, FullSetSketch>) h.finalize();
+        std::get<3>(ret[i]) = total_weight(h);
         std::vector<uint64_t> ids(m);
         auto &hids = h.ids();
         std::transform(hids.begin(), hids.end(), ids.begin(), [ind=indices + b](auto x) {return ind[x];});
@@ -41,31 +45,35 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
     return ret;
 }
 
+
 template<typename BMH, typename FT, typename IT>
 SimpleMHRet minwise_det(const FT *weights, const IT *indices, size_t n, size_t m) {
+    std::fprintf(stderr, "Made mw det, w = %p, i = %p, size = %zu\n", (void *)weights, (void *)indices, sizeof(IT));
     BMH h(m, true);
     for(size_t i = 0; i < n; ++i) {
         // We use the offset as a first ID, and then we convert these to the
          // relevant IDs sampled at the end
-        h.add(i, weights[i]);
+        h.update(i, weights ? weights[i]: FT(1));
     }
     std::vector<uint64_t> ids(m);
     std::vector<RegT> regs;
-    h.finalize();
+    if constexpr(!std::is_same_v<BMH, FullSetSketch>) h.finalize();
     auto &hids = h.ids();
     std::transform(hids.begin(), hids.end(), ids.begin(), [ind=indices](auto x) {return ind[x];});
     SimpleMHRet ret;
     ret.sigs() = h.template to_sigs<RegT>();
     ret.hashes() = hids;
     ret.ids() = ids;
-    ret.total_weight() = h.total_weight();
+    ret.total_weight() = total_weight(h);
     return ret;
 }
 template<typename FT, typename IT>
-SimpleMHRet minhash(const FT *weights, const IT *indices, size_t n, size_t m, bool usepmh=true) {
-    if(usepmh)
+SimpleMHRet minhash(const FT *weights, const IT *indices, size_t n, size_t m, int usepmh) {
+    std::fprintf(stderr, "Made mw det, w = %p, i = %p, size = %zu, %d pmh\n", (void *)weights, (void *)indices, sizeof(IT), usepmh);
+    if(usepmh == 0)
         return minwise_det<ProbMinHash>(weights, indices, n, m);
-    return minwise_det<BagMinHash>(weights, indices, n, m);
+    if(usepmh == 1) return minwise_det<BagMinHash>(weights, indices, n, m);
+    return minwise_det<FullSetSketch>(weights, indices, n, m);
 }
 
 #if 0
@@ -97,14 +105,15 @@ SimpleMHRet minhash_csr(std::FILE *datap, std::FILE *indicesp, std::FILE *indptr
 #endif
 
 #define SIG(T1, T2, P1, P2) \
-SimpleMHRet minhash##T1##T2(const P1 *weights, const P2 *indices, size_t n, size_t m, bool usepmh=true);\
-SimpleMHRet minhash##T1##T2(const P1 *weights, const P2 *indices, size_t n, size_t m, bool usepmh) { \
+SimpleMHRet minhash##T1##T2(const P1 *weights, const P2 *indices, size_t n, size_t m, int usepmh) { \
     return minhash(weights, indices, n, m, usepmh);}\
 
+#if 0
 SIG(f64, u64, double, uint64_t)\
 SIG(f64, u32, double, uint32_t)\
 SIG(f32, u64, float, uint64_t)\
 SIG(f32, u32, float, uint32_t)
+#endif
 
 #undef SIG
 
@@ -113,6 +122,7 @@ struct FReader{
     std::FILE *fp_;
     bool pclose = true;
     FReader(std::string path): path_(path), fp_(nullptr) {
+        std::fprintf(stderr, "Reading from %s\n", path.data());
         std::string c = "cat ";
         if(endswith(path, ".gz"))
             c = "gzip -dc ";
@@ -158,25 +168,27 @@ std::vector<T> fromfile(std::string path) {
     return ret;
 }
 
-
-std::vector<SimpleMHRet> wmh_from_file_csr(std::string cpath, std::string idpath, std::string indptrpath, size_t sksz, bool usepmh, int usef32=0, bool wordids=false, bool ip32=false) {
+std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath, std::string indptrpath, size_t sksz, int usepmh, int usef32=0, bool wordids=false, bool ip32=false) {
     // usef32 means use float32 instead of float64 for weights
     // default is f64
     // For IDs, default is 64 bits
+    //
     std::vector<SimpleMHRet> ret;
     std::vector<std::thread> threads;
 #define PERF(TL, TR, IR) do {\
             std::vector<TL> lvec;\
             std::vector<TR> rvec;\
             std::vector<IR> cvec;\
-            threads.emplace_back([&]() {lvec = fromfile<TL>(cpath);});\
+            threads.emplace_back([&]() {if(cpath.size() && cpath != "-") lvec = fromfile<TL>(cpath);});\
             threads.emplace_back([&]() {rvec = fromfile<TR>(idpath);});\
             threads.emplace_back([&]() {cvec = fromfile<IR>(indptrpath);});\
             for(auto &t: threads) t.join();\
             const auto nr = cvec.size() - 1;\
             assert(lvec.size() == rvec.size());\
-            auto lp = lvec.data(); auto rp = rvec.data(); auto cp = cvec.data();\
-            ret = usepmh ? minhash_rowwise_csr<ProbMinHash>(lp, rp, cp, nr, sksz): minhash_rowwise_csr<BagMinHash>(lp, rp, cp, nr, sksz);\
+            const TL *lp = lvec.size() ? lvec.data(): (const TL *)nullptr;\
+            if(usepmh == 1) ret = minhash_rowwise_csr<ProbMinHash>(lp, rvec.data(), cvec.data(), nr, sksz);\
+            else if(usepmh == 0) ret = minhash_rowwise_csr<BagMinHash>(lp, rvec.data(), cvec.data(), nr, sksz);\
+            else ret = minhash_rowwise_csr<FullSetSketch>(lp, rvec.data(), cvec.data(), nr, sksz);\
         } while(0)
 #define PERF2(LT) do {\
         if(wordids) {\
@@ -203,15 +215,16 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string cpath, std::string idpath
 #undef PERF
 #undef PERF2
 }
-SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bool usepmh, int usef32, bool wordids=false) {
+SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bool usepmh, int usef32, bool wordids) {
     // usef32 means use float32 instead of float64 for weights
     // default is f64
     // For IDs, default is 64 bits
-    // 
-    FReader lhs(cpath), rhs(idpath);
-#define PERF(TL, TR) do {auto lvec = lhs.getvec<TL>(); auto rvec = rhs.getvec<TR>();\
+    //
+    FReader rhs(idpath);
+#define PERF(TL, TR) do {std::vector<TL> lvec; if(cpath.size()) {FReader lhs(cpath); lvec = lhs.getvec<TL>();} auto rvec = rhs.getvec<TR>();\
             assert(lvec.size() == rvec.size());\
-            return minhash(lvec.data(), rvec.data(), lvec.size(), sksz, usepmh);\
+            const TL *ptr = lvec.size() ? lvec.data(): static_cast<const TL *>(nullptr);\
+            return minhash(ptr, rvec.data(), rvec.size(), sksz, usepmh);\
         } while(0)
 #define PERF2(LT) do {\
         if(wordids) {\
@@ -235,53 +248,70 @@ SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, bo
 int wsketchusage() {
     std::fprintf(stderr, "Sketch raw IDs, with optional weights added\n"
                          "Usage: dashing2 wsketch [input.bin] [input.weights.bin] <Optional: indptr.bin for CSR data>\n"
+                         "If only one path is provided, it treated as indices, and sketched via SetSketch; IE, everything is sketched with equal weight.\n"
+                         "If two paths are provided, the second is treated as a weight vector, and the multiset is sketched via ProbMinHash or BagMinHash.\n"
+                         "If three paths are provided, the second is treated as a weight vector, and the last is used as indptr; this yields a stacked set of sketches corresponding to the input matrix.\n"
                          "-S: set sketch size\n"
                          "-f: Read 32-bit floating point weights from [input.weights.bin] (Default: double)\n"
                          "-H: Read 16-bit data weights from [input.weight.bin] (Default: float64)\n"
                          "-u: Read 32-bit identifiers from input.bin rather than 64-bit (Default: 64-bit integers)\n"
                          "-P: Read 32-bit indptr integers [indptr.bin] (Default: uint64_t)\n"
                          "-B: Sketch with BagMinHash (Default: Uses ProbMinHash)\n"
+                         "-q: Sketch with SetSketch (Default: Uses ProbMinHash unless no weights are provided.)\n"
                          "-o: outprefix. If unset, uses [input.bin]\n"
                          "-p: Set number of threads (processes)\n"
             );
     return 1;
 }
 template<typename T>
-void write_container(const T &vec, std::string path, size_t nb = 0) {
-    if(nb == 0) nb = vec.size();
+void write_container(const T &vec, std::string path) {
+    const size_t nb = vec.size();
     std::FILE *ifp = std::fopen(path.data(), "wb");
-    std::fwrite(vec.data(), sizeof(T), nb, ifp);
+    if(!ifp)
+        THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path '") + path + "' for reading"));
+    static constexpr size_t vnb = sizeof(std::decay_t<decltype(*vec.begin())>);
+    std::fwrite(vec.data(), vnb, nb, ifp);
     std::fclose(ifp);
 }
 int wsketch_main(int argc, char **argv) {
     int sketchsize = 1024;
-    bool bmhsketch = true;
+    int sketchtype = 1;
     bool u32 = false;
     int f32 = 0;
     bool ip32 = false;
     std::string outpref;
     int nthreads = 1;
-    for(int c;(c = getopt(argc, argv, "p:o:S:BHPufh?")) >= 0;) { switch(c) {
+    for(int c;(c = getopt(argc, argv, "p:o:S:PqBHPufh?")) >= 0;) { switch(c) {
         case 'p': nthreads = std::atoi(optarg); break;
         case 'S': sketchsize = std::atoi(optarg); break;
-        case 'o': outpref = optarg; break;
-        case 'B': bmhsketch = true; break;
-        case 'u': u32 = true; break; case 'f': f32 = 1; break;
+        case 'B': sketchtype = 0; break;
+        case 'q': sketchtype = -1; break;
+        case 'u': u32 = true; break;
+        case 'f': f32 = true; break;
         case 'H': f32 = -1; break;
+        case 'o': outpref = optarg; break;
         case 'P': ip32 = true; break;
         case '?': case 'h': return wsketchusage();
     }}
     OMP_ONLY(omp_set_num_threads(std::max(nthreads, 1));)
     auto diff = argc - optind;
-    if(diff < 2 || diff > 3) {
+    if(diff < 1 || diff > 3) {
         std::fprintf(stderr, "Required: two or three positional arguments. All flags must come before positional arguments. Diff: %d\n", diff);
         std::fprintf(stderr, "If two are provided, then 1-D weighted minhashing is performed on the compressed vector. If three are passed, then this result is treated as a CSR-format matrix and then emits a matrix of sketches.\n");
-        std::fprintf(stderr, "Example: 'dashing2 wsketch -o g1.k31.k64 g1.fastq.k31.kmerset64 g1.fastq.k31.kmercounts.f64'.\n");
+        std::fprintf(stderr, "To unweighted sparse matrices (omitting the data field), use CSR-style sketching but replace the weights file with '-'");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64 g1.fastq.k31.kmerset64 g1.fastq.k31.kmercounts.f64'.\n");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64 g1.fastq.k31.kmerset64 # sketches k-mers only'.\n");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat g1.fastq.k31.data64 fq.fastq.k31.indices64 # sketches weighted k-mer sets'.\n");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat g1.fastq.k31.data64 fq.fastq.k31.indices64 fq.fastq.k31.indptr64 # sketches weighted sets from CSR-format and emits these sketches stacked'.\n");
+        std::fprintf(stderr, "Example: 'dashing2 wsketch -S 64  -o g1.k31.k64.mat - fq.fastq.k31.indices64 fq.fastq.k31.indptr64 # sketches sets from packed sets and emits these sketches stacked.");
+        std::fprintf(stderr, "The use of '-' causes the weights for all points to be uniform.\n");
         return wsketchusage();
     }
-    if(outpref.empty()) outpref = argv[optind];
-    if(argc - 3 == optind) {
-        auto mhrs = wmh_from_file_csr(argv[optind], argv[optind + 1], argv[optind + 2], sketchsize, !bmhsketch, f32, u32, ip32);
+    if(outpref.empty()) {
+        outpref = argv[optind];
+    }
+    if(argc + 3 == optind) {
+        auto mhrs = wmh_from_file_csr(argv[optind], argv[optind + 1], argv[optind + 2], sketchsize, sketchtype, f32, u32, ip32);
         std::FILE *fp = std::fopen((outpref + ".sampled.indices.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64").data(), "wb");
         for(size_t i = 0; i < mhrs.size(); ++i) {
             std::fwrite(std::get<2>(mhrs[i]).data(), sizeof(uint64_t), std::get<2>(mhrs[i]).size(), fp);
@@ -293,18 +323,24 @@ int wsketch_main(int argc, char **argv) {
         }
         std::fclose(fp);
         return 0;
-    } else {
-        SimpleMHRet mh(wmh_from_file(argv[optind], argv[optind + 1], sketchsize, !bmhsketch, f32, u32));
-        std::fprintf(stderr, "MH is gotten\n");
-        auto [sigs, indices, ids, total_weight] = mh.tup();
-    
-        write_container(indices, outpref + ".sampled.indices.u64");
-        write_container(sigs, outpref + std::string(".sampled.hashes.f") + (sizeof(RegT) == 4  ? "32" : sizeof(RegT) == 8 ? "64": sizeof(RegT) == 16 ? "128": "UNKNOWN"));
-        write_container(ids, outpref + ".sampled.ids.u64");
-        write_container(std::string("Total weight: ") + std::to_string(total_weight) + ";" + argv[optind] + ";" + argv[optind + 1] + ';' + (f32 ? 'f': 'd') + ';' + (u32 ? 'W': 'L'),
-                        outpref + ".sampled.tw.txt");
-        return 0;
     }
+    SimpleMHRet mh;
+    if(argc - 1 == optind) {
+        mh = SimpleMHRet(wmh_from_file(argv[optind], std::string(), sketchsize, sketchtype, f32, u32));
+    } else {
+        mh = SimpleMHRet(wmh_from_file(argv[optind], argv[optind + 1], sketchsize, sketchtype, f32, u32));
+    }
+    auto [sigs, indices, ids, total_weight] = mh.tup();
+
+    write_container(indices, outpref + ".sampled.indices.u64");
+    write_container(sigs, outpref + std::string(".sampled.hashes.f") + (sizeof(RegT) == 4  ? "32" : sizeof(RegT) == 8 ? "64": sizeof(RegT) == 16 ? "128": "UNKNOWN"));
+    write_container(ids, outpref + ".sampled.ids.u64");
+    std::ofstream ofs(outpref + ".sampled.tw.txt");
+    std::string msg = std::string("Total weight: ") + std::to_string(total_weight) + ";" + argv[optind];
+    if(optind + 1 < argc) msg += std::string(";") + argv[optind + 1];
+    msg += ';' + (f32 ? 'f': 'd') + ';' + (u32 ? 'W': 'L');
+    ofs <<  msg << '\n';
+    return 0;
 }
 
 
