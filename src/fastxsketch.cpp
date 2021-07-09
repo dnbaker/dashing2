@@ -308,8 +308,10 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             __RESET(tid);
             auto perf_for_substrs = [&](const auto &func) {
                 for_each_substr([&](const std::string &subpath) {
-                    //std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
-                    auto lfunc = [&](auto x) {if(!opts.fs_ || !opts.fs_->in_set(x)) func(x);};
+                    auto lfunc = [&](auto x) {
+                        if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass())
+                            func(x);
+                    };
 #define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
                     if(!opts.parse_protein() && (opts.w_ > opts.k_ || opts.k_ <= 64)) {
                         if(opts.k_ < 32) {

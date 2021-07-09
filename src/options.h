@@ -26,6 +26,7 @@ enum OptArg{
     OPTARG_BED_NORMALIZE,
     OPTARG_PROTEIN,
     OPTARG_HPCOMPRESS,
+    OPTARG_DOWNSAMPLE_FRACTION,
     OPTARG_REFINEEXACT,
     OPTARG_DUMMY
 };
@@ -75,6 +76,7 @@ enum OptArg{
     {"full-setsketch", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
     {"enable-protein", no_argument, 0, OPTARG_PROTEIN},\
+    {"downsample", required_argument, 0, OPTARG_DOWNSAMPLE_FRACTION},\
     {"cache", no_argument, 0, 'W'},
 
 
@@ -116,6 +118,9 @@ enum OptArg{
         } \
         case OPTARG_HPCOMPRESS: {\
             hpcompress = true; break;\
+        }\
+        case OPTARG_DOWNSAMPLE_FRACTION: {\
+            downsample_frac = std::atof(optarg); break;\
         }
 
 
@@ -139,7 +144,9 @@ static constexpr const char *siglen =
         "\t If --bbit-sigs is enabled, this random signatures truncated to [arg] bytes will be replaced.\n"\
         "\t The tradeoff is that you may get better accuracy in set space comparisons at the expense of information regarding the sizes of the sets\n"\
         "--exact-kmer-dist\tThis uses exact k-mer distances instead of approximate methods\n"\
-        "--refine-exact\tThis causes the candidate KNN graph to be refined to a final KNN graph using full distances.\tIf using sketches, then full hash registers are used.\nOtherwise, exact k-mer comparison functions are used.\n"
+        "--refine-exact\tThis causes the candidate KNN graph to be refined to a final KNN graph using full distances.\tIf using sketches, then full hash registers are used.\nOtherwise, exact k-mer comparison functions are used.\n"\
+        "--downsample\t Downsample minimizers at fraction [arg] . Default is 1: IE, all minimizers pass.\n"
+
 
 
 }

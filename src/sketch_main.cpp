@@ -95,6 +95,7 @@ int sketch_main(int argc, char **argv) {
     int truncate_mode = 0;
     size_t nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
+    double downsample_frac = 1.;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
     // By default, use full hash values, but allow people to enable smaller
@@ -148,6 +149,7 @@ int sketch_main(int argc, char **argv) {
         .parse_by_seq(parse_by_seq)
         .cmd(cmd).count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress);
+    opts.downsample(downsample_frac);
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }

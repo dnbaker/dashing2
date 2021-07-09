@@ -109,6 +109,8 @@ struct Dashing2Options {
     std::string spacing_;
     std::string cmd_;
     double kmer_downsample_frac_ = 1.;
+    uint64_t sampler_rng_;
+    uint64_t sampler_threshold_;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
@@ -145,6 +147,16 @@ struct Dashing2Options {
     D2O2(count_threshold)
 #undef D2O
 #undef D2O2
+    void downsample(double f) {
+        if(f < 0. || f > 1.) throw std::runtime_error("Can't downsample to anything > 1 or < 0");
+        kmer_downsample_frac_ = f;
+        std::memcpy(&sampler_rng_, &f, 8);
+        sampler_threshold_ = std::ceil(uint64_t(-1) * f);
+    }
+    INLINE bool downsample_pass() {
+        return kmer_downsample_frac_ == 1. ||
+               wy::wyhash64_stateless(&sampler_rng_) < sampler_threshold_;
+    }
     // Getters and setters for all of the above
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}

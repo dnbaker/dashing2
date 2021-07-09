@@ -136,6 +136,7 @@ int cmp_main(int argc, char **argv) {
     int topk_threshold = -1;
     int truncate_mode = 0;
     double nbytes_for_fastdists = sizeof(RegT);
+    double downsample_frac = 1.;
     bool parse_by_seq = false;
     bool hpcompress = false;
     Measure measure = SIMILARITY;
@@ -176,6 +177,7 @@ int cmp_main(int argc, char **argv) {
         .count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress);
     opts.bed_parse_normalize_intervals_ = normalize_bed;
+    opts.downsample(downsample_frac);
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
     distopts.measure_ = measure;
     SketchingResult result;
