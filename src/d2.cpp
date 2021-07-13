@@ -4,9 +4,6 @@ namespace dashing2 {
 int cmp_main(int argc, char **argv);
 int wsketch_main(int argc, char **argv);
 int sketch_main(int argc, char **argv);
-bool endswith(std::string lhs, std::string rhs) {
-    return std::equal(rhs.begin(), rhs.end(), &lhs[lhs.size() - rhs.size()]);
-}
 std::string Dashing2Options::to_string() const {
     size_t m = 4096;
     std::string ret(m, '\0');

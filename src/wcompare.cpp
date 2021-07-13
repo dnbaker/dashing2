@@ -4,6 +4,7 @@
 #include <cassert>
 #include "wcompare.h"
 #include "enums.h"
+#include <cstring>
 
 namespace dashing2 {
 //using u128_t = __uint128_t;
@@ -17,24 +18,24 @@ struct PushBackCounter
 };
 
 template<size_t MODE=0>
-std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl, const double lhsum, const uint64_t *rptr, size_t rhl, const double rhsum, const double *lnptr, const double *rnptr) {
+std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl, const double lhsum, const double *lnptr, const uint64_t *rptr, const double *rnptr, size_t rhl, const double rhsum) {
     double isz_size = 0, isz_carry = 0.;
     auto increment = [](auto &sum, auto &carry, auto inc) __attribute__((__always_inline__)) {
         if(MODE) sketch::kahan::update(sum, carry, inc);
         else    sum += inc;
     };
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
-        if(lptr[lhi] == rptr[rhi]) {
+        if(lptr[lhi] == rptr[rhi])
             increment(isz_size, isz_carry, std::min(lnptr[lhi++], rnptr[rhi++]));
-        } else {
+        else {
             const bool v = lptr[lhi] < rptr[rhi];
             lhi += v; rhi += !v;
         }
     }
     return std::make_pair(isz_size, lhsum + rhsum - isz_size);
 }
-std::pair<double, double> weighted_compare(const uint64_t *lptr, size_t lhl, const double lhsum, const uint64_t *rptr, size_t rhl, const double rhsum, const double *lnptr, const double *rnptr, bool kahan) {
-    return kahan ? weighted_compare_mode<1>(lptr, lhl, lhsum, rptr, rhl, rhsum, lnptr, rnptr): weighted_compare_mode<0>(lptr, lhl, lhsum, rptr, rhl, rhsum, lnptr, rnptr);
+std::pair<double, double> weighted_compare(const uint64_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const uint64_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) {
+    return kahan ? weighted_compare_mode<1>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum): weighted_compare_mode<0>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
 }
 size_t set_compare(const uint64_t *lptr, size_t lhl, const uint64_t *rptr, size_t rhl) {
     PushBackCounter c;
@@ -47,11 +48,9 @@ double cosine_compare(const uint64_t *lptr, size_t lhl, [[maybe_unused]] const d
     auto increment = [kahan](auto &norm, auto &carry, auto inc) __attribute__((__always_inline__)) {
         if(kahan) sketch::kahan::update(norm, carry, inc); else norm += inc;
     };
-    // TODO:
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
-        if(lptr[lhi] == rptr[rhi]) {
-            increment(dotprod, carry, lnptr[lhi++] * rnptr[rhi++]);
-        } else {
+        if(lptr[lhi] == rptr[rhi]) increment(dotprod, carry, lnptr[lhi++] * rnptr[rhi++]);
+        else {
             const bool v = lptr[lhi] < rptr[rhi];
             lhi += v; rhi += !v;
         }

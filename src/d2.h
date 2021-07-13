@@ -67,14 +67,14 @@ static inline bool check_compressed(std::string &path, int &ft) {
         ft = 0;
         return true;
     }
-    if(bns::isfile(path + ".gz")) {
-        ft = 1;
-        path = path + ".gz";
+    std::string opath = path + ".gz";
+    if(bns::isfile(opath)) {
+        ft = 1; path = opath;
         return true;
     }
-    if(bns::isfile(path + ".xz")) {
-        ft = 2;
-        path = path + ".xz";
+    opath = path + ".xz";
+    if(bns::isfile(opath)) {
+        ft = 2; path = opath;
         return true;
     }
     return false;
@@ -183,6 +183,9 @@ struct Dashing2Options {
     auto nthreads() const {return nthreads_;}
 };
 
+static INLINE bool endswith(std::string lhs, std::string rhs) {
+    return std::equal(rhs.begin(), rhs.end(), &lhs[lhs.size() - rhs.size()]);
+}
 
 
 

@@ -257,10 +257,15 @@ case v: {\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
+        //std::fprintf(stderr, "Paths %zu/%zu are %s/%s\n", i, j, lpath.data(), rpath.data());
+        std::string dummy;
+        auto &lnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[i]: dummy);
+        auto &rnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[j]: dummy);
         const bool lcomp = iscomp(lpath), rcomp = iscomp(rpath);
-        std::fprintf(stderr, "Exact k-mer distance!\n");
-        if(lcomp || rcomp) {
-            std::fprintf(stderr, "One of these is compressed\n");
+        const bool lncomp = iscomp(lnpath), rncomp = iscomp(rnpath);
+        if(lcomp || rcomp || lncomp || rncomp)
+        {
+            DBG_ONLY(std::fprintf(stderr, "One of these is compressed\n");)
             std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
             std::string lcmd = path2cmd(lpath);
             std::string rcmd = path2cmd(rpath);
@@ -275,14 +280,14 @@ case v: {\
                 if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
             }
             const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-            std::fprintf(stderr, "Points: %p, %p, %p, %p\n", (void *)lhk, (void *)rhk, (void *)lhn, (void *)rhn);
+            //std::fprintf(stderr, "Points: %p, %p, %p, %p\n", (void *)lhk, (void *)rhk, (void *)lhn, (void *)rhn);
             auto [isz_size, union_size] = weighted_compare(lhk, rhk, 0, 0, lhc, rhc);
             double res = isz_size;
             CORRECT_RES(res, opts.measure_, lhc, rhc)
             ::pclose(lhk); ::pclose(rhk);
             if(lhn) ::pclose(lhn), ::pclose(rhn);
         } else {
-            std::fprintf(stderr, "Using mmapping\n");
+            //std::fprintf(stderr, "Using mmapping, %s and %s\n", lpath.data(), rpath.data());
             mio::mmap_source lhs(lpath), rhs(rpath);
             std::unique_ptr<mio::mmap_source> lhn, rhn;
             if(result.kmercountfiles_.size()) {
@@ -295,7 +300,7 @@ case v: {\
             if(lhn && rhn) {
                 const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
                 double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-                auto [isz_size, union_size] = weighted_compare(lptr, lhl, lhc, rptr, rhl, rhc, lnptr, rnptr);
+                auto [isz_size, union_size] = weighted_compare(lptr, lnptr, lhl, lhc, rptr, rnptr, rhl, rhc);
                 double res = isz_size;
                 CORRECT_RES(res, opts.measure_, lhc, rhc)
             } else {
@@ -378,12 +383,19 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
         OMP_PFOR
         for(size_t i = 0; i < n; ++i) {
             int ft;
-            int isf = check_compressed(result.names_.at(i), ft);
+#if 0
+            if(!check_compressed(result.names_.at(i), ft)) {
+                std::fprintf(stderr, "Missing input file %s at %zu, ignoring...\n", &result.names_.at(i)[0], i);
+            }
+#endif
             std::FILE *ifp = nullptr;
             std::string fn = opts.kmer_result_ == FULL_MMER_SET ? result.kmerfiles_.at(i): result.destination_files_.at(i);
             if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE) {
-                if(!check_compressed(fn, ft)) throw std::runtime_error("Missing kmerfile or destination file");
-                std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand") + fn;
+                if(!check_compressed(fn, ft)) throw std::runtime_error(std::string("Missing kmerfile or destination file: ") + fn);
+                if(endswith(fn, ".xz")) ft = 2;
+                else if(endswith(fn, ".gz")) ft = 1;
+                else ft = 0;
+                std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
                 std::fprintf(stderr, "Checking with command = '%s'\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
@@ -392,8 +404,13 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
                 result.cardinalities_[i] = c;
             } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 if(!check_compressed(result.kmercountfiles_[i], ft)) throw std::runtime_error("Missing kmercountfile");
-                std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand")
-                    + result.kmercountfiles_[i];
+                if(endswith(result.kmercountfiles_[i], ".xz")) ft = 2;
+                else if(endswith(result.kmercountfiles_[i], ".gz")) ft = 1;
+                else ft = 0;
+                std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
+                if(cmd == "unknowncommand") THROW_EXCEPTION(std::runtime_error("Failure"));
+                cmd += result.kmercountfiles_[i];
+                std::fprintf(stderr, "Calling %s\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
                 double x, c, s;
