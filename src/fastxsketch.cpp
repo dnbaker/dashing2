@@ -247,7 +247,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             }
             ret += ".";
             ret += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(opts.kmer_result_);
-            return ret + "." + bns::to_string(opts.rht_) + suffix;
+            ret = ret + "." + bns::to_string(opts.rht_) + suffix;
+            DBG_ONLY(std::fprintf(stderr, "Source %s->%s\n", path.data(), ret.data());)
+            return ret;
         };
         if(opts.build_sig_matrix_) {
             ret.signatures_.resize(ss * paths.size());
@@ -257,6 +259,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         }
         if(opts.build_count_matrix_) {
             ret.kmercounts_.resize(ss * paths.size());
+        }
+        if(opts.kmer_result_ == FULL_MMER_SET) {
+            ret.kmerfiles_.resize(ret.destination_files_.size());
         }
         OMP_PFOR_DYN
         for(size_t i = 0; i < paths.size(); ++i) {
@@ -274,9 +279,12 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             std::string destkmercounts = destination_prefix + ".kmercounts.f64";
             std::string destkmer = destination_prefix + ".kmer.u64";
             int dkt, dct, dft;
-            const bool dkif = check_compressed(destkmer, dkt);
-            const bool dkcif = check_compressed(destkmercounts, dct);
+            bool dkif = check_compressed(destkmer, dkt);
             const bool destisfile = check_compressed(destination, dft);
+            if(!dkif && opts.kmer_result_ == FULL_MMER_SET && destisfile) {
+                dkif = 1; destkmer = destination;
+            }
+            const bool dkcif = check_compressed(destkmercounts, dct);
             if(ret.kmercountfiles_.size() > myind) ret.kmercountfiles_[myind] = destkmercounts;
             if(opts.cache_sketches_ &&
                (destisfile || (opts.kmer_result_ == FULL_MMER_COUNTDICT && dkif)) &&
@@ -296,7 +304,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                     std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
                 }
-                DBG_ONLY(std::fprintf(stderr, "Cache-sketches enabled. Using saved data at %s\n", destination.data());)
+                if(ret.kmerfiles_.size() > i) {
+                    ret.kmerfiles_[i] = destkmer;
+                }
                 continue;
             } else {
 #ifndef NDEBUG
@@ -343,12 +353,13 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 std::vector<uint64_t> kmervec64;
                 std::vector<double> kmerveccounts;
                 if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
-                    if(opts.use128()) {
+                    if(opts.use128())
                         ctr.finalize(kmervec128, kmerveccounts, opts.count_threshold_);
-                    } else {
+                    else
                         ctr.finalize(kmervec64, kmerveccounts, opts.count_threshold_);
-                    }
-                    ret.cardinalities_[myind] = opts.kmer_result_ == FULL_MMER_SET ? (opts.use128() ? kmervec128.size(): kmervec64.size()): std::accumulate(kmerveccounts.begin(), kmerveccounts.end(), size_t(0));
+                    ret.cardinalities_[myind] =
+                        opts.kmer_result_ == FULL_MMER_SET ? std::max(kmervec128.size(), kmervec64.size())
+                                                           : std::accumulate(kmerveccounts.begin(), kmerveccounts.end(), size_t(0));
                 } else if(opts.sspace_ == SPACE_MULTISET) {
                     ctr.finalize(bmhs[tid], opts.count_threshold_);
                     ret.cardinalities_[myind] = bmhs[tid].total_weight();
@@ -428,7 +439,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
                     if(opts.kmer_result_ == FULL_MMER_COUNTDICT || (opts.kmer_result_ == FULL_MMER_SET && opts.save_kmercounts_)) {
-                        std::fprintf(stderr, "kvc size %zu. Writing to file %s\n", kmerveccounts.size(), destkmercounts.data());
+                        DBG_ONLY(std::fprintf(stderr, "kvc size %zu. Writing to file %s\n", kmerveccounts.size(), destkmercounts.data());)
                         tmp = std::move(kmerveccounts);
                     } else DO_IF(pmhs) else DO_IF(bmhs) else DO_IF(opss) else DO_IF(fss)
 #undef DO_IF
@@ -517,7 +528,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
 }
 
 SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const std::vector<std::string> &names=std::vector<std::string>()) {
-    std::fprintf(stderr, "About to merge from %p of size %zu, names has size %zu\n", (void *)start, n, names.size());
+    DBG_ONLY(std::fprintf(stderr, "About to merge from %p of size %zu, names has size %zu\n", (void *)start, n, names.size());)
     SketchingResult ret;
     ret.options_ = start->options_;
     if(n == 0) return ret;
