@@ -371,20 +371,20 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
 }
 void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     if(opts.kmer_result_ >= FULL_MMER_SET && result.cardinalities_.size() && result.cardinalities_.front() < 0.) {
+        std::fprintf(stderr, "Getting cardinalities from k-mer set/seq/countdict\n");
         const size_t n = result.cardinalities_.size();
         if(opts.parse_by_seq_)
             THROW_EXCEPTION(std::runtime_error("Not yet supported"));
         OMP_PFOR
         for(size_t i = 0; i < n; ++i) {
             int ft;
-            int isf = check_compressed(result.names_[i], ft);
-            std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand")
-                + result.names_[i];
-            std::FILE *ifp = ::popen(cmd.data(), "r");
-            std::string fn = opts.kmer_result_ == FULL_MMER_SET ? result.kmerfiles_[i]: result.destination_files_[i];
+            int isf = check_compressed(result.names_.at(i), ft);
+            std::FILE *ifp = nullptr;
+            std::string fn = opts.kmer_result_ == FULL_MMER_SET ? result.kmerfiles_.at(i): result.destination_files_.at(i);
             if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE) {
                 if(!check_compressed(fn, ft)) throw std::runtime_error("Missing kmerfile or destination file");
                 std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand") + fn;
+                std::fprintf(stderr, "Checking with command = '%s'\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
                 size_t c = 0;
