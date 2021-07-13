@@ -84,7 +84,7 @@ enum OptArg{
 #define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
 #define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
-#define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atoi(optarg); break;}
+#define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atof(optarg); break;}
 #define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN; break;}
 #define REFINEEXACT_FIELD case OPTARG_REFINEEXACT: {refine_exact = true; break;}
 
