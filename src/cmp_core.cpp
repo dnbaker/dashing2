@@ -166,7 +166,7 @@ case v: {\
                 case 1: {
                     uint8_t *ptr = static_cast<uint8_t *>(opts.compressed_ptr_);
                     res = sketch::eq::count_gtlt_nibbles(ptr + i * opts.sketchsize_ / 2, ptr + j * opts.sketchsize_ / 2, opts.sketchsize_);
-                    std::fprintf(stderr, "gt/lt/eq: %zu/%zu/%zu\n", size_t(res.first), size_t(res.second), size_t(opts.sketchsize_ - res.first - res.second));
+                    //std::fprintf(stderr, "gt/lt/eq: %zu/%zu/%zu\n", size_t(res.first), size_t(res.second), size_t(opts.sketchsize_ - res.first - res.second));
                     break;
                 }
                 default: __builtin_unreachable();
