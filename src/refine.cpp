@@ -19,7 +19,7 @@ void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
         // Selves are not in the list; We'll add self-connections later
         auto beg = l.begin(), e = l.end();
         const size_t lsz = l.size();
-        std::fprintf(stderr, "Processing seqset %zu/%s\n", i, result.names_[i].data());
+        DBG_ONLY(std::fprintf(stderr, "Processing seqset %zu/%s\n", i, result.names_[i].data());)
         if(opts.num_neighbors_ > 0 && size_t(opts.num_neighbors_) < lsz) {
             // -- as above, for the KNN-format
 #ifndef NDEBUG
