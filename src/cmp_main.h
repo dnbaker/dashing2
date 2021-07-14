@@ -25,6 +25,7 @@ enum Measure {
     SYMMETRIC_CONTAINMENT, // (A & B) / min(|A|, |B|)
     POISSON_LLR, // -log-transformed similarity
     INTERSECTION, // |A & B|
+    M_EDIT_DISTANCE = POISSON_LLR, // Whether in minimizer-sequence space or sequence edit distance space.
     MASH_DISTANCE = POISSON_LLR
 };
 static inline std::string to_string(Measure m) {
@@ -84,6 +85,9 @@ struct Dashing2DistOptions: public Dashing2Options {
         truncation_method_ = truncate_method;
         num_neighbors_ = nneighbors;
         min_similarity_ = minsim;
+        if(this->kmer_result_ >= FULL_MMER_SET) {
+            exact_kmer_dist_ = true;
+        }
         validate();
     }
     ~Dashing2DistOptions() {
@@ -97,6 +101,10 @@ struct Dashing2DistOptions: public Dashing2Options {
         if((sspace_ == SPACE_PSET || sspace_ == SPACE_EDIT_DISTANCE) && measure_ == INTERSECTION) {
             std::fprintf(stderr, "Can't estimate intersection sizes for ProbMinHash due to the implicit normalization. Reverting to similarity\n");
             measure_ = SIMILARITY;
+        }
+        if((sspace_ == SPACE_EDIT_DISTANCE) && measure_ != SIMILARITY && measure_ != M_EDIT_DISTANCE) {
+            std::fprintf(stderr, "Edit distance LSH, but measure is not similarity. Switching to edit distance so that it is well defined\n");
+             measure_ = M_EDIT_DISTANCE;
         }
     }
 };

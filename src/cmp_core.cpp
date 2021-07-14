@@ -1,11 +1,11 @@
 #include "cmp_main.h"
 #include "sketch/count_eq.h"
-//#include "sketch/ssi.h"
 #include "index_build.h"
 #include "refine.h"
 #include "emitnn.h"
 #include "mio.hpp"
 #include "wcompare.h"
+#include "levenshtein-sse.hpp"
 
 
 namespace dashing2 {
@@ -210,30 +210,29 @@ case v: {\
             else if(opts.measure_ == POISSON_LLR)
                 ret = sim2dist(ret);
         }
+    } else if(opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE)) {
+        //std::fprintf(stderr, "Return exact distance for edit distance between sequences\n");
+        assert(result.sequences_.size() > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zu vs %zu/%zu)\n", result.sequences_.size(), i, j));
+        return levenshteinSSE::levenshtein(result.sequences_[i], result.sequences_[j]);
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET) {
-            //std::fprintf(stderr, "Comparing setsketches at %zu/%zu, size = %zu\n", i, j, opts.sketchsize_);
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
-            //for(size_t m = 0; m < opts.sketchsize_; ++m) std::fprintf(stderr, "%zu/%g/%g\n", m, lhsrc[m], rhsrc[m]);
             LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
             lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
             eq = (1. - alpha - beta);
-            //std::fprintf(stderr, "lhcard %g, rhc %g\n", lhcard, rhcard);
             if(eq <= 0.)
                 return opts.measure_ != POISSON_LLR ? 0.: std::numeric_limits<double>::max();
             ucard = std::max(lhcard + rhcard / (2. - alpha - beta), 0.);
             LSHDistType isz = ucard * eq, sim = eq;
-            //std::fprintf(stderr, "isz %g. sim %g\n", isz, sim);
             ret = opts.measure_ == SIMILARITY ? sim
                 : opts.measure_ == INTERSECTION ? isz
                 : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
                 : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
-            //std::fprintf(stderr, "doing equality comparisons between registers for %s/%s\n", to_string(opts.sspace_).data(), to_string(opts.kmer_result_).data());
             const auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
             DBG_ONLY(std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);)
@@ -243,7 +242,7 @@ case v: {\
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / lhcard;
             else if(opts.measure_ == POISSON_LLR) ret = sim2dist(ret);
         }
-    } else if(opts.exact_kmer_dist_) {
+    } else {
 #define CORRECT_RES(res, measure, lhc, rhc)\
             if(measure == INTERSECTION) {\
                 /* do nothing*/ \
@@ -265,7 +264,6 @@ case v: {\
         const bool lncomp = iscomp(lnpath), rncomp = iscomp(rnpath);
         if(lcomp || rcomp || lncomp || rncomp)
         {
-            DBG_ONLY(std::fprintf(stderr, "One of these is compressed\n");)
             std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
             std::string lcmd = path2cmd(lpath);
             std::string rcmd = path2cmd(rpath);
@@ -280,10 +278,19 @@ case v: {\
                 if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
             }
             const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-            //std::fprintf(stderr, "Points: %p, %p, %p, %p\n", (void *)lhk, (void *)rhk, (void *)lhn, (void *)rhn);
-            auto [isz_size, union_size] = weighted_compare(lhk, rhk, 0, 0, lhc, rhc);
-            double res = isz_size;
-            CORRECT_RES(res, opts.measure_, lhc, rhc)
+            if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
+                if(opts.exact_kmer_dist_) {
+                    auto [edit_dist, max_edit_dist] = mmer_edit_distance(lhk, rhk, opts.use128());
+                    ret = opts.measure_ == M_EDIT_DISTANCE ? edit_dist: max_edit_dist - edit_dist;
+                } else {
+                    ret = hamming_compare_f64(lhk, rhk);
+                }
+            } else {
+                std::pair<double, double> wcret = weighted_compare(lhk, rhk, 0, 0, lhc, rhc);
+                auto [isz_size, union_size] = wcret;
+                double res = isz_size;
+                CORRECT_RES(res, opts.measure_, lhc, rhc)
+            }
             ::pclose(lhk); ::pclose(rhk);
             if(lhn) ::pclose(lhn), ::pclose(rhn);
         } else {
@@ -308,6 +315,7 @@ case v: {\
                 CORRECT_RES(res, opts.measure_, lhl, rhl)
             }
         }
+#undef CORRECT_RES
         // Compare exact representations, not compressed shrunk
     }
     if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<double>::max();
@@ -316,7 +324,7 @@ case v: {\
 void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::fprintf(stderr, "Beginning emit_all_pairs\n");
     const size_t ns = result.names_.size();
-    std::FILE *ofp = opts.outfile_path_.empty() ? stdout: std::fopen(opts.outfile_path_.data(), "w");
+    std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
     std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;

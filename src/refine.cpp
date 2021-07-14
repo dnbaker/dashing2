@@ -6,7 +6,7 @@ void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     // 1. Perform full distance computations over the LSH-selected candidates
     if(opts.refine_exact_ && !opts.exact_kmer_dist_) {
-        if(opts.kmer_result_ <= FULL_SETSKETCH) {
+        if(opts.kmer_result_ <= FULL_SETSKETCH && opts.compressed_ptr_) {
             std::free(opts.compressed_ptr_), opts.compressed_ptr_ = 0;
         } else {
             opts.exact_kmer_dist_ = true;

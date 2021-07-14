@@ -14,7 +14,16 @@ std::pair<double, double> weighted_compare(const uint64_t *lptr, const double *l
 size_t set_compare(const uint64_t *lptr, size_t lhl, const uint64_t *rptr, size_t rhl);
 // Compute the dot product between k-mer sets, which can be used to compute cosine similarity/distance.
 double cosine_compare(const uint64_t *lptr, size_t lhl, const double lhnorm, const uint64_t *rptr, size_t rhl, const double rhnorm, const double *lnptr, const double *rnptr, bool kahan=false);
+size_t hamming_compare(const uint64_t *SK_RESTRICT lptr, size_t lhl, const uint64_t *SK_RESTRICT rptr, size_t rhl);
+
 std::pair<double, double> weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum);
+
+size_t hamming_compare_f64(std::FILE *lfp, std::FILE *rfp);
+size_t hamming_compare_f128(std::FILE *lfp, std::FILE *rfp);
+std::pair<size_t, size_t> mmer_edit_distance(std::FILE *lfp, std::FILE *rfp, bool use128=true);
+// Computes edit distance between two file pointer's data
+// If true, uses __uint128_t
+// otherwise, uint64_t
 
 }
 

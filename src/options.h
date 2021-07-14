@@ -28,6 +28,10 @@ enum OptArg{
     OPTARG_HPCOMPRESS,
     OPTARG_DOWNSAMPLE_FRACTION,
     OPTARG_REFINEEXACT,
+    OPTARG_MASHDIST,
+    OPTARG_SYMCONTAIN,
+    OPTARG_CONTAIN,
+    OPTARG_ASYMMETRIC_ALLPAIRS,
     OPTARG_DUMMY
 };
 
@@ -63,12 +67,19 @@ enum OptArg{
     LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)\
     LO_FLAG("bbit-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
     LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
+    LO_FLAG("mash-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
+    LO_FLAG("distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
+    LO_FLAG("symmetric-containment", OPTARG_SYMCONTAIN, measure, SYMMETRIC_CONTAINMENT)\
+    LO_FLAG("containment", OPTARG_CONTAIN, measure, SYMMETRIC_CONTAINMENT)\
+    LO_FLAG("poisson-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
+    LO_FLAG("compute-edit-distance", OPTARG_MASHDIST, measure, M_EDIT_DISTANCE)\
     LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
     LO_FLAG("save-kmers", 's', save_kmers, true)\
+    LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_ARG("regbytes", OPTARG_REGBYTES)\
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
     {"refine-exact", no_argument, 0, OPTARG_REFINEEXACT},\
@@ -145,7 +156,15 @@ static constexpr const char *siglen =
         "\t The tradeoff is that you may get better accuracy in set space comparisons at the expense of information regarding the sizes of the sets\n"\
         "--exact-kmer-dist\tThis uses exact k-mer distances instead of approximate methods\n"\
         "--refine-exact\tThis causes the candidate KNN graph to be refined to a final KNN graph using full distances.\tIf using sketches, then full hash registers are used.\nOtherwise, exact k-mer comparison functions are used.\n"\
-        "--downsample\t Downsample minimizers at fraction [arg] . Default is 1: IE, all minimizers pass.\n"
+        "--downsample\t Downsample minimizers at fraction [arg] . Default is 1: IE, all minimizers pass.\n"\
+        "\n\nDistance specifications\n"\
+        "The default value emitted is similarity. For MinHash/HLL/SetSketch sketches, this is the fraction of shared registers.\n"\
+        "This can be changed to a distance (--mash-distance) for k-mer similarity, where it can be used for hierarchical clustering.\n"\
+        "--mash-distance/--poisson-distance\t Emit distances, as estimated by the Poisson model for k-mer distances.\n"\
+        "--symmetric-containment\t Use symmetric containment as the distance. e.g., (|A & B| / min(|A|, |B|))\n"\
+        "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
+        "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
+        "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"
 
 
 
