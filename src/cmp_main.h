@@ -5,20 +5,6 @@
 
 namespace dashing2 {
 
-#if 0
-enum OutputKind {
-    SYMMETRIC_ALL_PAIRS,
-    ASYMMETRIC_ALL_PAIRS,
-    KNN_GRAPH, // Fixed top-k neighbors
-    NN_GRAPH_THRESHOLD, // Variable number of similarities, as given by threshold
-    DEDUP
-}
-enum OutputFormat {
-    MACHINE_READABLE,
-    HUMAN_READABLE,
-    BINARY = MACHINE_READABLE
-};
-#endif
 enum Measure {
     SIMILARITY,  // Jaccard or set similarity. Default behavior
     CONTAINMENT, // (A & B) / A

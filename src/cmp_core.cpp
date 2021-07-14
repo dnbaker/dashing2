@@ -391,11 +391,6 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
         OMP_PFOR
         for(size_t i = 0; i < n; ++i) {
             int ft;
-#if 0
-            if(!check_compressed(result.names_.at(i), ft)) {
-                std::fprintf(stderr, "Missing input file %s at %zu, ignoring...\n", &result.names_.at(i)[0], i);
-            }
-#endif
             std::FILE *ifp = nullptr;
             std::string fn = opts.kmer_result_ == FULL_MMER_SET ? result.kmerfiles_.at(i): result.destination_files_.at(i);
             if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE) {

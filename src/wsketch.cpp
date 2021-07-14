@@ -76,44 +76,9 @@ SimpleMHRet minhash(const FT *weights, const IT *indices, size_t n, size_t m, in
     return minwise_det<FullSetSketch>(weights, indices, n, m);
 }
 
-#if 0
-void fillindptr(std::FILE *fp, std::vector<size_t> &ip, size_t ipbytes=8) {
-#define PERF(NB, T) \
-    if(ipbytes == NB) { \
-        ip = {0}; \
-        T v; \
-        while(!std::feof(fp) && std::fread(&v, sizeof(v), 1, fp) == 1)\
-            ip.push_back(v); \
-        return;\
-    }
-    PERF(8, uint64_t)
-    PERF(4, uint32_t)
-    throw std::runtime_error("Unexpected indptr size not 32 or 64 bits");
-}
-
-SimpleMHRet minhash_csr(std::FILE *datap, std::FILE *indicesp, std::FILE *indptrp, size_t ipbytes=8) {
-    fillindptr(indptrp, indptr, ipbytes);
-    T v;
-    I i;
-    for(;!std::feof(datap);) {
-        if(std::feof(indicesp)) throw std::runtime_error("Indices reached EOF before data; incorrect size?");
-        if(std::fread(&v, sizeof(v), 1, datap) != 1u) throw 1;
-        if(std::fread(&i, sizeof(i), 1, datap) != 1u) throw 2;
-    }
-}
-
-#endif
-
 #define SIG(T1, T2, P1, P2) \
 SimpleMHRet minhash##T1##T2(const P1 *weights, const P2 *indices, size_t n, size_t m, int usepmh) { \
     return minhash(weights, indices, n, m, usepmh);}\
-
-#if 0
-SIG(f64, u64, double, uint64_t)\
-SIG(f64, u32, double, uint32_t)\
-SIG(f32, u64, float, uint64_t)\
-SIG(f32, u32, float, uint32_t)
-#endif
 
 #undef SIG
 
