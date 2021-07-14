@@ -3,10 +3,14 @@
 #include <algorithm>
 #include <cassert>
 #include "wcompare.h"
+#include <numeric>
 #include "enums.h"
+#include <cstring>
+#include "levenshtein-sse.hpp"
 
 namespace dashing2 {
 //using u128_t = __uint128_t;
+template<typename T> std::vector<T> load_file(std::FILE *fp);
 
 struct PushBackCounter
 {
@@ -17,25 +21,66 @@ struct PushBackCounter
 };
 
 template<size_t MODE=0>
-std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl, const double lhsum, const uint64_t *rptr, size_t rhl, const double rhsum, const double *lnptr, const double *rnptr) {
+std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl, const double lhsum, const double *lnptr, const uint64_t *rptr, const double *rnptr, size_t rhl, const double rhsum) {
     double isz_size = 0, isz_carry = 0.;
     auto increment = [](auto &sum, auto &carry, auto inc) __attribute__((__always_inline__)) {
         if(MODE) sketch::kahan::update(sum, carry, inc);
         else    sum += inc;
     };
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
-        if(lptr[lhi] == rptr[rhi]) {
+        if(lptr[lhi] == rptr[rhi])
             increment(isz_size, isz_carry, std::min(lnptr[lhi++], rnptr[rhi++]));
-        } else {
+        else {
             const bool v = lptr[lhi] < rptr[rhi];
             lhi += v; rhi += !v;
         }
     }
     return std::make_pair(isz_size, lhsum + rhsum - isz_size);
 }
-std::pair<double, double> weighted_compare(const uint64_t *lptr, size_t lhl, const double lhsum, const uint64_t *rptr, size_t rhl, const double rhsum, const double *lnptr, const double *rnptr, bool kahan) {
-    return kahan ? weighted_compare_mode<1>(lptr, lhl, lhsum, rptr, rhl, rhsum, lnptr, rnptr): weighted_compare_mode<0>(lptr, lhl, lhsum, rptr, rhl, rhsum, lnptr, rnptr);
+std::pair<double, double> weighted_compare(const uint64_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const uint64_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) {
+    return kahan ? weighted_compare_mode<1>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum): weighted_compare_mode<0>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
 }
+size_t hamming_compare(const uint64_t *SK_RESTRICT lptr, size_t lhl, const uint64_t *SK_RESTRICT rptr, size_t rhl) {
+    return std::inner_product(lptr, lptr + std::min(lhl, rhl), rptr, size_t(0), [](auto &c, auto x) {return c + x;}, [](auto lhs, auto rhs) -> size_t {return lhs == rhs;})
+            + (std::max(lhl, rhl) - std::min(lhl, rhl));
+}
+template<typename T>
+std::pair<size_t, size_t> mmer_edit_distance_f(std::FILE *lfp, std::FILE *rfp) {
+    // Compute exact edit distance at char level, then divide by the ratio of the size of these registers to characters
+    // IE, the edit distance calculated is by chars rather than T
+    const auto lhs(load_file<T>(lfp));
+    const auto rhs(load_file<T>(rfp));
+    size_t ret = levenshteinSSE::levenshtein((const uint8_t *)lhs.data(), (const uint8_t *)&lhs[lhs.size()], (const uint8_t *)rhs.data(), (const uint8_t *)&rhs[rhs.size()]);
+    assert(ret % sizeof(T) == 0);
+    return {ret / sizeof(T), std::max(lhs.size(), rhs.size())};
+}
+std::pair<size_t, size_t> mmer_edit_distance(std::FILE *lfp, std::FILE *rfp, bool use128) {
+    auto ptr = use128 ? &mmer_edit_distance_f<u128_t>: &mmer_edit_distance_f<uint64_t>;
+    return ptr(lfp, rfp);
+}
+template<size_t NB>
+size_t hamming_compare_f(std::FILE *lfp, std::FILE *rfp) {
+    using RT = std::conditional_t<NB == 1, uint8_t, std::conditional_t<NB == 2, uint16_t, std::conditional_t<NB == 4, uint32_t, std::conditional_t<NB == 8, uint64_t, u128_t>>>>;
+    size_t ret = 0;
+    RT lv, rv;
+    for(;;) {
+        if(std::feof(lfp)) {
+            if(!std::feof(rfp))
+                for(;std::fread(&rv, NB, 1, rfp) == 1u;++ret);
+            break;
+        } else if(std::feof(rfp)) {
+            while(std::fread(&lv, NB, 1, lfp) == 1u) ++ret;
+            break;
+        } else {
+            std::fread(&rv, NB, 1, rfp);
+            std::fread(&lv, NB, 1, lfp);
+            ret += lv == rv;
+        }
+    }
+    return ret;
+}
+size_t hamming_compare_f64(std::FILE *lfp, std::FILE *rfp) {return hamming_compare_f<8>(lfp, rfp);}
+size_t hamming_compare_f128(std::FILE *lfp, std::FILE *rfp) {return hamming_compare_f<16>(lfp, rfp);}
 size_t set_compare(const uint64_t *lptr, size_t lhl, const uint64_t *rptr, size_t rhl) {
     PushBackCounter c;
     std::set_intersection(lptr, lptr + lhl, rptr, rptr + rhl, std::back_inserter(c));
@@ -47,11 +92,9 @@ double cosine_compare(const uint64_t *lptr, size_t lhl, [[maybe_unused]] const d
     auto increment = [kahan](auto &norm, auto &carry, auto inc) __attribute__((__always_inline__)) {
         if(kahan) sketch::kahan::update(norm, carry, inc); else norm += inc;
     };
-    // TODO:
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
-        if(lptr[lhi] == rptr[rhi]) {
-            increment(dotprod, carry, lnptr[lhi++] * rnptr[rhi++]);
-        } else {
+        if(lptr[lhi] == rptr[rhi]) increment(dotprod, carry, lnptr[lhi++] * rnptr[rhi++]);
+        else {
             const bool v = lptr[lhi] < rptr[rhi];
             lhi += v; rhi += !v;
         }
@@ -136,6 +179,13 @@ double cosine_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE 
     const auto ptr = use128keys ? usef32counts ? &cosine_compare_<u128_t, float>: &cosine_compare_<u128_t, double>: usef32counts ? &cosine_compare_<uint64_t, float>: &cosine_compare_<uint64_t, double>;
     return ptr(lhk, rhk, lhn, rhn);
 }
+
+#ifdef WCOMPARE_MAIN
+
+int main(){
+}
+
+#endif
 
 
 } // namespace dashing2

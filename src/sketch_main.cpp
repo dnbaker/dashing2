@@ -93,7 +93,7 @@ int sketch_main(int argc, char **argv) {
     std::string cmpout; // Only used if distances are also requested
     int topk_threshold = -1;
     int truncate_mode = 0;
-    size_t nbytes_for_fastdists = sizeof(RegT);
+    double nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
     double downsample_frac = 1.;
     Measure measure = SIMILARITY;

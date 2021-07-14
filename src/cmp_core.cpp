@@ -1,11 +1,11 @@
 #include "cmp_main.h"
 #include "sketch/count_eq.h"
-//#include "sketch/ssi.h"
 #include "index_build.h"
 #include "refine.h"
 #include "emitnn.h"
 #include "mio.hpp"
 #include "wcompare.h"
+#include "levenshtein-sse.hpp"
 
 
 namespace dashing2 {
@@ -166,7 +166,7 @@ case v: {\
                 case 1: {
                     uint8_t *ptr = static_cast<uint8_t *>(opts.compressed_ptr_);
                     res = sketch::eq::count_gtlt_nibbles(ptr + i * opts.sketchsize_ / 2, ptr + j * opts.sketchsize_ / 2, opts.sketchsize_);
-                    std::fprintf(stderr, "gt/lt/eq: %zu/%zu/%zu\n", size_t(res.first), size_t(res.second), size_t(opts.sketchsize_ - res.first - res.second));
+                    //std::fprintf(stderr, "gt/lt/eq: %zu/%zu/%zu\n", size_t(res.first), size_t(res.second), size_t(opts.sketchsize_ - res.first - res.second));
                     break;
                 }
                 default: __builtin_unreachable();
@@ -210,30 +210,29 @@ case v: {\
             else if(opts.measure_ == POISSON_LLR)
                 ret = sim2dist(ret);
         }
+    } else if(opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE)) {
+        //std::fprintf(stderr, "Return exact distance for edit distance between sequences\n");
+        assert(result.sequences_.size() > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zu vs %zu/%zu)\n", result.sequences_.size(), i, j));
+        return levenshteinSSE::levenshtein(result.sequences_[i], result.sequences_[j]);
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET) {
-            //std::fprintf(stderr, "Comparing setsketches at %zu/%zu, size = %zu\n", i, j, opts.sketchsize_);
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
-            //for(size_t m = 0; m < opts.sketchsize_; ++m) std::fprintf(stderr, "%zu/%g/%g\n", m, lhsrc[m], rhsrc[m]);
             LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
             lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
             eq = (1. - alpha - beta);
-            //std::fprintf(stderr, "lhcard %g, rhc %g\n", lhcard, rhcard);
             if(eq <= 0.)
                 return opts.measure_ != POISSON_LLR ? 0.: std::numeric_limits<double>::max();
             ucard = std::max(lhcard + rhcard / (2. - alpha - beta), 0.);
             LSHDistType isz = ucard * eq, sim = eq;
-            //std::fprintf(stderr, "isz %g. sim %g\n", isz, sim);
             ret = opts.measure_ == SIMILARITY ? sim
                 : opts.measure_ == INTERSECTION ? isz
                 : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
                 : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
-            //std::fprintf(stderr, "doing equality comparisons between registers for %s/%s\n", to_string(opts.sspace_).data(), to_string(opts.kmer_result_).data());
             const auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
             DBG_ONLY(std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);)
@@ -243,7 +242,7 @@ case v: {\
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / lhcard;
             else if(opts.measure_ == POISSON_LLR) ret = sim2dist(ret);
         }
-    } else if(opts.exact_kmer_dist_) {
+    } else {
 #define CORRECT_RES(res, measure, lhc, rhc)\
             if(measure == INTERSECTION) {\
                 /* do nothing*/ \
@@ -257,10 +256,14 @@ case v: {\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
+        //std::fprintf(stderr, "Paths %zu/%zu are %s/%s\n", i, j, lpath.data(), rpath.data());
+        std::string dummy;
+        auto &lnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[i]: dummy);
+        auto &rnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[j]: dummy);
         const bool lcomp = iscomp(lpath), rcomp = iscomp(rpath);
-        std::fprintf(stderr, "Exact k-mer distance!\n");
-        if(lcomp || rcomp) {
-            std::fprintf(stderr, "One of these is compressed\n");
+        const bool lncomp = iscomp(lnpath), rncomp = iscomp(rnpath);
+        if(lcomp || rcomp || lncomp || rncomp)
+        {
             std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
             std::string lcmd = path2cmd(lpath);
             std::string rcmd = path2cmd(rpath);
@@ -275,14 +278,23 @@ case v: {\
                 if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
             }
             const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-            std::fprintf(stderr, "Points: %p, %p, %p, %p\n", (void *)lhk, (void *)rhk, (void *)lhn, (void *)rhn);
-            auto [isz_size, union_size] = weighted_compare(lhk, rhk, 0, 0, lhc, rhc);
-            double res = isz_size;
-            CORRECT_RES(res, opts.measure_, lhc, rhc)
+            if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
+                if(opts.exact_kmer_dist_) {
+                    auto [edit_dist, max_edit_dist] = mmer_edit_distance(lhk, rhk, opts.use128());
+                    ret = opts.measure_ == M_EDIT_DISTANCE ? edit_dist: max_edit_dist - edit_dist;
+                } else {
+                    ret = hamming_compare_f64(lhk, rhk);
+                }
+            } else {
+                std::pair<double, double> wcret = weighted_compare(lhk, rhk, 0, 0, lhc, rhc);
+                auto [isz_size, union_size] = wcret;
+                double res = isz_size;
+                CORRECT_RES(res, opts.measure_, lhc, rhc)
+            }
             ::pclose(lhk); ::pclose(rhk);
             if(lhn) ::pclose(lhn), ::pclose(rhn);
         } else {
-            std::fprintf(stderr, "Using mmapping\n");
+            //std::fprintf(stderr, "Using mmapping, %s and %s\n", lpath.data(), rpath.data());
             mio::mmap_source lhs(lpath), rhs(rpath);
             std::unique_ptr<mio::mmap_source> lhn, rhn;
             if(result.kmercountfiles_.size()) {
@@ -295,7 +307,7 @@ case v: {\
             if(lhn && rhn) {
                 const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
                 double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-                auto [isz_size, union_size] = weighted_compare(lptr, lhl, lhc, rptr, rhl, rhc, lnptr, rnptr);
+                auto [isz_size, union_size] = weighted_compare(lptr, lnptr, lhl, lhc, rptr, rnptr, rhl, rhc);
                 double res = isz_size;
                 CORRECT_RES(res, opts.measure_, lhc, rhc)
             } else {
@@ -303,6 +315,7 @@ case v: {\
                 CORRECT_RES(res, opts.measure_, lhl, rhl)
             }
         }
+#undef CORRECT_RES
         // Compare exact representations, not compressed shrunk
     }
     if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<double>::max();
@@ -311,7 +324,7 @@ case v: {\
 void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
     std::fprintf(stderr, "Beginning emit_all_pairs\n");
     const size_t ns = result.names_.size();
-    std::FILE *ofp = opts.outfile_path_.empty() ? stdout: std::fopen(opts.outfile_path_.data(), "w");
+    std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
     std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
@@ -378,12 +391,14 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
         OMP_PFOR
         for(size_t i = 0; i < n; ++i) {
             int ft;
-            int isf = check_compressed(result.names_.at(i), ft);
             std::FILE *ifp = nullptr;
             std::string fn = opts.kmer_result_ == FULL_MMER_SET ? result.kmerfiles_.at(i): result.destination_files_.at(i);
             if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE) {
-                if(!check_compressed(fn, ft)) throw std::runtime_error("Missing kmerfile or destination file");
-                std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand") + fn;
+                if(!check_compressed(fn, ft)) throw std::runtime_error(std::string("Missing kmerfile or destination file: ") + fn);
+                if(endswith(fn, ".xz")) ft = 2;
+                else if(endswith(fn, ".gz")) ft = 1;
+                else ft = 0;
+                std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
                 std::fprintf(stderr, "Checking with command = '%s'\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
@@ -392,8 +407,13 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
                 result.cardinalities_[i] = c;
             } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 if(!check_compressed(result.kmercountfiles_[i], ft)) throw std::runtime_error("Missing kmercountfile");
-                std::string cmd = std::string(isf == 0 ? "cat ": isf == 1 ? "gzip -dc ": isf == 2 ? "xz -dc " : "unknowncommand")
-                    + result.kmercountfiles_[i];
+                if(endswith(result.kmercountfiles_[i], ".xz")) ft = 2;
+                else if(endswith(result.kmercountfiles_[i], ".gz")) ft = 1;
+                else ft = 0;
+                std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
+                if(cmd == "unknowncommand") THROW_EXCEPTION(std::runtime_error("Failure"));
+                cmd += result.kmercountfiles_[i];
+                std::fprintf(stderr, "Calling %s\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
                 double x, c, s;

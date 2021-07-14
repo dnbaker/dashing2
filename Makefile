@@ -37,9 +37,9 @@ GLIBOBJ=$(patsubst %.cpp,%.go,$(OBJFS))
 FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
 LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 
-dashing2: $(OBJ) libBigWig.a
+dashing2: $(OBJ) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
-dashing2-0: $(OBJ0) libBigWig.a
+dashing2-0: $(OBJ0) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a

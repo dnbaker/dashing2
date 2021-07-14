@@ -53,11 +53,14 @@ std::string to_string(CountingType ct) {
 }
 
 bool iscomp(const std::string &s) {
-    if(s.size() < 3) return false;
-    if(std::equal(&s[s.size() - 3], &s[s.size()], ".gz")) return true;
-    if(std::equal(&s[s.size() - 3], &s[s.size()], ".xz")) return true;
-    if(std::equal(&s[s.size() - 4], &s[s.size()], ".bz2")) return true;
-    return false;
+    bool ret = false;
+    if(s.size() >= 3) {
+        if(std::equal(&s[s.size() - 3], &s[s.size()], ".gz")) ret = true;
+        else if(std::equal(&s[s.size() - 3], &s[s.size()], ".xz")) ret = true;
+        else if(std::equal(&s[s.size() - 4], &s[s.size()], ".bz2")) ret = true;
+    }
+    std::fprintf(stderr, "%s is %d/%s\n", s.data(), int(ret), ret ? "compressed": "uncompressed");
+    return ret;
 }
 
 }
