@@ -269,6 +269,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             OMP_ONLY(tid = omp_get_thread_num();)
             //const int tid = OMP_ELSE(omp_get_thread_num(), 0);
             //const auto starttime = std::chrono::high_resolution_clock::now();
+            //#if 0
             auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
             const size_t mss = ss * myind;
             auto &path = paths[myind];
@@ -304,8 +305,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                     std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
                 }
-                if(ret.kmerfiles_.size() > i) {
-                    ret.kmerfiles_[i] = destkmer;
+                if(ret.kmerfiles_.size() > myind) {
+                    ret.kmerfiles_[myind] = destkmer;
                 }
                 continue;
             } else {

@@ -1,5 +1,6 @@
 #include "cmp_main.h"
 #include "sketch/count_eq.h"
+#include "sketch/hash.h"
 #include "index_build.h"
 #include "refine.h"
 #include "emitnn.h"
@@ -37,7 +38,8 @@ std::string path2cmd(const std::string &path) {
 }
 
 std::tuple<void *, double, double>
-make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs, bool is_edit_distance) {
+make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs, const std::vector<uint64_t> &kmers, bool is_edit_distance) {
+    sketch::hash::CEHasher revhasher;
     std::tuple<void *, double, double> ret = {nullptr, 0., 0.};
     if(fd >= sizeof(RegT)) return ret;
     size_t mem = fd * sigs.size();
@@ -65,18 +67,21 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
             }
         }
     } else if(truncation_method > 0) {
-        std::fprintf(stderr, "Performing %d-bit compression\n", int(fd * 8.));
+        std::fprintf(stderr, "Performing %d-bit compression. If k-mers are saved and b-bit signatures are used, the actual kmers are emitted.\n", int(fd * 8.));
+        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&revhasher](auto x) {
+            return kne ? revhasher(kmers[x]): reg2sig(sigs[x]);
+        };
         if(fd == 0.5) {
             uint8_t *ptr = (uint8_t *)compressed_reps;
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs / 2; ++i) {
-                auto sig1 = sigs[2 * i], sig2 = sigs[2 * i + 1];
-                ptr[i] = (reg2sig(sig1) & 0xfu) | ((reg2sig(sig2) & 0xfu) << 4);
+                const uint64_t sig1 = getsig(2 * i), sig2 = getsig(2 * i + 1);
+                ptr[i] = (sig1 & 0xfu) | ((sig2 & 0xfu) << 4);
             }
         } else {
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs; ++i) {
-                const auto sig = reg2sig(sigs[i]);
+                const uint64_t sig = getsig(i);
                 if(fd == 8) ((uint64_t *)compressed_reps)[i] = sig;
                 else if(fd == 4) ((uint32_t *)compressed_reps)[i] = sig;
                 else if(fd == 2) ((uint16_t *)compressed_reps)[i] = sig;
@@ -98,7 +103,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         std::fprintf(stderr, "Truncated via setsketch, a = %Lg and b = %Lg\n", a, b);
         std::get<1>(ret) = a;
         std::get<2>(ret) = b;
-        const RegT logbinv = 1. / std::log1p(b - 1.);
+        const long double logbinv = 1.L / std::log1p(b - 1.L);
         if(fd == 0.5) {
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs / 2; ++i) {
@@ -233,7 +238,15 @@ case v: {\
                 : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
-            const auto neq = sketch::eq::count_eq(&result.signatures_[opts.sketchsize_ * i], &result.signatures_[opts.sketchsize_ * j], opts.sketchsize_);
+            const RegT *sptr = result.signatures_.data();
+            if constexpr(sizeof(RegT) == 8) {
+                // If RegT are the same size as k-mers, compare the k-mers themselves
+                // instead of the doubles
+                // Since we're only comparing for equality, this can only improve accuracy
+                if(result.kmers_.size() == result.signatures_.size())
+                    sptr = reinterpret_cast<const RegT *>(result.kmers_.data());
+            }
+            const auto neq = sketch::eq::count_eq(&sptr[opts.sketchsize_ * i], &sptr[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
             DBG_ONLY(std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);)
             if(opts.measure_ == INTERSECTION) {
@@ -322,7 +335,6 @@ case v: {\
     return ret;
 }
 void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
-    std::fprintf(stderr, "Beginning emit_all_pairs\n");
     const size_t ns = result.names_.size();
     std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
@@ -342,6 +354,11 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
         std::fputc('\n', ofp);
         std::fprintf(ofp, "%zu\n", ns);
     }
+    /*
+     *  This is a worker thread which processes and emits
+     *  data in the datq which computation is done in parallel by other threads.
+     *  If the queue is empty, it sleeps.
+     */
     std::thread sub = std::thread([&](){
         while(loopint == 0 || datq.size()) {
             if(datq.empty()) {
@@ -440,7 +457,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
-    std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_, opts.sspace_ == SPACE_EDIT_DISTANCE);
+    std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE);
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
         emit_all_pairs(opts, result);
         return;
