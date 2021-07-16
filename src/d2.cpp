@@ -91,10 +91,12 @@ void Dashing2Options::validate() const {
 int main_usage() {
     std::fprintf(stderr, "dashing2 has several subcommands\n");
     std::fprintf(stderr, "Usage can be seen in those commands.\n");
-    std::fprintf(stderr, "cmp: compres previously sketched/decomposed k-mer sets and emits results.\n");
-    std::fprintf(stderr, "sketch: converts FastX into k-mer sets/sketches, and sketches BigWig and BED files; also contains functionality from cmp, for one-step sketch and comparisons\n");
+    std::fprintf(stderr, "sketch: converts FastX into k-mer sets/sketches, and sketches BigWig and BED files; also contains functionality from cmp, for one-step sketch and comparisons\n"
+                         "This is probably the most common subcommand to use.\n"
+    );
+    std::fprintf(stderr, "cmp, a.k.a. dist: compres previously sketched/decomposed k-mer sets and emits results.\n");
     std::fprintf(stderr, "wsketch: Takes a tuple of [1-3] input binary files [(u32 or u64), (float or double), (u32 or u64)] and performs weighted minhash sketching.\n"
-                         "You should think of sketch as for parsing and sketching (from Fast{qa}, BED, BigWig) and wsketch as sketching binary files which have already been summed\n");
+                         "sketch is for parsing and sketching (from Fast{qa}, BED, BigWig) and wsketch is for sketching binary files which have already been summed\n");
     return 1;
 }
 using namespace dashing2;

@@ -2,6 +2,7 @@
 #include "sketch_core.h"
 #include "options.h"
 #include "refine.h"
+#include <filesystem>
 
 namespace dashing2 {
 
@@ -117,10 +118,10 @@ enum KmerSketchResultType {
 
 int cmp_main(int argc, char **argv) {
     int c;
-    int k = 16, w = 50, nt = -1;
+    int k = 16, w = 0, nt = -1;
     SketchSpace sketch_space = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
-    bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false, presketched = false;
+    bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true, presketched = false;
     bool exact_kmer_dist = false;
     bool refine_exact = false; // This uses sketching for K-NN graph generation, then uses exact distances for NN refinement
     double count_threshold = 0., similarity_threshold = -1.;
@@ -140,21 +141,29 @@ int cmp_main(int argc, char **argv) {
     bool parse_by_seq = false;
     bool hpcompress = false;
     Measure measure = SIMILARITY;
+    std::string spacing;
     // By default, use full hash values, but allow people to enable smaller
-    OutputFormat of = OutputFormat::MACHINE_READABLE;
+    OutputFormat of = OutputFormat::HUMAN_READABLE;
     CMP_OPTS(cmp_long_options);
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
         SHARED_FIELDS
         case '?': case 'h': cmp_usage(); return 1;
     }}
-    if(nt < 0) {
-        if(char *s = std::getenv("OMP_NUM_THREADS")) nt = std::atoi(s);
-        else nt = 1;
-    }
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
+    std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[-1])));
+    for(char **s = argv; *s; cmd += std::string(" ") + *s++);
+    std::fprintf(stderr, "[Dashing2] Invocation: %s ", cmd.data());
+    if(nt < 0) {
+        char *s = std::getenv("OMP_NUM_THREADS");
+        if(s) nt = std::max(std::atoi(s), 1);
+    }
+    OMP_ONLY(omp_set_num_threads(nt));
     if(ffile.size()) {
         std::ifstream ifs(ffile);
+        static constexpr size_t bufsize = 1<<18;
+        std::unique_ptr<char []> buf(new char[bufsize]);
+        ifs.rdbuf()->pubsetbuf(buf.get(), bufsize);
         for(std::string l;std::getline(ifs, l);) {
             paths.push_back(l);
         }
@@ -166,17 +175,23 @@ int cmp_main(int argc, char **argv) {
             paths.push_back(l);
     }
     size_t nq = paths.size() - nref;
-    Dashing2Options opts(k, w, rht, sketch_space, dt);
+    Dashing2Options opts(k, w, rht, sketch_space, dt, nt, use128, spacing, canon, res);
+    opts
+        .cache_sketches(cache)
+        .cssize(cssize)
+        .sketchsize(sketchsize)
+        .save_kmers(save_kmers)
+        .outprefix(outprefix)
+        .save_kmercounts(save_kmercounts)
+        .save_kmers(save_kmers)
+        .parse_by_seq(parse_by_seq)
+        .cmd(cmd).count_threshold(count_threshold)
+        .homopolymer_compress_minimizers(hpcompress);
+    if(hpcompress) {
+        if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
+    }
     if(nbytes_for_fastdists == 0.5)
         opts.sketchsize_ += opts.sketchsize_ & 1; // Ensure that sketch size is a multiple of 2 if using nibbles
-    opts.nthreads(nt)
-        .kmer_result(res)
-        .cache_sketches(cache).cssize(cssize).use128(use128)
-        .sketchsize(sketchsize).save_kmers(save_kmers).outprefix(outprefix)
-        .save_kmercounts(save_kmercounts).parse_by_seq(parse_by_seq)
-        .count_threshold(count_threshold)
-        .homopolymer_compress_minimizers(hpcompress)
-        .canonicalize(canon);
     opts.bed_parse_normalize_intervals_ = normalize_bed;
     opts.downsample(downsample_frac);
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
