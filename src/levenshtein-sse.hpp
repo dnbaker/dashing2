@@ -8,6 +8,7 @@
 #define LSTSSE_LEVENSHTEIN_SSE_HPP
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 #include <iterator>
 #include <cstdint>
