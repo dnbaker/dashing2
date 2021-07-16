@@ -78,6 +78,7 @@ enum OutputKind {
     ASYMMETRIC_ALL_PAIRS,
     KNN_GRAPH, // Fixed top-k neighbors
     NN_GRAPH_THRESHOLD, // Variable number of similarities, as given by threshold
+    PANEL,
     DEDUP
 };
 
@@ -91,6 +92,8 @@ std::string to_string(KmerSketchResultType t);
 std::string to_string(SketchSpace ss);
 std::string to_string(DataType dt);
 std::string to_string(CountingType ct);
+std::string to_string(OutputKind ok);
+std::string to_string(OutputFormat of);
 std::string trim_folder(const std::string &s);
 struct Dashing2Options;
 

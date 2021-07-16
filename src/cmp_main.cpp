@@ -175,7 +175,8 @@ int cmp_main(int argc, char **argv) {
         .sketchsize(sketchsize).save_kmers(save_kmers).outprefix(outprefix)
         .save_kmercounts(save_kmercounts).parse_by_seq(parse_by_seq)
         .count_threshold(count_threshold)
-        .homopolymer_compress_minimizers(hpcompress);
+        .homopolymer_compress_minimizers(hpcompress)
+        .canonicalize(canon);
     opts.bed_parse_normalize_intervals_ = normalize_bed;
     opts.downsample(downsample_frac);
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);

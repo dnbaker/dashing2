@@ -228,6 +228,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if(opts.outprefix_.size())
                     ret = opts.outprefix_ + '/' + ret;
             }
+            if(opts.canonicalize())
+                ret += ".rc_canon";
             if(opts.kmer_result_ <= FULL_SETSKETCH)
                 ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
             ret = ret + std::string(".k") + std::to_string(opts.k_);

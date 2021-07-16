@@ -31,6 +31,8 @@ void sketch_usage() {
                          "-2/--128bit/long-kmers: Use 128-bit k-mer hashes instead of 64-bit\n"
                          "-m/--threshold: Set a count threshold for inclusion. Default: 0.\n"
                          "--enable-protein: Switch from DNA-sequence encoding to protein encoding. This treats all characters as valid\n"
+                         "--no-canon: If DNA is being encoded, this disables canonicalization. By default, DNA sequence is canonicalized with its reverse-complement.\n"
+                         "            If Protein is being encoded, this is ignored\n"
                          "\nPathsOptions\n\n"
                          "By default, dashing2 reads positional arguments and sketches them. You may want to use flags instructing it\n"
                          "to read from paths in <file>. Additionally, you can put multiple files separated by spaces into a single line "
@@ -52,7 +54,7 @@ void sketch_usage() {
                          "-c/--countsketch-size: Use Count-Sketch counting instead of exact counting, using [arg] as the size.\n    "
                          "This allows you to avoid unbounded dictionary size at the cost of some approximation of weighted sets\n"
                          "This only affects methods which perform counting\n"
-                         "You can also emit full m-mer sets, a count dictionary (key-count map)\n"
+                         "You can also emit full m-mer sets, a count dictionary (key-count map), or a set of minimizer sequences\n"
                          "-H/--set: Full m-mer set. This generates a sorted hash set for m-mers in the data. If the parser is windowed (-w is set), this may be rather small.\n"
                          "-J/--countdict: Full m-mer countdict. This generates a sorted hash set for m-mers in the data, and additionally saves the associated counts for these m-mers.\n"
                          "-G/--seq: Full m-mer sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"
@@ -79,7 +81,7 @@ int sketch_main(int argc, char **argv) {
     int k = 16, w = -1, nt = -1;
     SketchSpace sketch_space = SPACE_SET;
     KmerSketchResultType res = ONE_PERM;
-    bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = false;
+    bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true;
     bool exact_kmer_dist = false, hpcompress = false;
     bool refine_exact = false;
     double count_threshold = 0., similarity_threshold = -1.;
@@ -103,7 +105,7 @@ int sketch_main(int argc, char **argv) {
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     std::string spacing;
     SKETCH_OPTS
-    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
+    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:CNs2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
         SHARED_FIELDS
         case '?': case 'h': sketch_usage(); return 1;
@@ -135,10 +137,8 @@ int sketch_main(int argc, char **argv) {
             paths.push_back(l);
     }
     size_t nq = paths.size() - nref;
-    std::fprintf(stderr, "Sketching %zu arguments (lhs) and %zu (rhs)\n", nref, nq);
-    Dashing2Options opts(k, w, rht, sketch_space, dt, nt, use128, spacing, canon);
+    Dashing2Options opts(k, w, rht, sketch_space, dt, nt, use128, spacing, canon, res);
     opts
-        .kmer_result(res)
         .cache_sketches(cache)
         .cssize(cssize)
         .sketchsize(sketchsize)

@@ -32,6 +32,7 @@ enum OptArg{
     OPTARG_SYMCONTAIN,
     OPTARG_CONTAIN,
     OPTARG_ASYMMETRIC_ALLPAIRS,
+    OPTARG_SET,
     OPTARG_DUMMY
 };
 
@@ -54,7 +55,6 @@ enum OptArg{
     LO_ARG("outfile", 'o')\
     LO_ARG("count-threshold", 'm')\
     LO_ARG("threshold", 'm')\
-    LO_FLAG("canon", 'C', canon, true)\
     LO_FLAG("binary-output", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
     LO_FLAG("parse-by-seq", OPTARG_PARSEBYSEQ, parse_by_seq, true)\
     LO_FLAG("bagminhash", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
@@ -63,8 +63,8 @@ enum OptArg{
     LO_FLAG("bigwig", OPTARG_BIGWIG, dt, DataType::BIGWIG)\
     LO_FLAG("leafcutter", OPTARG_LEAFCUTTER, dt, DataType::LEAFCUTTER)\
     /*LO_FLAG("edit-distance", 'E', sketch_space, SPACE_EDIT_DISTANCE)*/\
-    LO_FLAG("set", 'H', res, FULL_MMER_SET)\
-    LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)\
+    /*LO_FLAG("set", 'H', res, FULL_MMER_SET)*/\
+    /*LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)*/\
     LO_FLAG("bbit-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
     LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
     LO_FLAG("mash-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
@@ -81,6 +81,7 @@ enum OptArg{
     LO_FLAG("save-kmers", 's', save_kmers, true)\
     LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_ARG("regbytes", OPTARG_REGBYTES)\
+    /*LO_ARG("set", 'H')*/\
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
     {"refine-exact", no_argument, 0, OPTARG_REFINEEXACT},\
     {"edit-distance", no_argument, 0, 'E'},\
@@ -88,8 +89,10 @@ enum OptArg{
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
     {"enable-protein", no_argument, 0, OPTARG_PROTEIN},\
     {"downsample", required_argument, 0, OPTARG_DOWNSAMPLE_FRACTION},\
-    {"cache", no_argument, 0, 'W'},
-
+    {"cache", no_argument, 0, 'W'},\
+    {"no-canon", no_argument, 0, 'C'},\
+    {"set", no_argument, 0, OPTARG_SET},\
+    {"exact-kmer-dist", no_argument, 0, OPTARG_EXACT_KMER_DIST}
 
 
 #define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
@@ -101,18 +104,23 @@ enum OptArg{
 
 #define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD FASTCMP_FIELD PROT_FIELD REFINEEXACT_FIELD \
         case 'E': sketch_space = SPACE_EDIT_DISTANCE; break;\
-        case 'C': canon = true; break;\
+        case 'C': canon = false; break;\
         case 'p': nt = std::atoi(optarg); break;\
+        case OPTARG_EXACT_KMER_DIST: {\
+            exact_kmer_dist = true;\
+            std::fprintf(stderr, "Exact kmer distance is set to %d -- %d/%d\n", exact_kmer_dist, c, option_index);\
+            break;\
+        }\
         case 'S': sketchsize = std::atoi(optarg); break;\
         case 'N': save_kmers = save_kmercounts = true; break;\
         case 's': save_kmers = true; break;\
-        case 'H': res = FULL_MMER_SET; break;\
+        case OPTARG_SET: case 'H': res = FULL_MMER_SET; std::fprintf(stderr, "Result should now be FULL_MMER_SET %s\n", to_string(res).data()); break;\
         case 'J': res = FULL_MMER_COUNTDICT; break;\
         case 'G': res = FULL_MMER_SEQUENCE; break;\
         case '2': use128 = true; break;\
         case 'm': count_threshold = std::atof(optarg); break;\
         case 'F': ffile = optarg; break;\
-        case 'Q': qfile = optarg; break;\
+        case 'Q': qfile = optarg; ok = PANEL; break;\
         case OPTARG_BED_NORMALIZE: normalize_bed = true; break;\
         case OPTARG_REGBYTES: nbytes_for_fastdists = std::atof(optarg); break;\
         case 'o': outfile = optarg; break;\
@@ -147,6 +155,8 @@ static constexpr const char *siglen =
         "This changes the output format from a full matrix into compressed-sparse row (CSR) notation.\n"\
         "--topk [arg]\tMaximum number of nearest neighbors to list. If [arg] is greater than N - 1, pairwise distances are instead emitted.\n"\
         "--binary-output\tEmit binary output rather than human-readable.\n\t For symmetric pairwise, this emits condensed distance matrix in f32\n"\
+        "-Q/--qfile\tThis causes rectangular output between -F filenames ane -Q filenames. This option is listed twice, as it changes the format of the data emitted.\n"\
+        "Use this if you want to compare a set of queries to a set of references rather than complete all-pairs. Note: -F must be provided, or reference files should be added as positional arguments\n"\
         "\t For asymmetric pairwise, this emits a flat distance matrix in f32\n"\
         "\t For top-k filtered, this emits a matrix of min(k, |N|) x |N| of IDs and distances\n"\
         "\t For similarity-thresholded distances, this emits a compressed-sparse row (CSR) formatted matrix\n"\
@@ -154,7 +164,8 @@ static constexpr const char *siglen =
         "For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
         "\t If --bbit-sigs is enabled, this random signatures truncated to [arg] bytes will be replaced.\n"\
         "\t The tradeoff is that you may get better accuracy in set space comparisons at the expense of information regarding the sizes of the sets\n"\
-        "--exact-kmer-dist\tThis uses exact k-mer distances instead of approximate methods\n"\
+        "--exact-kmer-dist\tThis uses exact k-mer distances instead of approximate methods. In edit distance space, this means calculating exact edit distance.\n"\
+        "For minhash sketches (setsketch, probminhash, and bagminhash), this uses full registers instead of compressed.\n"\
         "--refine-exact\tThis causes the candidate KNN graph to be refined to a final KNN graph using full distances.\tIf using sketches, then full hash registers are used.\nOtherwise, exact k-mer comparison functions are used.\n"\
         "--downsample\t Downsample minimizers at fraction [arg] . Default is 1: IE, all minimizers pass.\n"\
         "\n\nDistance specifications\n"\

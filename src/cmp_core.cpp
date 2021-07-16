@@ -334,7 +334,7 @@ case v: {\
     if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<double>::max();
     return ret;
 }
-void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
+void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t ns = result.names_.size();
     std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
@@ -359,13 +359,14 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
      *  data in the datq which computation is done in parallel by other threads.
      *  If the queue is empty, it sleeps.
      */
+    const size_t nq = result.nqueries(), nf = ns - nq;
     std::thread sub = std::thread([&](){
         while(loopint == 0 || datq.size()) {
             if(datq.empty()) {
                 std::this_thread::sleep_for(std::chrono::duration<size_t, std::nano>(2000));
             } else {
                 auto &f = datq.front();
-                const size_t nwritten = asym ? ns: ns - f.second - 1;
+                const size_t nwritten = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - f.second - 1;
                 if(opts.output_format_ == HUMAN_READABLE) {
                     auto datp = f.first.get();
                     auto &seqn = result.names_[f.second];
@@ -383,6 +384,17 @@ void emit_all_pairs(Dashing2DistOptions &opts, const SketchingResult &result) {
             }
         }
     });
+    if(opts.output_kind_ == PANEL) {
+        for(size_t i = 0; i < nf; ++i) {
+            std::unique_ptr<float[]> dat(new float[nq]);
+            OMP_PFOR_DYN
+            for(size_t j = 0; j < nq; ++j) {
+                dat[j] = compare(opts, result, i, j + nf);
+            }
+            std::lock_guard<std::mutex> guard(datq_lock);
+            datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
+        }
+    }
     for(size_t i = 0; i < ns; ++i) {
         // TODO: batch queries together for cache efficiency (distmat::parallel_fill for an example)
         size_t nelem = asym ? ns: ns - i - 1;
@@ -458,8 +470,8 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE);
-    if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS) {
-        emit_all_pairs(opts, result);
+    if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS || opts.output_kind_ == PANEL) {
+        emit_rectangular(opts, result);
         return;
     }
     // This is LSH-index assisted KNN graphs +

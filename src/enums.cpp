@@ -63,4 +63,17 @@ bool iscomp(const std::string &s) {
     return ret;
 }
 
+
+std::string to_string(OutputFormat of) {
+    if(of == HUMAN_READABLE) return "HumanReadable";
+    return "MachineReadable";
+}
+std::string to_string(OutputKind ok) {
+    if(ok == SYMMETRIC_ALL_PAIRS) return "UpperTriangularSymmetricAllPairs";
+    if(ok == ASYMMETRIC_ALL_PAIRS) return "AllPairs";
+    if(ok == KNN_GRAPH) return "KNNGraph";
+    if(ok == NN_GRAPH_THRESHOLD) return "ThresholdedNNGraph";
+    return "Deduplication (not supported yet)";
+}
+
 }
