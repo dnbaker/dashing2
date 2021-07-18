@@ -97,6 +97,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
             minreg = std::min(minreg, sigs[i]);
             maxreg = std::max(maxreg, sigs[i]);
         }
+        //std::fprintf(stderr, "regs: %g->%g\n", minreg, maxreg);
         double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
         assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
@@ -131,6 +132,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
 }
 
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
+    //std::fprintf(stderr, "Calling %s for %zu/%zu\n", __PRETTY_FUNCTION__, i, j);
     LSHDistType ret = std::numeric_limits<LSHDistType>::max();
     const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const LSHDistType invdenom = 1. / opts.sketchsize_;
@@ -160,7 +162,6 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = ske
             switch(int(2. * opts.fd_level_)) {
 #define CASE_ENTRY(v, TYPE)\
 case v: {\
-    VERBOSE_ONLY(std::fprintf(stderr, "Doing comparing between %zu and %zu with %d bits\n", i, j, int(8. * opts.fd_level_));)\
     TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_);\
     res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
                 CASE_ENTRY(16, uint64_t)
@@ -299,7 +300,7 @@ case v: {\
                     ret = hamming_compare_f64(lhk, rhk);
                 }
             } else {
-                std::pair<double, double> wcret = weighted_compare(lhk, rhk, 0, 0, lhc, rhc);
+                std::pair<double, double> wcret = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc, opts.use128());
                 auto [isz_size, union_size] = wcret;
                 double res = isz_size;
                 CORRECT_RES(res, opts.measure_, lhc, rhc)
@@ -314,14 +315,16 @@ case v: {\
                 lhn.reset(new mio::mmap_source(result.kmercountfiles_[i]));
                 rhn.reset(new mio::mmap_source(result.kmercountfiles_[j]));
             }
-            if(opts.use128()) THROW_EXCEPTION(std::runtime_error("Not yet implemented: 128-bit exact k-mer comparisons"));
             const uint64_t *lptr = (const uint64_t *)lhs.data(), *rptr = (const uint64_t *)rhs.data();
-            const size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
+            const size_t lhl = lhs.size() / (opts.use128() ? 16: 8), rhl = rhs.size() / (opts.use128() ? 16: 8);
             if(lhn && rhn) {
                 const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
-                double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-                auto [isz_size, union_size] = weighted_compare(lptr, lnptr, lhl, lhc, rptr, rnptr, rhl, rhc);
-                double res = isz_size;
+                const double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
+                std::pair<double, double> szp = opts.use128()
+                    ? weighted_compare((const u128_t *)lhs.data(), lnptr, lhl, lhc, (const u128_t *)rhs.data(), rnptr, rhl, rhc)
+                    : weighted_compare((const uint64_t *)lhs.data(), lnptr, lhl, lhc, (const uint64_t *)rhs.data(), rnptr, rhl, rhc);
+                //auto [isz_size, union_size] = szp;
+                double res = szp.first;
                 CORRECT_RES(res, opts.measure_, lhc, rhc)
             } else {
                 double res = set_compare(lptr, lhl, rptr, rhl);
@@ -413,7 +416,6 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
 }
 void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     if(opts.kmer_result_ >= FULL_MMER_SET && result.cardinalities_.size() && result.cardinalities_.front() < 0.) {
-        std::fprintf(stderr, "Getting cardinalities from k-mer set/seq/countdict\n");
         const size_t n = result.cardinalities_.size();
         if(opts.parse_by_seq_)
             THROW_EXCEPTION(std::runtime_error("Not yet supported"));
@@ -428,7 +430,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
                 else if(endswith(fn, ".gz")) ft = 1;
                 else ft = 0;
                 std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
-                std::fprintf(stderr, "Checking with command = '%s'\n", cmd.data());
+                //std::fprintf(stderr, "Checking with command = '%s'\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
                 size_t c = 0;
@@ -442,7 +444,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
                 std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
                 if(cmd == "unknowncommand") THROW_EXCEPTION(std::runtime_error("Failure"));
                 cmd += result.kmercountfiles_[i];
-                std::fprintf(stderr, "Calling %s\n", cmd.data());
+                //std::fprintf(stderr, "Calling %s\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
                 double x, c, s;
@@ -452,8 +454,9 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
             if(ifp) ::pclose(ifp);
         }
     }
+    //std::fprintf(stderr, "Handled generating needed cardinalities\n");
     // Calculate cardinalities if they haven't been
-    VERBOSE_ONLY(
+    //VERBOSE_ONLY(
     std::fprintf(stderr, "Beginning cmp_core with options: \n");
         if(opts.sspace_ == SPACE_SET) {
             std::fprintf(stderr, "Comparing sets\n");
@@ -465,7 +468,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
             std::fprintf(stderr, "Comparing items in edit distance space\n");
         }
         std::fprintf(stderr, "Result type: %s\n", to_string(opts.kmer_result_).data());
-    )
+    //)
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
