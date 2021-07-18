@@ -66,9 +66,9 @@ void Dashing2Options::filterset(std::string path, bool is_kmer) {
         for_each_substr([&](const std::string &subpath) {
             //std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
             auto lfunc = [&](auto x) {if(!fs_ || !fs_->in_set(x)) func(x);};
-            if(k_ <= enc_.nremperres64() && !use128()) {
+            if(unsigned(k_) <= enc_.nremperres64() && !use128()) {
                 enc_.for_each(lfunc, subpath.data());
-            } else if(k_ <= enc_.nremperres128()) {
+            } else if(unsigned(k_) <= enc_.nremperres128()) {
                 auto encoder(enc_.to_u128());
                 encoder.for_each(lfunc, subpath.data());
             } else {
