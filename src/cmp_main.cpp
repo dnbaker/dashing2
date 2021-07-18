@@ -105,17 +105,6 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
     std::fprintf(stderr, "loading results, but this isn't written!\n");
 }
 
-#if 0
-enum KmerSketchResultType {
-    ONE_PERM = 0,       // Faster (3-4x) than Full, comparable accuracy for both cardinality and set similarities
-    FULL_SETSKETCH = 1, // Not stochastically-averaged; potentially better LSH properties
-    FULL_MMER_SET = 2,
-    FULL_MMER_SEQUENCE = 3,
-    FULL_MMER_COUNTDICT = 4
-};
-
-#endif
-
 int cmp_main(int argc, char **argv) {
     int c;
     int k = 16, w = 0, nt = -1;

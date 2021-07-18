@@ -85,9 +85,9 @@ struct Dashing2Options {
     // K-mer options
     int k_, w_;
     bns::Spacer sp_;
-    bns::Encoder<> enc_;
-    bns::RollingHasher<uint64_t> rh_;
-    bns::RollingHasher<u128_t> rh128_;
+    mutable bns::Encoder<> enc_;
+    mutable bns::RollingHasher<uint64_t> rh_;
+    mutable bns::RollingHasher<u128_t> rh128_;
     bns::RollingHashingType rht_;
     bool parse_by_seq_ = false;
     bool trim_chr_ = true;
@@ -131,7 +131,7 @@ struct Dashing2Options {
         }
         if(nt < 1) nt = 1;
         nthreads(nt);
-        rh_.enctype_ = rh128_.enctype_ = rht;
+        ht(rht);
     }
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
     std::string to_string() const;
@@ -161,7 +161,19 @@ struct Dashing2Options {
     // Getters and setters for all of the above
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
-    Dashing2Options &parse_protein(bool val) {rh_.enctype_ = rh128_.enctype_ = rht_ = (val ? bns::PROTEIN: bns::DNA); return *this;}
+    bns::InputType input_mode() const {return rht_;}
+    Dashing2Options &ht(bns::InputType rt) {
+        rht_ = rt;
+        rh_.hashtype(rt); rh128_.hashtype(rt);
+        enc_.hashtype(rt);
+        return *this;
+    }
+    Dashing2Options &parse_protein() {return ht(bns::PROTEIN);}
+    Dashing2Options &parse_protein3bit() {return ht(bns::PROTEIN_3BIT);}
+    Dashing2Options &parse_protein6() {return ht(bns::PROTEIN_6);}
+    Dashing2Options &parse_protein14() {return ht(bns::PROTEIN_14);}
+    Dashing2Options &parse_dna2() {return ht(bns::DNA2);}
+    Dashing2Options &parse_dnac() {return ht(bns::DNAC);}
     Dashing2Options &nthreads(int nt) {
         nt = std::max(nt, 1);
         nthreads_ = nt;
@@ -169,19 +181,22 @@ struct Dashing2Options {
         return *this;
     }
     void filterset(std::string path, bool is_kmer);
-    bool parse_protein() const {return rh_.enctype_ == bns::PROTEIN;}
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool trim_folder_paths() const {
         return trim_folder_paths_ || outprefix_.size();
     }
     bool canonicalize() const {return enc_.canonicalize();}
-    void canonicalize(bool val) {
+    void canonicalize(bool val) const {
         enc_.canonicalize(val);
+        rh_.canonicalize(val);
+        rh128_.canonicalize(val);
     }
     auto w() const {return w_;}
     bool one_perm() const {return kmer_result_ == ONE_PERM && sspace_ == SPACE_SET;}
     auto nthreads() const {return nthreads_;}
+    size_t nremperres64() const {return enc_.nremperres64();}
+    size_t nremperres128() const {return enc_.nremperres128();}
 };
 
 static INLINE bool endswith(std::string lhs, std::string rhs) {

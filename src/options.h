@@ -25,6 +25,9 @@ enum OptArg{
     OPTARG_ISZ,
     OPTARG_BED_NORMALIZE,
     OPTARG_PROTEIN,
+    OPTARG_PROTEIN6,
+    OPTARG_PROTEIN8,
+    OPTARG_PROTEIN14,
     OPTARG_HPCOMPRESS,
     OPTARG_DOWNSAMPLE_FRACTION,
     OPTARG_REFINEEXACT,
@@ -38,7 +41,6 @@ enum OptArg{
 };
 
 #define SHARED_OPTS \
-    LO_ARG("save-kmercounts", 'N')\
     LO_ARG("ffile", 'F')\
     LO_ARG("qfile", 'Q')\
     LO_ARG("threads", 'p')\
@@ -79,29 +81,38 @@ enum OptArg{
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
-    LO_FLAG("save-kmers", 's', save_kmers, true)\
     LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_ARG("regbytes", OPTARG_REGBYTES)\
     /*LO_ARG("set", 'H')*/\
+    {"save-kmers", no_argument, 0, 's'},\
+    {"save-kmercounts", no_argument, 0, 'N'},\
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
     {"refine-exact", no_argument, 0, OPTARG_REFINEEXACT},\
     {"edit-distance", no_argument, 0, 'E'},\
     {"full-setsketch", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
+    {"protein", no_argument, 0, OPTARG_PROTEIN},\
     {"enable-protein", no_argument, 0, OPTARG_PROTEIN},\
+    {"protein6", no_argument, 0, OPTARG_PROTEIN6},\
+    {"protein8", no_argument, 0, OPTARG_PROTEIN8},\
+    {"protein14", no_argument, 0, OPTARG_PROTEIN14},\
     {"downsample", required_argument, 0, OPTARG_DOWNSAMPLE_FRACTION},\
     {"cache", no_argument, 0, 'W'},\
     {"no-canon", no_argument, 0, 'C'},\
     {"set", no_argument, 0, OPTARG_SET},\
     {"exact-kmer-dist", no_argument, 0, OPTARG_EXACT_KMER_DIST},\
-    {"spacing", required_argument, 0, OPTARG_SPACING},
+    {"spacing", required_argument, 0, OPTARG_SPACING}
+
 
 
 #define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
 #define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
 #define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atof(optarg); break;}
-#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN; break;}
+#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN; break;} \
+    case OPTARG_PROTEIN6: {rht = bns::PROTEIN_6; break;}\
+    case OPTARG_PROTEIN14: {rht = bns::PROTEIN14; break;}\
+    case OPTARG_PROTEIN8: {rht = bns::PROTEIN8; break;}
 #define REFINEEXACT_FIELD case OPTARG_REFINEEXACT: {refine_exact = true; break;}
 
 #define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD FASTCMP_FIELD PROT_FIELD REFINEEXACT_FIELD \
@@ -167,9 +178,14 @@ static constexpr const char *siglen =
         "--spacing: Set a spacing scheme for spaced minimizers\n"\
         "-2/--128bit/long-kmers: Use 128-bit k-mer hashes instead of 64-bit\n"\
         "-m/--threshold: Set a count threshold for inclusion. Default: 0.\n"\
-        "--enable-protein: Switch from DNA-sequence encoding to protein encoding. This treats all characters as valid\n"\
+        "\nFastx Alphabet:\n"\
+        "Dashing2 sketches DNA be default. This can be changed with the following flags; this will disable canonicalization.\n"\
+        "--enable-protein: Use 20 character amino acid alphabet.\n"\
+        "--protein14: Use 14 character amino acid alphabet.\n"\
+        "--protein6: Use 6 character amino acid alphabet.\n"\
+        "--protein8: Use 8 character (3-bit) amino acid alphabet.\n"\
         "--no-canon: If DNA is being encoded, this disables canonicalization. By default, DNA sequence is canonicalized with its reverse-complement.\n"\
-        "            If Protein is being encoded, this is ignored\n"\
+        "            Otherwise, this is ignored\n"\
         "\nPathsOptions\n\n"\
         "By default, dashing2 reads positional arguments and sketches them. You may want to use flags instructing it\n"\
         "to read from paths in <file>. Additionally, you can put multiple files separated by spaces into a single line "\

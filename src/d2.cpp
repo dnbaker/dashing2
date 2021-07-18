@@ -66,13 +66,11 @@ void Dashing2Options::filterset(std::string path, bool is_kmer) {
         for_each_substr([&](const std::string &subpath) {
             //std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
             auto lfunc = [&](auto x) {if(!fs_ || !fs_->in_set(x)) func(x);};
-            if(!parse_protein() && (w_ > k_ || k_ <= 64)) {
-                if(k_ < 32) {
-                    enc_.for_each(lfunc, subpath.data());
-                } else {
-                    auto encoder(enc_.to_u128());
-                    encoder.for_each(lfunc, subpath.data());
-                }
+            if(k_ <= enc_.nremperres64() && !use128()) {
+                enc_.for_each(lfunc, subpath.data());
+            } else if(k_ <= enc_.nremperres128()) {
+                auto encoder(enc_.to_u128());
+                encoder.for_each(lfunc, subpath.data());
             } else {
                 use128() ? rh128_.for_each_hash(lfunc, subpath.data()): rh_.for_each_hash(lfunc, subpath.data());
             }
@@ -81,10 +79,10 @@ void Dashing2Options::filterset(std::string path, bool is_kmer) {
     perf_for_substrs([fs=fs_.get()](auto x) {fs->add(x);});
 }
 void Dashing2Options::validate() const {
-    if(canonicalize() && rh_.enctype_ == bns::PROTEIN) {
-        throw std::invalid_argument("Can't reverse-complement protein");
+    if(canonicalize() && rh_.hashtype() != bns::DNA) {
+        std::fprintf(stderr, "Can't reverse-complement protein\n");
+        canonicalize(false);
     }
-    if(spacing_.size() && parse_protein()) throw std::runtime_error("Can't do spaced protein parsing currently; this may be updated");
 }
 } // dashing2
 

@@ -271,7 +271,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             OMP_ONLY(tid = omp_get_thread_num();)
             //const int tid = OMP_ELSE(omp_get_thread_num(), 0);
             //const auto starttime = std::chrono::high_resolution_clock::now();
-            //#if 0
             auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
             const size_t mss = ss * myind;
             auto &path = paths[myind];
@@ -326,19 +325,15 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                             func(x);
                     };
 #define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
-                    if(!opts.parse_protein() && (opts.w_ > opts.k_ || opts.k_ <= 64)) {
-                        if(opts.k_ < 32) {
-                            auto encoder(opts.enc_);
-                            FUNC_FE(encoder.for_each);
-                        } else {
-                            auto encoder(opts.enc_.to_u128());
-                            FUNC_FE(encoder.for_each);
-                        }
+                    if(unsigned(opts.k_) <= opts.nremperres64()) {
+                        auto encoder(opts.enc_);
+                        FUNC_FE(encoder.for_each);
+                    } else if(unsigned(opts.k_) <= opts.nremperres128()) {
+                        auto encoder(opts.enc_.to_u128());
+                        FUNC_FE(encoder.for_each);
                     } else if(opts.use128()) {
-                        DBG_ONLY(std::fprintf(stderr, "Parsing Protein with k = %u for 128-bit hashes\n", opts.k_);)
                         FUNC_FE(opts.rh128_.for_each_hash);
                     } else {
-                        DBG_ONLY(std::fprintf(stderr, "Parsing Protein with k = %u for 64-bit hashes\n", opts.k_);)
                         FUNC_FE(opts.rh_.for_each_hash);
                     }
 #undef FUNC_FE
