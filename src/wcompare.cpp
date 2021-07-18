@@ -28,6 +28,7 @@ std::pair<double, double> weighted_compare_mode(const IT *lptr, size_t lhl, cons
         else    sum += inc;
     };
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
+        //std::fprintf(stderr, "Comparing %zu/%zu, %zu/%zu\n", lhi, lhl, rhi, rhl);
         if(lptr[lhi] == rptr[rhi])
             increment(isz_size, isz_carry, std::min(lnptr[lhi++], rnptr[rhi++]));
         else {
@@ -41,7 +42,8 @@ std::pair<double, double> weighted_compare(const uint64_t *lptr, const double *l
     return kahan ? weighted_compare_mode<uint64_t, 1>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum): weighted_compare_mode<uint64_t, 0>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
 }
 std::pair<double, double> weighted_compare(const u128_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const u128_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) {
-    return kahan ? weighted_compare_mode<u128_t, 1>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum): weighted_compare_mode<u128_t, 0>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
+    auto ptr = kahan ? &weighted_compare_mode<u128_t, 1> : &weighted_compare_mode<u128_t, 0>;
+    return ptr(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
 }
 size_t hamming_compare(const uint64_t *SK_RESTRICT lptr, size_t lhl, const uint64_t *SK_RESTRICT rptr, size_t rhl) {
     return std::inner_product(lptr, lptr + std::min(lhl, rhl), rptr, size_t(0), [](auto &c, auto x) {return c + x;}, [](auto lhs, auto rhs) -> size_t {return lhs == rhs;})

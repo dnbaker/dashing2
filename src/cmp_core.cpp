@@ -276,7 +276,8 @@ case v: {\
         auto &rnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[j]: dummy);
         const bool lcomp = iscomp(lpath), rcomp = iscomp(rpath);
         const bool lncomp = iscomp(lnpath), rncomp = iscomp(rnpath);
-        if(lcomp || rcomp || lncomp || rncomp)
+        if(1 || lcomp || rcomp || lncomp || rncomp)
+        // TODO: get a version using mmapping that works well. currently, can't be sure that it works.
         {
             std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
             std::string lcmd = path2cmd(lpath);
@@ -300,6 +301,7 @@ case v: {\
                     ret = hamming_compare_f64(lhk, rhk);
                 }
             } else {
+                std::fprintf(stderr, "Something is compressed, doing weighted compare, %p, %p\n", lhn, rhn);
                 std::pair<double, double> wcret = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc, opts.use128());
                 auto [isz_size, union_size] = wcret;
                 double res = isz_size;
@@ -316,8 +318,10 @@ case v: {\
                 rhn.reset(new mio::mmap_source(result.kmercountfiles_[j]));
             }
             const uint64_t *lptr = (const uint64_t *)lhs.data(), *rptr = (const uint64_t *)rhs.data();
-            const size_t lhl = lhs.size() / (opts.use128() ? 16: 8), rhl = rhs.size() / (opts.use128() ? 16: 8);
+            size_t lhl = lhs.size() / 8, rhl = rhs.size() / 8;
+            if(opts.use128()) lhl /= 2, rhl /= 2;
             if(lhn && rhn) {
+                std::fprintf(stderr, "Using weights, %p, %p with sizes %zu, %zu\n", lhn->data(), rhn->data(), lhl, rhl);
                 const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
                 const double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
                 std::pair<double, double> szp = opts.use128()
