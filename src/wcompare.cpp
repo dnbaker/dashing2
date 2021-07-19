@@ -20,14 +20,15 @@ struct PushBackCounter
   size_t count;
 };
 
-template<size_t MODE=0>
-std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl, const double lhsum, const double *lnptr, const uint64_t *rptr, const double *rnptr, size_t rhl, const double rhsum) {
+template<typename IT, size_t MODE=0>
+std::pair<double, double> weighted_compare_mode(const IT *lptr, size_t lhl, const double lhsum, const double *lnptr, const IT *rptr, const double *rnptr, size_t rhl, const double rhsum) {
     double isz_size = 0, isz_carry = 0.;
     auto increment = [](auto &sum, auto &carry, auto inc) __attribute__((__always_inline__)) {
         if(MODE) sketch::kahan::update(sum, carry, inc);
         else    sum += inc;
     };
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
+        //std::fprintf(stderr, "Comparing %zu/%zu, %zu/%zu\n", lhi, lhl, rhi, rhl);
         if(lptr[lhi] == rptr[rhi])
             increment(isz_size, isz_carry, std::min(lnptr[lhi++], rnptr[rhi++]));
         else {
@@ -38,7 +39,11 @@ std::pair<double, double> weighted_compare_mode(const uint64_t *lptr, size_t lhl
     return std::make_pair(isz_size, lhsum + rhsum - isz_size);
 }
 std::pair<double, double> weighted_compare(const uint64_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const uint64_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) {
-    return kahan ? weighted_compare_mode<1>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum): weighted_compare_mode<0>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
+    return kahan ? weighted_compare_mode<uint64_t, 1>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum): weighted_compare_mode<uint64_t, 0>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
+}
+std::pair<double, double> weighted_compare(const u128_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const u128_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) {
+    auto ptr = kahan ? &weighted_compare_mode<u128_t, 1> : &weighted_compare_mode<u128_t, 0>;
+    return ptr(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
 }
 size_t hamming_compare(const uint64_t *SK_RESTRICT lptr, size_t lhl, const uint64_t *SK_RESTRICT rptr, size_t rhl) {
     return std::inner_product(lptr, lptr + std::min(lhl, rhl), rptr, size_t(0), [](auto &c, auto x) {return c + x;}, [](auto lhs, auto rhs) -> size_t {return lhs == rhs;})
@@ -116,26 +121,38 @@ std::vector<T> load_file(std::FILE *fp) {
     return ret;
 }
 std::pair<double, double>
-weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum) {
+weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum, bool use128) {
     //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
+
+    u128_t lhv2, rhv2;
     uint64_t lhv, rhv;
+    //uint64_t &lhv = *reinterpret_cast<uint64_t *>(&lhv2), &rhv = *reinterpret_cast<uint64_t *>(&rhv2);
     double lhc = 1., rhc = 1.;
     if(std::feof(lhk) || std::feof(rhk)) {
         // If one of the sets is empty, return 0 intersection and union size accordingly
         return {0., lhsum + rhsum};
     }
+    const size_t incbytes = use128 ? 16: 8;
+    auto lh2p = &lhv2; auto lh1p = &lhv;
+    auto rh1p = &rhv;  auto rh2p = &rhv2;
+    void *const lhp = use128 ? static_cast<void *>(lh2p): static_cast<void *>(lh1p);
+    void *const rhp = use128 ? static_cast<void *>(rh2p): static_cast<void *>(rh1p);
     auto incl = [&]() {
         assert(lhk);
-        std::fread(&lhv, sizeof(lhv), 1, lhk); if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);
+        std::fread(lhp, incbytes, 1, lhk);
+        if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);
     };
-    auto incr = [&]() {std::fread(&rhv, sizeof(rhv), 1, rhk); if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);};
+    auto incr = [&]() {
+        std::fread(rhp, incbytes, 1, rhk);
+        if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);
+    };
     auto incb = [&]() {incl(); incr();};
     long double isz = 0.;
     incb();
     for(;;) {
-        if(lhv < rhv) incl();
+        if(use128 ? lhv2 < rhv2 :lhv < rhv) incl();
             // lhv not found, increment lh side
-        else if(rhv < lhv) incr();
+        else if(use128 ? rhv2 < lhv2: rhv < lhv) incr();
         else {
             isz += std::min(rhc, lhc);
             incb();

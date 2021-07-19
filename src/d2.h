@@ -85,15 +85,15 @@ struct Dashing2Options {
     // K-mer options
     int k_, w_;
     bns::Spacer sp_;
-    bns::Encoder<> enc_;
-    bns::RollingHasher<uint64_t> rh_;
-    bns::RollingHasher<u128_t> rh128_;
+    mutable bns::Encoder<> enc_;
+    mutable bns::RollingHasher<uint64_t> rh_;
+    mutable bns::RollingHasher<u128_t> rh128_;
     bns::RollingHashingType rht_;
     bool parse_by_seq_ = false;
     bool trim_chr_ = true;
     size_t sketchsize_ = 2048;
     double count_threshold_ = 0.;
-    KmerSketchResultType kmer_result_ = ONE_PERM;
+    KmerSketchResultType kmer_result_;
     bool by_chrom_ = false;
     bool bed_parse_normalize_intervals_ = false;
     size_t cssize_ = 0;
@@ -120,9 +120,10 @@ struct Dashing2Options {
     unsigned nthreads_;
 
     std::unique_ptr<FilterSet> fs_;
-    Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false):
+    Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false, KmerSketchResultType kres=ONE_PERM):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_, canon), rh_(k, canon, rht, w), rh128_(k, canon, rht, w), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
-        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, %s target, space = %s, datatype = %s\n", k, w, rht == bns::DNA ? "DNA": "Protein", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data());
+        kmer_result_ = kres;
+        std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, %s target, space = %s, datatype = %s and result = %s\n", k, w, rht == bns::DNA ? "DNA": "Protein", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data(), ::dashing2::to_string(kmer_result_).data());
         if(nt <= 0) {
             DBG_ONLY(std::fprintf(stderr, "[%s:%s:%d] num threads < 0, checking OMP_NUM_THREADS\n", __FILE__, __func__, __LINE__);)
             if(char *s = std::getenv("OMP_NUM_THREADS"))
@@ -130,7 +131,7 @@ struct Dashing2Options {
         }
         if(nt < 1) nt = 1;
         nthreads(nt);
-        rh_.enctype_ = rh128_.enctype_ = rht;
+        ht(rht);
     }
     void w(int neww) {w_ = neww; sp_.resize(k_, w_); rh128_.window(neww); rh_.window(neww);}
     std::string to_string() const;
@@ -160,7 +161,19 @@ struct Dashing2Options {
     // Getters and setters for all of the above
     Dashing2Options &parse_bigwig() {dtype_ = BIGWIG; return *this;}
     Dashing2Options &parse_bed() {dtype_ = BED; return *this;}
-    Dashing2Options &parse_protein(bool val) {rh_.enctype_ = rh128_.enctype_ = rht_ = (val ? bns::PROTEIN: bns::DNA); return *this;}
+    bns::InputType input_mode() const {return rht_;}
+    Dashing2Options &ht(bns::InputType rt) {
+        rht_ = rt;
+        rh_.hashtype(rt); rh128_.hashtype(rt);
+        enc_.hashtype(rt);
+        return *this;
+    }
+    Dashing2Options &parse_protein() {return ht(bns::PROTEIN);}
+    Dashing2Options &parse_protein3bit() {return ht(bns::PROTEIN_3BIT);}
+    Dashing2Options &parse_protein6() {return ht(bns::PROTEIN_6);}
+    Dashing2Options &parse_protein14() {return ht(bns::PROTEIN_14);}
+    Dashing2Options &parse_dna2() {return ht(bns::DNA2);}
+    Dashing2Options &parse_dnac() {return ht(bns::DNAC);}
     Dashing2Options &nthreads(int nt) {
         nt = std::max(nt, 1);
         nthreads_ = nt;
@@ -168,19 +181,22 @@ struct Dashing2Options {
         return *this;
     }
     void filterset(std::string path, bool is_kmer);
-    bool parse_protein() const {return rh_.enctype_ == bns::PROTEIN;}
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool trim_folder_paths() const {
         return trim_folder_paths_ || outprefix_.size();
     }
     bool canonicalize() const {return enc_.canonicalize();}
-    void canonicalize(bool val) {
+    void canonicalize(bool val) const {
         enc_.canonicalize(val);
+        rh_.canonicalize(val);
+        rh128_.canonicalize(val);
     }
     auto w() const {return w_;}
     bool one_perm() const {return kmer_result_ == ONE_PERM && sspace_ == SPACE_SET;}
     auto nthreads() const {return nthreads_;}
+    size_t nremperres64() const {return enc_.nremperres64();}
+    size_t nremperres128() const {return enc_.nremperres128();}
 };
 
 static INLINE bool endswith(std::string lhs, std::string rhs) {

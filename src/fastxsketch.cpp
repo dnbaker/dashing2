@@ -228,6 +228,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if(opts.outprefix_.size())
                     ret = opts.outprefix_ + '/' + ret;
             }
+            if(opts.canonicalize())
+                ret += ".rc_canon";
             if(opts.kmer_result_ <= FULL_SETSKETCH)
                 ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
             ret = ret + std::string(".k") + std::to_string(opts.k_);
@@ -304,8 +306,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                     std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
                 }
-                if(ret.kmerfiles_.size() > i) {
-                    ret.kmerfiles_[i] = destkmer;
+                if(ret.kmerfiles_.size() > myind) {
+                    ret.kmerfiles_[myind] = destkmer;
                 }
                 continue;
             } else {
@@ -323,19 +325,15 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                             func(x);
                     };
 #define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
-                    if(!opts.parse_protein() && (opts.w_ > opts.k_ || opts.k_ <= 64)) {
-                        if(opts.k_ < 32) {
-                            auto encoder(opts.enc_);
-                            FUNC_FE(encoder.for_each);
-                        } else {
-                            auto encoder(opts.enc_.to_u128());
-                            FUNC_FE(encoder.for_each);
-                        }
+                    if(unsigned(opts.k_) <= opts.nremperres64()) {
+                        auto encoder(opts.enc_);
+                        FUNC_FE(encoder.for_each);
+                    } else if(unsigned(opts.k_) <= opts.nremperres128()) {
+                        auto encoder(opts.enc_.to_u128());
+                        FUNC_FE(encoder.for_each);
                     } else if(opts.use128()) {
-                        DBG_ONLY(std::fprintf(stderr, "Parsing Protein with k = %u for 128-bit hashes\n", opts.k_);)
                         FUNC_FE(opts.rh128_.for_each_hash);
                     } else {
-                        DBG_ONLY(std::fprintf(stderr, "Parsing Protein with k = %u for 64-bit hashes\n", opts.k_);)
                         FUNC_FE(opts.rh_.for_each_hash);
                     }
 #undef FUNC_FE
