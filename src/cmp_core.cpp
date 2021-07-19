@@ -222,7 +222,7 @@ case v: {\
         return levenshteinSSE::levenshtein(result.sequences_[i], result.sequences_[j]);
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
-        if(opts.sspace_ == SPACE_SET) {
+        if(opts.sspace_ == SPACE_SET && opts.truncation_method_ <= 0) {
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
             LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
@@ -274,63 +274,35 @@ case v: {\
         std::string dummy;
         auto &lnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[i]: dummy);
         auto &rnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[j]: dummy);
-        const bool lcomp = iscomp(lpath), rcomp = iscomp(rpath);
-        const bool lncomp = iscomp(lnpath), rncomp = iscomp(rnpath);
-        if(lcomp || rcomp || lncomp || rncomp)
-        {
-            std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
-            std::string lcmd = path2cmd(lpath);
-            std::string rcmd = path2cmd(rpath);
-            std::cerr << lcmd << '\n';
-            std::cerr << rcmd << '\n';
-            if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
-            if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'"));
-            if(result.kmercountfiles_.size()) {
-                lcmd = path2cmd(result.kmercountfiles_[i]);
-                rcmd = path2cmd(result.kmercountfiles_[j]);
-                if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
-                if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
-            }
-            const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-            if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
-                if(opts.exact_kmer_dist_) {
-                    auto [edit_dist, max_edit_dist] = mmer_edit_distance(lhk, rhk, opts.use128());
-                    ret = opts.measure_ == M_EDIT_DISTANCE ? edit_dist: max_edit_dist - edit_dist;
-                } else {
-                    ret = hamming_compare_f64(lhk, rhk);
-                }
-            } else {
-                std::pair<double, double> wcret = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc, opts.use128());
-                auto [isz_size, union_size] = wcret;
-                double res = isz_size;
-                CORRECT_RES(res, opts.measure_, lhc, rhc)
-            }
-            ::pclose(lhk); ::pclose(rhk);
-            if(lhn) ::pclose(lhn), ::pclose(rhn);
-        } else {
-            //std::fprintf(stderr, "Using mmapping, %s and %s\n", lpath.data(), rpath.data());
-            mio::mmap_source lhs(lpath), rhs(rpath);
-            std::unique_ptr<mio::mmap_source> lhn, rhn;
-            if(result.kmercountfiles_.size()) {
-                lhn.reset(new mio::mmap_source(result.kmercountfiles_[i]));
-                rhn.reset(new mio::mmap_source(result.kmercountfiles_[j]));
-            }
-            const uint64_t *lptr = (const uint64_t *)lhs.data(), *rptr = (const uint64_t *)rhs.data();
-            const size_t lhl = lhs.size() / (opts.use128() ? 16: 8), rhl = rhs.size() / (opts.use128() ? 16: 8);
-            if(lhn && rhn) {
-                const double *lnptr = (const double *)lhn->data(), *rnptr = (const double *)rhn->data();
-                const double lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
-                std::pair<double, double> szp = opts.use128()
-                    ? weighted_compare((const u128_t *)lhs.data(), lnptr, lhl, lhc, (const u128_t *)rhs.data(), rnptr, rhl, rhc)
-                    : weighted_compare((const uint64_t *)lhs.data(), lnptr, lhl, lhc, (const uint64_t *)rhs.data(), rnptr, rhl, rhc);
-                //auto [isz_size, union_size] = szp;
-                double res = szp.first;
-                CORRECT_RES(res, opts.measure_, lhc, rhc)
-            } else {
-                double res = set_compare(lptr, lhl, rptr, rhl);
-                CORRECT_RES(res, opts.measure_, lhl, rhl)
-            }
+        std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
+        std::string lcmd = path2cmd(lpath);
+        std::string rcmd = path2cmd(rpath);
+        //std::cerr << lcmd << '\n';
+        //std::cerr << rcmd << '\n';
+        if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
+        if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'"));
+        if(result.kmercountfiles_.size()) {
+            lcmd = path2cmd(result.kmercountfiles_[i]);
+            rcmd = path2cmd(result.kmercountfiles_[j]);
+            if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
+            if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
         }
+        const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
+        if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
+            if(opts.exact_kmer_dist_) {
+                auto [edit_dist, max_edit_dist] = mmer_edit_distance(lhk, rhk, opts.use128());
+                ret = opts.measure_ == M_EDIT_DISTANCE ? edit_dist: max_edit_dist - edit_dist;
+            } else {
+                ret = hamming_compare_f64(lhk, rhk);
+            }
+        } else {
+            std::pair<double, double> wcret = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc, opts.use128());
+            auto [isz_size, union_size] = wcret;
+            double res = isz_size;
+            CORRECT_RES(res, opts.measure_, lhc, rhc)
+        }
+        ::pclose(lhk); ::pclose(rhk);
+        if(lhn) ::pclose(lhn), ::pclose(rhn);
 #undef CORRECT_RES
         // Compare exact representations, not compressed shrunk
     }
@@ -414,7 +386,28 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
     if(sub.joinable()) sub.join();
     if(ofp != stdout) std::fclose(ofp);
 }
+
+template<typename MHT, typename KMT>
+inline void densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
+{
+    std::vector<uint32_t> empty_indices;
+    for(size_t i = 0; i < sketchsize; ++i) {
+        if(minhashes[i] == empty)
+            empty_indices.push_back(i);
+    }
+    if(empty_indices.empty() || empty_indices.size() == sketchsize) return;
+    for(const uint32_t i: empty_indices) {
+        size_t j = i;
+        for(wy::WyRand<uint32_t> rng(i ^ 0xd63af43ad731df95);minhashes[j] == empty;j = div.mod(rng()));
+        minhashes[i] = minhashes[j];
+        if(kmers) kmers[i] = kmers[j];
+    }
+}
+
 void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
+    // We handle some details before dispatching the final comparison code
+    // First, we compute cardinalities for sets/multisets
+    // and then we densify one-permutation minhashing
     if(opts.kmer_result_ >= FULL_MMER_SET && result.cardinalities_.size() && result.cardinalities_.front() < 0.) {
         const size_t n = result.cardinalities_.size();
         if(opts.parse_by_seq_)
@@ -454,9 +447,21 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
             if(ifp) ::pclose(ifp);
         }
     }
+    if(opts.kmer_result_ == ONE_PERM && opts.truncation_method_ > 0) {
+        const schism::Schismatic<uint64_t> sd(opts.sketchsize_);
+        const size_t n = result.cardinalities_.size();
+        uint64_t *const kp= result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic, 32)
+#endif
+        for(size_t i = 0; i < n;++i) {
+            auto lp = &result.signatures_[opts.sketchsize_ * i];
+            densify(lp, kp ? &kp[opts.sketchsize_ * i]: kp, opts.sketchsize_, sd);
+        }
+    }
     //std::fprintf(stderr, "Handled generating needed cardinalities\n");
     // Calculate cardinalities if they haven't been
-    //VERBOSE_ONLY(
+    VERBOSE_ONLY(
     std::fprintf(stderr, "Beginning cmp_core with options: \n");
         if(opts.sspace_ == SPACE_SET) {
             std::fprintf(stderr, "Comparing sets\n");
@@ -468,7 +473,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
             std::fprintf(stderr, "Comparing items in edit distance space\n");
         }
         std::fprintf(stderr, "Result type: %s\n", to_string(opts.kmer_result_).data());
-    //)
+    )
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }

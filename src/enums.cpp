@@ -59,7 +59,7 @@ bool iscomp(const std::string &s) {
         else if(std::equal(&s[s.size() - 3], &s[s.size()], ".xz")) ret = true;
         else if(std::equal(&s[s.size() - 4], &s[s.size()], ".bz2")) ret = true;
     }
-    std::fprintf(stderr, "%s is %d/%s\n", s.data(), int(ret), ret ? "compressed": "uncompressed");
+    //std::fprintf(stderr, "%s is %d/%s\n", s.data(), int(ret), ret ? "compressed": "uncompressed");
     return ret;
 }
 
