@@ -258,22 +258,15 @@ case v: {\
         }
     } else {
 #define CORRECT_RES(res, measure, lhc, rhc)\
-            if(measure == INTERSECTION) {\
-                /* do nothing*/ \
-            } else if(measure == SYMMETRIC_CONTAINMENT) {\
+            if(measure == SYMMETRIC_CONTAINMENT) \
                 res = res / std::min(lhc, rhc);\
-            } else if(measure == POISSON_LLR || measure == SIMILARITY) {\
+            else if(measure == POISSON_LLR || measure == SIMILARITY)\
                 res = res / (lhc + rhc - res);\
-            } else if(measure == CONTAINMENT) {\
-                res /= lhc;\
-            }\
+            else if(measure == CONTAINMENT) res /= lhc;\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
         //std::fprintf(stderr, "Paths %zu/%zu are %s/%s\n", i, j, lpath.data(), rpath.data());
-        std::string dummy;
-        auto &lnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[i]: dummy);
-        auto &rnpath(result.kmercountfiles_.size() ? result.kmercountfiles_[j]: dummy);
         std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
         std::string lcmd = path2cmd(lpath);
         std::string rcmd = path2cmd(rpath);
@@ -296,8 +289,7 @@ case v: {\
                 ret = hamming_compare_f64(lhk, rhk);
             }
         } else {
-            std::pair<double, double> wcret = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc, opts.use128());
-            auto [isz_size, union_size] = wcret;
+            const auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc, opts.use128());
             double res = isz_size;
             CORRECT_RES(res, opts.measure_, lhc, rhc)
         }
