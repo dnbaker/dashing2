@@ -66,29 +66,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
                 else ((uint8_t *)compressed_reps)[i] = sig;
             }
         }
-    } else if(truncation_method > 0) {
-        std::fprintf(stderr, "Performing %d-bit compression. If k-mers are saved and b-bit signatures are used, the actual kmers are emitted.\n", int(fd * 8.));
-        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&revhasher](auto x) {
-            return kne ? revhasher(kmers[x]): reg2sig(sigs[x]);
-        };
-        if(fd == 0.5) {
-            uint8_t *ptr = (uint8_t *)compressed_reps;
-            OMP_STATIC_SCHED32
-            for(size_t i = 0; i < nsigs / 2; ++i) {
-                const uint64_t sig1 = getsig(2 * i), sig2 = getsig(2 * i + 1);
-                ptr[i] = (sig1 & 0xfu) | ((sig2 & 0xfu) << 4);
-            }
-        } else {
-            OMP_STATIC_SCHED32
-            for(size_t i = 0; i < nsigs; ++i) {
-                const uint64_t sig = getsig(i);
-                if(fd == 8) ((uint64_t *)compressed_reps)[i] = sig;
-                else if(fd == 4) ((uint32_t *)compressed_reps)[i] = sig;
-                else if(fd == 2) ((uint16_t *)compressed_reps)[i] = sig;
-                else ((uint8_t *)compressed_reps)[i] = sig;
-            }
-        }
-    } else {
+    } else if(truncation_method <= 0) {
         RegT minreg = sigs[0], maxreg = minreg;
         OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
         for(size_t i = 0; i < nsigs; ++i) {
@@ -99,12 +77,17 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         }
         //std::fprintf(stderr, "regs: %g->%g\n", minreg, maxreg);
         double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
+        long double logbinv;
         assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
-        std::fprintf(stderr, "Truncated via setsketch, a = %Lg and b = %Lg\n", a, b);
+        std::fprintf(stderr, "Truncated via setsketch, a = %Lg and b = %Lg from min, max regs %g, %g\n", a, b, minreg, maxreg);
+        if(a == 0. || std::isinf(b)) {
+            std::fprintf(stderr, "Note: setsketch compression yielded infinite value.\n");
+            //throw 1;
+        }
         std::get<1>(ret) = a;
         std::get<2>(ret) = b;
-        const long double logbinv = 1.L / std::log1p(b - 1.L);
+        logbinv = 1.L / std::log1p(b - 1.L);
         if(fd == 0.5) {
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs / 2; ++i) {
@@ -125,6 +108,29 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
                     else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
                     else             ((uint8_t *)compressed_reps)[i] = isub;
                 }
+            }
+        }
+    } else {
+        //bbit:
+        std::fprintf(stderr, "Performing %d-bit compression. If k-mers are saved and b-bit signatures are used, the actual kmers are emitted.\n", int(fd * 8.));
+        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&revhasher](auto x) {
+            return kne ? revhasher(kmers[x]): reg2sig(sigs[x]);
+        };
+        if(fd == 0.5) {
+            uint8_t *ptr = (uint8_t *)compressed_reps;
+            OMP_STATIC_SCHED32
+            for(size_t i = 0; i < nsigs / 2; ++i) {
+                const uint64_t sig1 = getsig(2 * i), sig2 = getsig(2 * i + 1);
+                ptr[i] = (sig1 & 0xfu) | ((sig2 & 0xfu) << 4);
+            }
+        } else {
+            OMP_STATIC_SCHED32
+            for(size_t i = 0; i < nsigs; ++i) {
+                const uint64_t sig = getsig(i);
+                if(fd == 8) ((uint64_t *)compressed_reps)[i] = sig;
+                else if(fd == 4) ((uint32_t *)compressed_reps)[i] = sig;
+                else if(fd == 2) ((uint16_t *)compressed_reps)[i] = sig;
+                else ((uint8_t *)compressed_reps)[i] = sig;
             }
         }
     }
@@ -249,7 +255,6 @@ case v: {\
             }
             const auto neq = sketch::eq::count_eq(&sptr[opts.sketchsize_ * i], &sptr[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
-            DBG_ONLY(std::fprintf(stderr, "Computing number of equal registers between %zu and %zu, resulting in %zu/%zu (%g)\n", i, j, size_t(neq), opts.sketchsize_, ret);)
             if(opts.measure_ == INTERSECTION) {
                 ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);

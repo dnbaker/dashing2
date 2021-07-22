@@ -40,6 +40,7 @@ struct SketchingResult {
 };
 using FastxSketchingResult = SketchingResult;
 
+
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths);
 FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs=static_cast<kseq_t *>(nullptr), bool parallel=false, const size_t seqs_per_batch = 8192);
 }

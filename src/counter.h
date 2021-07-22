@@ -100,6 +100,8 @@ struct Counter {
                 if(count_sketch_[i] > threshold)
                    tmp.push_back({i, count_sketch_[i]});
         }
+        // When finalizing, hash the ids so that our hash sets are sorted hash sets
+        // which means we can make a minhash sketch by taking the prefix!
         std::sort(tmp.begin(), tmp.end()); // Sort the hashes
         dst.resize(tmp.size());
         countdst.resize(tmp.size());

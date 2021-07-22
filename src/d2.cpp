@@ -80,10 +80,22 @@ void Dashing2Options::filterset(std::string path, bool is_kmer) {
 }
 void Dashing2Options::validate() const {
     if(canonicalize() && rh_.hashtype() != bns::DNA) {
-        std::fprintf(stderr, "Can't reverse-complement protein\n");
         canonicalize(false);
     }
 }
+
+uint64_t XORMASK = 0x724526e320f9967dull;
+u128_t XORMASK2 = (u128_t(12499408336417088522ull) << 64) | XORMASK;
+void seed_mask(uint64_t x) {
+    if(x == 0) {
+        XORMASK = 0; XORMASK2 = 0;
+    } else {
+        wy::WyRand<uint64_t> rng(x);
+        XORMASK = rng();
+        XORMASK2 = (u128_t(rng()) << 64) | XORMASK;
+    }
+}
+
 } // dashing2
 
 int main_usage() {

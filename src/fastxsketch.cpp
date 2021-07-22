@@ -128,6 +128,9 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     return m / s;
 }
 
+
+
+
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
     if(paths.empty()) THROW_EXCEPTION(std::invalid_argument("Can't sketch empty path set"));
     std::vector<std::pair<size_t, uint64_t>> filesizes = get_filesizes(paths);
@@ -228,6 +231,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 if(opts.outprefix_.size())
                     ret = opts.outprefix_ + '/' + ret;
             }
+            if(opts.seedseed_ != 0)
+                ret += ".seed" + std::to_string(opts.seedseed_);
             if(opts.canonicalize())
                 ret += ".rc_canon";
             if(opts.kmer_result_ <= FULL_SETSKETCH)
@@ -321,18 +326,21 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             auto perf_for_substrs = [&](const auto &func) {
                 for_each_substr([&](const std::string &subpath) {
                     auto lfunc = [&](auto x) {
+                        x = maskfn(x);
                         if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass())
                             func(x);
                     };
 #define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
-                    if(unsigned(opts.k_) <= opts.nremperres64()) {
+                    if(opts.use128()) {
+                        if(unsigned(opts.k_) <= opts.nremperres128()) {
+                            auto encoder(opts.enc_.to_u128());
+                            FUNC_FE(encoder.for_each);
+                        } else {
+                            FUNC_FE(opts.rh128_.for_each_hash);
+                        }
+                    } else if(unsigned(opts.k_) <= opts.nremperres64()) {
                         auto encoder(opts.enc_);
                         FUNC_FE(encoder.for_each);
-                    } else if(unsigned(opts.k_) <= opts.nremperres128()) {
-                        auto encoder(opts.enc_.to_u128());
-                        FUNC_FE(encoder.for_each);
-                    } else if(opts.use128()) {
-                        FUNC_FE(opts.rh128_.for_each_hash);
                     } else {
                         FUNC_FE(opts.rh_.for_each_hash);
                     }

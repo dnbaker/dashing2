@@ -130,6 +130,7 @@ int cmp_main(int argc, char **argv) {
     bool parse_by_seq = false;
     bool hpcompress = false;
     Measure measure = SIMILARITY;
+    uint64_t seedseed = 0;
     std::string spacing;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -175,7 +176,8 @@ int cmp_main(int argc, char **argv) {
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
         .cmd(cmd).count_threshold(count_threshold)
-        .homopolymer_compress_minimizers(hpcompress);
+        .homopolymer_compress_minimizers(hpcompress)
+        .seedseed(seedseed);
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }

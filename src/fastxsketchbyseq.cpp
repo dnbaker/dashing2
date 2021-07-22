@@ -3,6 +3,7 @@
 namespace dashing2 {
 using bns::InputType;
 
+
 struct OptSketcher {
     std::unique_ptr<BagMinHash> bmh;
     std::unique_ptr<ProbMinHash> pmh;
@@ -19,6 +20,7 @@ struct OptSketcher {
     bns::InputType it_;
     OptSketcher&operator=(const OptSketcher &o) {
         rh_ = o.rh_; rh128_ = o.rh128_; enc_ = o.enc_; enc128_ = o.enc128_; k_ = o.k_; w_ = o.w_; use128_ = o.use128_; it_ = o.it_;
+        input_mode(o.input_mode());
         if(o.ctr) ctr.reset(new Counter(*o.ctr));
         if(o.bmh) bmh.reset(new BagMinHash(*o.bmh));
         else if(o.pmh) pmh.reset(new ProbMinHash(*o.pmh));
@@ -27,7 +29,8 @@ struct OptSketcher {
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
         return *this;
     }
-    OptSketcher(const OptSketcher &o): rh_(o.rh_), rh128_(o.rh128_), enc_(o.enc_), enc128_(o.enc128_), k_(o.k_), w_(o.w_), use128_(o.use128_), it_(o.it_) {
+    OptSketcher(const OptSketcher &o): rh_(o.rh_), rh128_(o.rh128_), enc_(o.enc_), enc128_(o.enc128_), k_(o.k_), w_(o.w_), use128_(o.use128_) {
+        input_mode(o.input_mode());
         if(o.ctr) ctr.reset(new Counter(*o.ctr));
         if(o.bmh) bmh.reset(new BagMinHash(*o.bmh));
         else if(o.pmh) pmh.reset(new ProbMinHash(*o.pmh));
@@ -35,21 +38,27 @@ struct OptSketcher {
         else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
     }
-    OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), k_(opts.k_), w_(opts.w_), use128_(opts.use128()), it_(opts.input_mode()) {
-        input_mode(it_);
+    OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), k_(opts.k_), w_(opts.w_), use128_(opts.use128()) {
+        input_mode(opts.input_mode());
+        assert(opts.hashtype() == it_);
         if(opts.sspace_ == SPACE_EDIT_DISTANCE)
             omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
     }
     template<typename Func>
     void for_each(const Func &func, const char *s, size_t n) {
-        if(unsigned(k_) <= enc_.nremperres64() && !use128_) {
+        if(use128_) {
+            if(unsigned(k_) <= enc_.nremperres128()) {
+                enc128_.for_each(func, s, n);
+            } else {
+                rh128_.for_each(func, s, n);
+            }
+            return;
+        }
+        if(unsigned(k_) <= enc_.nremperres64()) {
             enc_.for_each(func, s, n);
-        } else if(unsigned(k_) <= enc_.nremperres128()) {
-            enc128_.for_each(func, s, n);
         } else {
-            use128_
-            ? rh128_.for_each_hash(func, s, n)
-            : rh_.for_each_hash(func, s, n);
+            //std::fprintf(stderr, "Doing for each hash\n");
+            rh_.for_each_hash(func, s, n);
         }
     }
     void input_mode(InputType it) {it_ = it; enc_.hashtype(it); enc128_.hashtype(it); rh_.hashtype(it); rh128_.hashtype(it);}
@@ -191,6 +200,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             auto &myseq(seqmins[i - lastindex]);
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
+                x = maskfn(x);
                 if(!opts.homopolymer_compress_minimizers_ || myseq.empty() ||
                     (sizeof(x) == 8 ? myseq.back() != x: std::memcmp(&myseq[myseq.size() - 2], &x, 16) != 0))
                 {
@@ -224,10 +234,10 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             ret.cardinalities_[i] = myseq.size();
             //std::fprintf(stderr, "Processed items for %zu\n", i);
         } else {
-            assert(!sketchers.opss || sketchers.opss->total_updates() == 0u);
             //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
             sketchers.for_each([&](auto x) {
                 if(opts.fs_ && opts.fs_->in_set(x)) return;
+                x = maskfn(x);
                 if(sketchers.opss) sketchers.opss->update(x);
                 else if(sketchers.ctr)
                     sketchers.ctr->add(x);
@@ -248,27 +258,25 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                         ptr = sketchers.fss->data();
                         ret.cardinalities_[i] = sketchers.fss->getcard();
                     }
-                } else if(sketchers.opss) {
-                    ptr = sketchers.opss->data();
-                    ret.cardinalities_[i] = sketchers.opss->getcard();
+                } else {
+                    ptr = sketchers.opss ? sketchers.opss->data(): sketchers.fss->data();
+                    ret.cardinalities_[i] = sketchers.opss ? sketchers.opss->getcard(): sketchers.fss->getcard();
                     if(ret.cardinalities_[i] < 10 * opts.sketchsize_) {
                         ska::flat_hash_set<uint64_t> ids;
                         ids.reserve(opts.sketchsize_);
-                        sketchers.for_each([&](auto x) {ids.insert(x);}, ret.sequences_[i].data(), ret.sequences_[i].size());
+                        sketchers.for_each([&](auto x) {
+                            if(opts.fs_ && opts.fs_->in_set(x)) return;
+                            x = maskfn(x);
+                            ids.insert(x);
+                        }, ret.sequences_[i].data(), ret.sequences_[i].size());
                         ret.cardinalities_[i] = ids.size();
                     }
-                    kmer_ptr = sketchers.opss->ids().data();
+                    kmer_ptr = sketchers.opss ? sketchers.opss->ids().data(): sketchers.fss->ids().data();
                     kmercounts.resize(opts.sketchsize_);
-                    auto &idc = sketchers.opss->idcounts();
-                    std::copy(idc.begin(), idc.end(), kmercounts.begin());
-                } else {
-                    assert(sketchers.fss);
-                    ptr = sketchers.fss->data();
-                    ret.cardinalities_[i] = sketchers.fss->getcard();
-                    DBG_ONLY(std::fprintf(stderr, "Card is %g from FSS\n", sketchers.fss->getcard());)
-                    if(sketchers.fss->ids().size())
-                        kmer_ptr = sketchers.fss->ids().data();
-                    if(sketchers.fss->idcounts().size()) {
+                    if(sketchers.opss) {
+                        auto &idc = sketchers.opss->idcounts();
+                        std::copy(idc.begin(), idc.end(), kmercounts.begin());
+                    } else if(sketchers.fss->idcounts().size()) {
                         kmercounts.resize(opts.sketchsize_);
                         std::copy(sketchers.fss->idcounts().begin(), sketchers.fss->idcounts().end(), kmercounts.begin());
                     }
