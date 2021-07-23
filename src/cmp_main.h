@@ -74,6 +74,7 @@ struct Dashing2DistOptions: public Dashing2Options {
         if(this->kmer_result_ >= FULL_MMER_SET) {
             exact_kmer_dist_ = true;
         }
+        if(outfile_path_.empty() || outfile_path_ == "-") outfile_path_ = "/dev/stdout";
         validate();
     }
     ~Dashing2DistOptions() {
