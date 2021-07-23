@@ -199,8 +199,8 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         } else if(seqmins) {
             auto &myseq(seqmins[i - lastindex]);
             sketchers.for_each([&](auto x) {
-                if(opts.fs_ && opts.fs_->in_set(x)) return;
                 x = maskfn(x);
+                if(opts.fs_ && opts.fs_->in_set(x)) return;
                 if(!opts.homopolymer_compress_minimizers_ || myseq.empty() ||
                     (sizeof(x) == 8 ? myseq.back() != x: std::memcmp(&myseq[myseq.size() - 2], &x, 16) != 0))
                 {
@@ -236,8 +236,8 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         } else {
             //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
             sketchers.for_each([&](auto x) {
-                if(opts.fs_ && opts.fs_->in_set(x)) return;
                 x = maskfn(x);
+                if(opts.fs_ && opts.fs_->in_set(x)) return;
                 if(sketchers.opss) sketchers.opss->update(x);
                 else if(sketchers.ctr)
                     sketchers.ctr->add(x);
@@ -265,8 +265,8 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                         ska::flat_hash_set<uint64_t> ids;
                         ids.reserve(opts.sketchsize_);
                         sketchers.for_each([&](auto x) {
-                            if(opts.fs_ && opts.fs_->in_set(x)) return;
                             x = maskfn(x);
+                            if(opts.fs_ && opts.fs_->in_set(x)) return;
                             ids.insert(x);
                         }, ret.sequences_[i].data(), ret.sequences_[i].size());
                         ret.cardinalities_[i] = ids.size();
