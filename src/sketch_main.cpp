@@ -46,6 +46,7 @@ int sketch_main(int argc, char **argv) {
     uint64_t seedseed = 0;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
+    std::string fsarg;
     // By default, use full hash values, but allow people to enable smaller
     bool normalize_bed = false;
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -100,6 +101,7 @@ int sketch_main(int argc, char **argv) {
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }
+    opts.filterset(fsarg);
     if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
             && opts.kmer_result_ == ONE_PERM) {
         opts.kmer_result_ = FULL_SETSKETCH;

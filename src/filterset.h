@@ -59,10 +59,13 @@ public:
         }
         return std::string("FilterSetSortedHashSet-size=") + std::to_string(data_.size());
     }
+#if 0
     template<typename IT>
     void reset(IT beg, IT end, double bfexp=-1., int ktouse=-1) {
+        //aligned::vector<T> dat = std::move(data_);
         *this = FilterSet(beg, end, bfexp, ktouse);
     }
+#endif
     FilterSet &operator=(const FilterSet &o) = default;
     FilterSet &operator=(FilterSet &&o){
         data_ = std::move(o.data_);
@@ -79,9 +82,7 @@ public:
     void add(uint64_t item) {
         data_.push_back(item);
     }
-    void finalize() {
-        reset(data_.begin(), data_.end(), bfexp_, k_ > 0 ? k_: -1);
-    }
+    void finalize();
     template<typename IT>
     FilterSet(IT beg, IT end, double bfexp=-1., int ktouse=-1): bfexp_(bfexp) {
         std::fprintf(stderr, "bfexp: %g\n", bfexp_);
@@ -104,8 +105,6 @@ public:
                 for(int i = 0; i < k_; ++i) {
                     auto v = mt();
                     const size_t rem = mod_.mod(v);
-                    auto &reg = data_[(rem >> SHIFT)];
-                    reg |= (T(1) << (rem & MASK));
                     data_[(rem >> SHIFT)] |= (T(1) << (rem & MASK));
                 }
             }
@@ -200,6 +199,8 @@ public:
         // Equivalent, but no logging
         return it != e && *it == x;
     }
+    const T *data() const {return data_.data();}
+    size_t size() const {return data_.size();}
 };
 
 FilterSet from_fastx(const std::string &path);

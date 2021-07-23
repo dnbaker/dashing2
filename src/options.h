@@ -38,6 +38,7 @@ enum OptArg{
     OPTARG_SET,
     OPTARG_SPACING,
     OPTARG_RANDOM_SEED,
+    OPTARG_FILTERSET,
     OPTARG_DUMMY
 };
 
@@ -112,7 +113,8 @@ enum OptArg{
     {"set", no_argument, 0, OPTARG_SET},\
     {"exact-kmer-dist", no_argument, 0, OPTARG_EXACT_KMER_DIST},\
     {"spacing", required_argument, 0, OPTARG_SPACING},\
-    {"seed", required_argument, 0, OPTARG_RANDOM_SEED},
+    {"seed", required_argument, 0, OPTARG_RANDOM_SEED},\
+    {"filterset", required_argument, 0, OPTARG_FILTERSET},
 
 
 
@@ -166,7 +168,8 @@ enum OptArg{
             downsample_frac = std::atof(optarg); break;\
         }\
         case OPTARG_SPACING: spacing = optarg; canon = false; break;\
-        case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;
+        case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;\
+        case OPTARG_FILTERSET: fsarg = optarg; break;\
 
 
 
@@ -206,6 +209,10 @@ static constexpr const char *siglen =
         "-F/--ffile: read paths from file in addition to positional arguments\n"\
         "-Q/--qfile: read query paths from file; this is used for asymmetric queries (e.g., containment)\n"\
         "This accelerates weighted sketching at the cost of some approximation.\n"\
+        "K-mer Filtering\n\n"\
+        "If there are a set of common k-mers or artefactual sequence, you can specify --filterset to skip k-mers in this file when sketching other files.\n"\
+        "By default, this converts it into a sorted hash set and skips k-mers which are found in the set.\n"\
+        "`--filterset [path]` yields this.\n"\
         "\nSketch options\n"\
         "These decide how m-mers are accumulated.\n"\
         "Default behavior is set sketching (tossing multiplicities). If --multiset or --prob is set or a minimum count is provided,"\

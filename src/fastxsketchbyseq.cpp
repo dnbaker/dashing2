@@ -47,18 +47,13 @@ struct OptSketcher {
     template<typename Func>
     void for_each(const Func &func, const char *s, size_t n) {
         if(use128_) {
-            if(unsigned(k_) <= enc_.nremperres128()) {
+            if(unsigned(k_) <= enc_.nremperres128())
                 enc128_.for_each(func, s, n);
-            } else {
+            else
                 rh128_.for_each(func, s, n);
-            }
-            return;
-        }
-        if(unsigned(k_) <= enc_.nremperres64()) {
-            enc_.for_each(func, s, n);
         } else {
-            //std::fprintf(stderr, "Doing for each hash\n");
-            rh_.for_each_hash(func, s, n);
+            if(unsigned(k_) <= enc_.nremperres64()) enc_.for_each(func, s, n);
+            else                                     rh_.for_each_hash(func, s, n);
         }
     }
     void input_mode(InputType it) {it_ = it; enc_.hashtype(it); enc128_.hashtype(it); rh_.hashtype(it); rh128_.hashtype(it);}

@@ -186,6 +186,7 @@ struct Dashing2Options {
         return *this;
     }
     void filterset(std::string path, bool is_kmer);
+    void filterset(std::string fsarg);
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool trim_folder_paths() const {

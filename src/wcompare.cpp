@@ -10,9 +10,10 @@
 
 namespace dashing2 {
 //using u128_t = __uint128_t;
-template<typename T> std::vector<T> load_file(std::FILE *fp);
+template<typename T, size_t BUFSZ=16384> std::vector<T> load_file(std::FILE *fp);
 
 struct PushBackCounter
+
 {
   struct value_type { template<typename T> value_type(const T&) { } };
   void push_back(const value_type &){++count;}
@@ -106,16 +107,17 @@ double cosine_compare(const uint64_t *lptr, size_t lhl, [[maybe_unused]] const d
     }
     return dotprod;
 }
-template<typename T>
+
+template<typename T, size_t BUFSZ>
 std::vector<T> load_file(std::FILE *fp) {
-    std::unique_ptr<T[]> tmp(new T[16384]);
+    std::unique_ptr<T[]> tmp(new T[BUFSZ]);
     std::vector<T> ret;
     while(!std::feof(fp)) {
-        size_t n = std::fread(tmp.get(), sizeof(T), 16384, fp);
+        size_t n = std::fread(tmp.get(), sizeof(T), BUFSZ, fp);
         const size_t oldsz = ret.size();
         ret.resize(oldsz + n);
         std::copy(tmp.get(), &tmp[n], &ret[oldsz]);
-        if(n != 16384)
+        if(n != BUFSZ)
             break;
     }
     return ret;

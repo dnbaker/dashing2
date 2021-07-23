@@ -41,7 +41,15 @@ std::string Dashing2Options::to_string() const {
     ret += "\"";
     return ret;
 }
+
+void Dashing2Options::filterset(std::string fsarg) {
+    if(fsarg.empty()) return;
+    auto i = fsarg.find_last_of(':');
+    filterset(fsarg.substr(0, i), (i != std::string::npos && static_cast<char>(fsarg[i + 1] & 0xdf) != 'K'));
+}
+
 void Dashing2Options::filterset(std::string path, bool is_kmer) {
+    fs_.reset(new FilterSet());
     if(is_kmer) {
         std::string cmd;
         if(endswith(path, ".xz")) cmd = "xz -dc ";
@@ -50,33 +58,33 @@ void Dashing2Options::filterset(std::string path, bool is_kmer) {
         else cmd = "cat ";
         cmd += path;
         std::FILE *ifp = ::popen(cmd.data(), "r");
-        fs_.reset(new FilterSet());
-        union {
-            uint64_t u6;
-            u128_t u12;
-        } u;
-        for(const auto is(use128() ? 16: 8);std::fread(&u, is, 1, ifp) == 1;) {
-            if(use128()) fs_->add(u.u12);
-            else         fs_->add(u.u6);
+        uint64_t u6; u128_t u12;
+        void *const ptr = use128() ? (void *)&u12: (void *)&u6;
+        for(const auto is(use128() ? 16: 8);std::fread(ptr, is, 1, ifp) == 1;) {
+            if(use128()) fs_->add(u12);
+            else         fs_->add(u6);
         }
         ::pclose(ifp);
-        return;
-    }
-    auto perf_for_substrs = [&](const auto &func) {
+    } else {
         for_each_substr([&](const std::string &subpath) {
             //std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
-            auto lfunc = [&](auto x) {if(!fs_ || !fs_->in_set(x)) func(x);};
-            if(unsigned(k_) <= enc_.nremperres64() && !use128()) {
-                enc_.for_each(lfunc, subpath.data());
-            } else if(unsigned(k_) <= enc_.nremperres128()) {
-                auto encoder(enc_.to_u128());
-                encoder.for_each(lfunc, subpath.data());
+            const auto sp = subpath.data();
+            auto lfunc = [&](auto x) {fs_->add(maskfn(x));};
+            if(use128()) {
+                if(unsigned(k_) <= enc_.nremperres128()) {
+                    auto encoder(enc_.to_u128());
+                    encoder.for_each(lfunc, sp);
+                } else {
+                    rh128_.for_each_hash(lfunc, sp);
+                }
+            } else if(unsigned(k_) <= enc_.nremperres64()) {
+                enc_.for_each(lfunc, sp);
             } else {
-                use128() ? rh128_.for_each_hash(lfunc, subpath.data()): rh_.for_each_hash(lfunc, subpath.data());
+                rh_.for_each_hash(lfunc, sp);
             }
         }, path);
-    };
-    perf_for_substrs([fs=fs_.get()](auto x) {fs->add(x);});
+    }
+    fs_->finalize();
 }
 void Dashing2Options::validate() const {
     if(canonicalize() && rh_.hashtype() != bns::DNA) {

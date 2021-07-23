@@ -206,6 +206,7 @@ public:
         as_sigs_.reset();
         card_ = -1.;
         for(auto &p: potentials_) p.clear();
+        total_updates_ = 0;
     }
     double getcard() {
         if(card_ > 0.) return card_;
