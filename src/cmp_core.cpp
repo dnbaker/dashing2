@@ -315,6 +315,11 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
     std::deque<std::pair<std::unique_ptr<float[]>, size_t>> datq;
     volatile int loopint = 0;
     std::mutex datq_lock;
+    if(opts.output_format_ == MACHINE_READABLE) {
+        std::fprintf(stderr, "Emitting machine-readable: %s\n", to_string(opts.output_format_).data());
+    } else {
+        std::fprintf(stderr, "Emitting human-readable: %s\n", to_string(opts.output_format_).data());
+    }
     // Emit Header
     if(opts.output_format_ == HUMAN_READABLE) {
         std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": "PHYLIP pairwise");
@@ -483,23 +488,21 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     // thresholded nn graphs
 
     // Step 1: Build LSH Index
-    std::vector<uint64_t> nperhashes{1, 2, 3, 4, 6, 8};
+    std::vector<uint64_t> nperhashes{1, 2, 3, 4};
     std::vector<uint64_t> nperrows(nperhashes.size());
     for(size_t i = 0; i < nperhashes.size(); ++i) {
         const auto nh = nperhashes[i];
         auto &np = nperrows[i];
-        if(nh < 3) {
+        if(nh < 2) {
             np = opts.sketchsize_ / nh;
-        } else if(nh < 5) {
-            np = opts.sketchsize_ / nh * 8;
-        } else if(nh < 6) {
-            np = opts.sketchsize_ / nh * 6;
-        } else np = opts.sketchsize_ / nh * 4;
+        } else if(nh <= 4) {
+            np = opts.sketchsize_ * 8 / nh;
+        } else if(nh <= 6) {
+            np = opts.sketchsize_  * 16 / nh;
+        } else np = opts.sketchsize_ * 32 / nh;
     }
-    auto idx = [&]() -> SetSketchIndex<uint64_t, LSHIDType> {
-        if(opts.kmer_result_ >= FULL_MMER_SET) return {};
-        return SetSketchIndex<uint64_t, LSHIDType>(opts.sketchsize_, nperhashes, nperrows);
-    }();
+    using SSI = SetSketchIndex<uint64_t, LSHIDType>;
+    SSI idx(opts.kmer_result_ < FULL_MMER_SET ? SSI(opts.sketchsize_, nperhashes, nperrows): SSI());
 
     // Step 2: Build nearest-neighbor candidate table
     if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {

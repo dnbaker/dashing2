@@ -61,7 +61,6 @@ enum OptArg{
     LO_ARG("count-threshold", 'm')\
     LO_ARG("threshold", 'm')\
     LO_FLAG("binary-output", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
-    LO_FLAG("parse-by-seq", OPTARG_PARSEBYSEQ, parse_by_seq, true)\
     LO_FLAG("bagminhash", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("prob", 'P', sketch_space, SPACE_PSET)\
     LO_FLAG("probs", 'P', sketch_space, SPACE_PSET)\
@@ -114,7 +113,8 @@ enum OptArg{
     {"exact-kmer-dist", no_argument, 0, OPTARG_EXACT_KMER_DIST},\
     {"spacing", required_argument, 0, OPTARG_SPACING},\
     {"seed", required_argument, 0, OPTARG_RANDOM_SEED},\
-    {"filterset", required_argument, 0, OPTARG_FILTERSET},
+    {"filterset", required_argument, 0, OPTARG_FILTERSET},\
+    {"parse-by-seq", no_argument, (int *)&parse_by_seq, 1},\
 
 
 
