@@ -5,7 +5,7 @@ CXX?=g++
 LIB=-lz
 INCLUDE+=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
 OPT+=-std=c++17 -O3 -march=native -fopenmp
-WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic
+WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic -Wno-shift-count-overflow
 EXTRA+=-DNOCURL
 CXXFLAGS+=-std=c++17
 
@@ -42,7 +42,9 @@ dashing2: $(OBJ) libBigWig.a $(wildcard src/*.h)
 dashing2-0: $(OBJ0) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-d: $(OBJDBG) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
+dashing2-d0: $(OBJDBG) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-add: $(OBJADD) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJADD) -o $@ $(LIB) $(EXTRA) libBigWig.a -fsanitize=address
 dashing2-g: $(GLIBOBJ) libBigWig.a
@@ -67,7 +69,7 @@ read%-f: test/read%.fo $(FLIBOBJ)
 %.lto: %.cpp
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
 %.do: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0
 %.sano: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto -fsanitize=address
 %.go: %.cpp $(wildcard src/*.h)

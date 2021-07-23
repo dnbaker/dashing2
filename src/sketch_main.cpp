@@ -43,8 +43,10 @@ int sketch_main(int argc, char **argv) {
     double nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
     double downsample_frac = 1.;
+    uint64_t seedseed = 0;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
+    std::string fsarg;
     // By default, use full hash values, but allow people to enable smaller
     bool normalize_bed = false;
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -52,9 +54,11 @@ int sketch_main(int argc, char **argv) {
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:CNs2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
-        SHARED_FIELDS
-        case '?': case 'h': sketch_usage(); return 1;
-    }}
+            SHARED_FIELDS
+            case '?': case 'h': sketch_usage(); return 1;
+        }
+        //std::fprintf(stderr, "After getopt argument %d, of is %s\n",c , to_string(of).data());
+    }
     const std::string ex(std::filesystem::absolute(std::filesystem::path(argv[-1])));
     std::string cmd(ex);
     for(char **s = argv; *s; cmd += std::string(" ") + *s++);
@@ -93,11 +97,13 @@ int sketch_main(int argc, char **argv) {
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
         .cmd(cmd).count_threshold(count_threshold)
-        .homopolymer_compress_minimizers(hpcompress);
+        .homopolymer_compress_minimizers(hpcompress)
+        .seedseed(seedseed);
     opts.downsample(downsample_frac);
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }
+    opts.filterset(fsarg);
     if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
             && opts.kmer_result_ == ONE_PERM) {
         opts.kmer_result_ = FULL_SETSKETCH;

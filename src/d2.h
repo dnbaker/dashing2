@@ -79,6 +79,7 @@ static inline bool check_compressed(std::string &path, int &ft) {
     }
     return false;
 }
+void seed_mask(uint64_t); // This function sets the seeds
 
 struct Dashing2Options {
 
@@ -111,6 +112,7 @@ struct Dashing2Options {
     double kmer_downsample_frac_ = 1.;
     uint64_t sampler_rng_;
     uint64_t sampler_threshold_;
+    uint64_t seedseed_ = 0;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
@@ -166,8 +168,11 @@ struct Dashing2Options {
         rht_ = rt;
         rh_.hashtype(rt); rh128_.hashtype(rt);
         enc_.hashtype(rt);
+        assert(rh_.hashtype() == rt);
+        assert(enc_.hashtype() == rt);
         return *this;
     }
+    bns::InputType hashtype() const {return rht_;}
     Dashing2Options &parse_protein() {return ht(bns::PROTEIN);}
     Dashing2Options &parse_protein3bit() {return ht(bns::PROTEIN_3BIT);}
     Dashing2Options &parse_protein6() {return ht(bns::PROTEIN_6);}
@@ -181,6 +186,7 @@ struct Dashing2Options {
         return *this;
     }
     void filterset(std::string path, bool is_kmer);
+    void filterset(std::string fsarg);
     CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool trim_folder_paths() const {
@@ -197,6 +203,8 @@ struct Dashing2Options {
     auto nthreads() const {return nthreads_;}
     size_t nremperres64() const {return enc_.nremperres64();}
     size_t nremperres128() const {return enc_.nremperres128();}
+    uint64_t seedseed() const {return seedseed_;}
+    Dashing2Options &seedseed(uint64_t seed) {seedseed_ = seed; seed_mask(seedseed_); return *this;}
 };
 
 static INLINE bool endswith(std::string lhs, std::string rhs) {
@@ -204,6 +212,11 @@ static INLINE bool endswith(std::string lhs, std::string rhs) {
 }
 
 
+extern uint64_t XORMASK;
+extern u128_t XORMASK2;
+
+INLINE uint64_t maskfn(uint64_t x) {return x ^ XORMASK;}
+INLINE u128_t maskfn(u128_t x) {return x ^ XORMASK2;}
 
 using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
 using FullSetSketch = sketch::CSetSketch<RegT>;

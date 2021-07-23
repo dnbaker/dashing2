@@ -37,6 +37,8 @@ enum OptArg{
     OPTARG_ASYMMETRIC_ALLPAIRS,
     OPTARG_SET,
     OPTARG_SPACING,
+    OPTARG_RANDOM_SEED,
+    OPTARG_FILTERSET,
     OPTARG_DUMMY
 };
 
@@ -59,9 +61,13 @@ enum OptArg{
     LO_ARG("count-threshold", 'm')\
     LO_ARG("threshold", 'm')\
     LO_FLAG("binary-output", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
-    LO_FLAG("parse-by-seq", OPTARG_PARSEBYSEQ, parse_by_seq, true)\
     LO_FLAG("bagminhash", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("prob", 'P', sketch_space, SPACE_PSET)\
+    LO_FLAG("probs", 'P', sketch_space, SPACE_PSET)\
+    LO_FLAG("pminhash", 'P', sketch_space, SPACE_PSET)\
+    LO_FLAG("pmh", 'P', sketch_space, SPACE_PSET)\
+    LO_FLAG("PMH", 'P', sketch_space, SPACE_PSET)\
+    LO_FLAG("probminhash", 'P', sketch_space, SPACE_PSET)\
     LO_FLAG("bed", OPTARG_BED, dt, DataType::BED)\
     LO_FLAG("bigwig", OPTARG_BIGWIG, dt, DataType::BIGWIG)\
     LO_FLAG("leafcutter", OPTARG_LEAFCUTTER, dt, DataType::LEAFCUTTER)\
@@ -77,6 +83,9 @@ enum OptArg{
     LO_FLAG("poisson-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("compute-edit-distance", OPTARG_MASHDIST, measure, M_EDIT_DISTANCE)\
     LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
+    LO_FLAG("bagminhash", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
+    LO_FLAG("bmh", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
+    LO_FLAG("BMH", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("countdict", 'J', res, FULL_MMER_COUNTDICT)\
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
@@ -92,6 +101,7 @@ enum OptArg{
     {"full-setsketch", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
     {"protein", no_argument, 0, OPTARG_PROTEIN},\
+    {"protein20", no_argument, 0, OPTARG_PROTEIN},\
     {"enable-protein", no_argument, 0, OPTARG_PROTEIN},\
     {"protein6", no_argument, 0, OPTARG_PROTEIN6},\
     {"protein8", no_argument, 0, OPTARG_PROTEIN8},\
@@ -101,7 +111,10 @@ enum OptArg{
     {"no-canon", no_argument, 0, 'C'},\
     {"set", no_argument, 0, OPTARG_SET},\
     {"exact-kmer-dist", no_argument, 0, OPTARG_EXACT_KMER_DIST},\
-    {"spacing", required_argument, 0, OPTARG_SPACING}
+    {"spacing", required_argument, 0, OPTARG_SPACING},\
+    {"seed", required_argument, 0, OPTARG_RANDOM_SEED},\
+    {"filterset", required_argument, 0, OPTARG_FILTERSET},\
+    {"parse-by-seq", no_argument, (int *)&parse_by_seq, 1},\
 
 
 
@@ -109,10 +122,10 @@ enum OptArg{
 #define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
 #define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atof(optarg); break;}
-#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN; break;} \
-    case OPTARG_PROTEIN6: {rht = bns::PROTEIN_6; break;}\
-    case OPTARG_PROTEIN14: {rht = bns::PROTEIN14; break;}\
-    case OPTARG_PROTEIN8: {rht = bns::PROTEIN8; break;}
+#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN20; canon = false; std::fprintf(stderr, "Using standard canon\n"); break;} \
+    case OPTARG_PROTEIN6: {rht = bns::PROTEIN_6; canon = false; break;}\
+    case OPTARG_PROTEIN14: {rht = bns::PROTEIN14; canon = false; break;}\
+    case OPTARG_PROTEIN8: {rht = bns::PROTEIN8; canon = false; std::fprintf(stderr, "Using 3-bit protein encoding\n"); break;}
 #define REFINEEXACT_FIELD case OPTARG_REFINEEXACT: {refine_exact = true; break;}
 
 #define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD FASTCMP_FIELD PROT_FIELD REFINEEXACT_FIELD \
@@ -155,6 +168,9 @@ enum OptArg{
             downsample_frac = std::atof(optarg); break;\
         }\
         case OPTARG_SPACING: spacing = optarg; canon = false; break;\
+        case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;\
+        case OPTARG_FILTERSET: fsarg = optarg; break;\
+
 
 
 static constexpr const char *siglen =
@@ -193,6 +209,10 @@ static constexpr const char *siglen =
         "-F/--ffile: read paths from file in addition to positional arguments\n"\
         "-Q/--qfile: read query paths from file; this is used for asymmetric queries (e.g., containment)\n"\
         "This accelerates weighted sketching at the cost of some approximation.\n"\
+        "K-mer Filtering\n\n"\
+        "If there are a set of common k-mers or artefactual sequence, you can specify --filterset to skip k-mers in this file when sketching other files.\n"\
+        "By default, this converts it into a sorted hash set and skips k-mers which are found in the set.\n"\
+        "`--filterset [path]` yields this.\n"\
         "\nSketch options\n"\
         "These decide how m-mers are accumulated.\n"\
         "Default behavior is set sketching (tossing multiplicities). If --multiset or --prob is set or a minimum count is provided,"\
@@ -200,7 +220,9 @@ static constexpr const char *siglen =
         "-S/--sketchsize: Set sketchsize (1024)\n"\
         "In sketching space you can use ProbMinHash, BagMinHash, or SetSketch, which is set MinHash\n"\
         "--prob: Sketch m-mers into ProbMinHash. Treats weighted sets as discrete probability distributions.\n"\
+        "        Aliases: --pminhash, --probs, --pmh, --PMH\n"\
         "-B/--multiset: Sketch m-mers into BagMinHash. Treats weighted sets as multisets.\n"\
+        "        Aliases: --bagminhash, --bmh, --BMH\n"\
         "-Z/--full-setsketch: Full setsketch (not stochastically-averaged)\n"\
         "This should perform similarly to default setsketch behavior, but has better behaviors with large sketches and small sets\n"\
         "It typically comes at 2-4x runtime cost, depending on sketch size\n"\
