@@ -15,6 +15,7 @@ namespace dashing2 {
 // nnz * sizeof(LSHIDType): indices in LSHIDType (default uint32_t)
 // nnz * sizeof(LSHDistType): data in LSHDistType (default float)
 void emit_neighbors(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const SketchingResult &result) {
+    auto emitstart = std::chrono::high_resolution_clock::now();
     std::string &outname = opts.outfile_path_;
     std::FILE *ofp = stdout;
     if(outname.size() && (ofp = std::fopen(outname.data(), "wb")) == nullptr)
@@ -52,6 +53,8 @@ void emit_neighbors(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
                 checked_fwrite(ofp, &lists[i][j].first, sizeof(LSHDistType));
     }
     if(ofp != stdout) std::fclose(ofp);
+    auto emitstop = std::chrono::high_resolution_clock::now();
+    std::fprintf(stderr, "Emitting list took %Lgs.\n", std::chrono::duration<long double, std::ratio<1, 1>>(emitstop - emitstart).count());
 }
 
 

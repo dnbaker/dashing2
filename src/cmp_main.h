@@ -54,8 +54,8 @@ struct Dashing2DistOptions: public Dashing2Options {
     int num_neighbors_ = -1; // Only emits top-"nn" neighbors
     double min_similarity_ = -1.; // Only emit similarities which are above min_similarity_ if nonnegative
     void *compressed_ptr_ = nullptr;
-    double compressed_b_ = -1.;
-    double compressed_a_ = -1.;
+    long double compressed_b_ = -1.;
+    long double compressed_a_ = -1.;
     mutable Measure measure_ = SIMILARITY;
     std::string outfile_path_;
     bool exact_kmer_dist_ = false;
@@ -69,6 +69,9 @@ struct Dashing2DistOptions: public Dashing2Options {
             throw std::runtime_error("Can't compress sketches to non-power of 2 register size. Should be < sizeof(RegT)");
         fd_level_ = nbytes_for_fastdists;
         truncation_method_ = truncate_method;
+        if(nbytes_for_fastdists == 4. && this->sspace_ != SPACE_SET && truncation_method_ == 1) {
+            std::fprintf(stderr, "For space %s and setsketch truncation with 4 bytes, b-bit minhash is automatically selected.\n", dashing2::to_string(sspace_).data());
+        }
         num_neighbors_ = nneighbors;
         min_similarity_ = minsim;
         if(this->kmer_result_ >= FULL_MMER_SET) {

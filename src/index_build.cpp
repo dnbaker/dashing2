@@ -65,6 +65,7 @@ std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashin
             n.reserve(opts.num_neighbors_);
     std::vector<ska::flat_hash_set<LSHIDType>> neighbor_sets(ns);
     std::unique_ptr<std::mutex[]> mutexes(new std::mutex[ns]);
+    auto idxstart = std::chrono::high_resolution_clock::now();
     // Build the index
     for(size_t i  = 0; i < ns; ++i) {
         if(index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
@@ -77,6 +78,7 @@ std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashin
             idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * i], opts.sketchsize_));
         }
     }
+    auto idxstop = std::chrono::high_resolution_clock::now();
     // Build neighbor lists
     // Currently parallelizing the outer loop,
     // but the inner might be worth trying
@@ -106,6 +108,7 @@ std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashin
             update(neighbor_lists[id], neighbor_sets[id], PairT{cd, oid}, topk, ntoquery, mutexes[id]);
         }
     }
+    auto knnstop = std::chrono::high_resolution_clock::now();
 
 VERBOSE_ONLY(
     for(size_t id = 0; id < ns; ++id) {
@@ -120,6 +123,7 @@ VERBOSE_ONLY(
         }
     }
 )
+    std::fprintf(stderr, "Index building took %Lgs. KNN Generation took %Lgs\n", std::chrono::duration<long double, std::ratio<1, 1>>(idxstop - idxstart).count(), std::chrono::duration<long double, std::ratio<1, 1>>(knnstop - idxstop).count());
     return neighbor_lists;
 }
 

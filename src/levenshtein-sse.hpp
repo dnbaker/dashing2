@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2016 Anna Henningsen <sqrt@entless.org>
- * 
+ *
  * MIT License
  */
 
@@ -34,7 +34,7 @@ namespace levenshteinSSE {
  * Both types of iterators need to be bidirectional, e.g.
  * fulfill the requirements of BidirectionalIterator, but may just be
  * pointers.
- * 
+ *
  * For pointers to types where SIMD instructions make sense, these are
  * used when available.
  */
@@ -45,7 +45,7 @@ std::size_t levenshtein(Iterator1 a, Iterator1 aEnd, Iterator2 b, Iterator2 bEnd
  * Compute the Levenshtein distances of a and b.
  * Both containers need to support bidirectional start and end iterators
  * (via std::begin() and std::end()).
- * 
+ *
  * If both containers provide .data() and .size(), these are used to
  * get pointers to the start and past-end elements. This holds true
  * for std::string, std::vector, std::array and possibly more, but
@@ -62,7 +62,7 @@ std::size_t levenshtein(const Container1& a, const Container2& b);
 /**
  * C++ STL allocator returning aligned memory with additional memory
  * on both sides to safely allow garbage reads/writes
- * 
+ *
  * based on https://stackoverflow.com/a/8545389/688904
  */
 template <typename T, std::size_t N = 16>
@@ -134,7 +134,7 @@ public:
   constexpr bool operator==(const AlignmentAllocator<T,N>& other) const {
     return other.usesMMAlloc;
   }
-  
+
   static constexpr bool usesMMAlloc = true;
 };
 #endif
@@ -154,7 +154,7 @@ constexpr std::size_t alignment = 1;
 
 /**
  * Some notes on the algorithm used here:
- * 
+ *
  * The standard Levenshtein metric is usually calculated using the
  * Wagner–Fischer algorithm [1]. This essentially means calculating
  * Levenshtein(a[:n], b[:m]) for all prefixes a[:n] and b[:m] of a and b,
@@ -162,31 +162,31 @@ constexpr std::size_t alignment = 1;
  * the previous rows to save memory). Normally, this is performed
  * row by row, but this approach has the disadvantage that it is not
  * easily converted to using SIMD instructions.
- * 
+ *
  * The “diagonal” algorithm variants in this file calculate the minor
  * diagonals one by one. There, the index `i` always corresponds to the
- * table row in which we currently are and `j` always denotes the column. 
+ * table row in which we currently are and `j` always denotes the column.
  * Note that the tables have a trivial i=0 row and j=0 column; The
  * table entry [i,j] corresponds to the comparison a[i-1] == b[j-1].
  * A diagonal is defined by its index `k`, yielding the inner loop invariant
  * k == i + j.
- * 
+ *
  * The outer loop iterates over all diagonals from k = 0 to
  * k = len(a)+len(b) (compare with the table in [1] to verify), meaning
  * that the length of the diagonals may vary between iterations.
  * The current diagonal and the previous diagonal are kept in memory,
  * referred to as diag and diag2 respectively.
- * 
+ *
  * In the inner loop, the rows are treated in descending order,
  * i.e. `i` decreases from iteration to iteration, to avoid overwriting
  * data needed in the next iteration.
- * 
+ *
  * [1]: https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm
  */
 
 /**
  * Trivial implementation of one inner loop iteration.
- * 
+ *
  * Note that i is passed as a reference; The SIMD version may decrease it
  * by more than 1.
  */
@@ -208,10 +208,10 @@ static inline void perform(const Iterator1& a, const Iterator2& b,
 
 /**
  * Start SIMD-Land
- * 
+ *
  * Currently, only SSSE3+ is supported, since we use
  * _mm_shuffle_epi8 and _mm_alignr_epi8.
- * 
+ *
  * If you are not familiar with SSE and/or the intrinsics,
  * you can just believe me that they do about the same thing
  * as LevenshteinIterationBase::perform.
@@ -280,7 +280,7 @@ static inline void performSIMD(const T* a, const T* b,
     return;
   }
 #endif
-  
+
   LevenshteinIterationBase<std::uint32_t*, const std::uint32_t*, const T*, const T*>
     ::perform(a, b, i, j, bLen, diag, diag2);
 }
@@ -318,24 +318,24 @@ static inline void performSSE(const T* a, const T* b,
 
   __m128i substitutionCost32[4];
   std::size_t k;
-  
+
   // We support 1, 2, and 4 byte objects for SSE comparison.
   // We always process 16 entries at once, so we may need multiple fetches
   // depending on object size.
   if (sizeof(T) <= 2) {
     __m128i substitutionCost16LX, substitutionCost16HX;
-    
+
     if (sizeof(T) == 1) {
       __m128i a_ = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&a[i-16]));
       __m128i b_ = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&b[j-1]));
       a_ = _mm_shuffle_epi8(a_, reversedIdentity128_epi8);
-      
+
       // int substitutionCost = a[i-1] == b[j-1] ? -1 : 0;
-      
+
       // diag/diag2 will contain the following entries from the diagonal:
       // index  [0]0 [0]1 [0]2 [0]3 [1]0 [1]1 [1]2 [1]3 ... [4]0 [4]1 [4]2 [4]3
       // diag+i   -3   -2   -1    0   -7   -6   -5   -4 ...  -19  -18  -17  -16
-      
+
       // substitutionCost8 contains the comparisons for the following indices in a and b:
       // index  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
       // a+i   -1  -2  -3  -4  -5  -6  -7  -8  -9 -10 -11 -12 -13 -14 -15 -16
@@ -359,14 +359,14 @@ static inline void performSSE(const T* a, const T* b,
       substitutionCost16LX = _mm_shuffle_epi8(substitutionCost16L, blockwiseReversed128_epi16_4);
       substitutionCost16HX = _mm_shuffle_epi8(substitutionCost16H, blockwiseReversed128_epi16_4);
     }
-    
+
     substitutionCost32[0] = _mm_unpacklo_epi16(substitutionCost16LX, substitutionCost16LX);
     substitutionCost32[1] = _mm_unpackhi_epi16(substitutionCost16LX, substitutionCost16LX);
     substitutionCost32[2] = _mm_unpacklo_epi16(substitutionCost16HX, substitutionCost16HX);
     substitutionCost32[3] = _mm_unpackhi_epi16(substitutionCost16HX, substitutionCost16HX);
   } else {
     assert(sizeof(T) == 4);
-    
+
     for (k = 0; k < 4; ++k) {
       __m128i a_ = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&a[i-4-k*4]));
       __m128i b_ = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&b[j-1+k*4]));
@@ -374,7 +374,7 @@ static inline void performSSE(const T* a, const T* b,
       substitutionCost32[k] = _mm_cmpeq_epi32(a_, b_);
     }
   }
-  
+
   __m128i diag_[5], diag2_[5];
   for (k = 0; k < 5; ++k) {
     diag_ [k] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&diag [i-3-k*4]));
@@ -382,7 +382,7 @@ static inline void performSSE(const T* a, const T* b,
   for (k = 0; k < 5; ++k) {
     diag2_[k] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&diag2[i-3-k*4]));
   }
-  
+
   // There’s a ton of debug stuff down here. You can use it for reference
   // or, of course, compile with -DLSTSSE_DEBUG if you’re feeling funny.
 #ifdef LSTSSE_DEBUG
@@ -406,7 +406,7 @@ static inline void performSSE(const T* a, const T* b,
     assert(diag22 == diag2[i-k*4-1]);
     assert(diag23 == diag2[i-k*4-0]);
   }
-  
+
   for (k = 0; k < 4; ++k) {
     int sc0 = _mm_extract_epi32(substitutionCost32[k], 0);
     int sc1 = _mm_extract_epi32(substitutionCost32[k], 1);
@@ -425,21 +425,21 @@ static inline void performSSE(const T* a, const T* b,
   // i+       -3   -2   -1    0   -7   -6   -5   -4 ...  -19  -18  -17  -16
   // so when we need to access ...[i-1], we need to align the entries
   // in *reverse* order
-  
+
   // diag[i] = min(
   //  diag2[i-1],
   //  diag2[i],
   //  diag[i-1] + substitutionCost
   // ) + 1;
-  // 
+  //
   for (k = 0; k < 4; ++k) {
     __m128i diag2_i_m1 = _mm_alignr_epi8(diag2_[k], diag2_[k+1], 12);
     __m128i diag_i_m1  = _mm_alignr_epi8(diag_ [k], diag_ [k+1], 12);
-    
+
     __m128i result3 = _mm_add_epi32(diag_i_m1,  substitutionCost32[k]);
     __m128i min = _mm_min_epi32(_mm_min_epi32(diag2_i_m1, diag2_[k]), result3);
     min = _mm_add_epi32(min, one128_epi32);
-    
+
 #ifdef LSTSSE_DEBUG
     std::uint32_t diag_i_m10 = _mm_extract_epi32(diag_i_m1, 0);
     std::uint32_t diag_i_m11 = _mm_extract_epi32(diag_i_m1, 1);
@@ -449,7 +449,7 @@ static inline void performSSE(const T* a, const T* b,
     assert(diag_i_m11 == diag[i-k*4-3]);
     assert(diag_i_m12 == diag[i-k*4-2]);
     assert(diag_i_m13 == diag[i-k*4-1]);
-    
+
     std::uint32_t diag2_i_m10 = _mm_extract_epi32(diag2_i_m1, 0);
     std::uint32_t diag2_i_m11 = _mm_extract_epi32(diag2_i_m1, 1);
     std::uint32_t diag2_i_m12 = _mm_extract_epi32(diag2_i_m1, 2);
@@ -458,12 +458,12 @@ static inline void performSSE(const T* a, const T* b,
     assert(diag2_i_m11 == diag2[i-k*4-3]);
     assert(diag2_i_m12 == diag2[i-k*4-2]);
     assert(diag2_i_m13 == diag2[i-k*4-1]);
-    
+
     std::uint32_t result30 = _mm_extract_epi32(result3, 0);
     std::uint32_t result31 = _mm_extract_epi32(result3, 1);
     std::uint32_t result32 = _mm_extract_epi32(result3, 2);
     std::uint32_t result33 = _mm_extract_epi32(result3, 3);
-    
+
     assert(result30 == diag[i-1-k*4-3] + ((a[i-1-k*4-3] == b[j-1+k*4+3]) ? -1 : 0));
     assert(result31 == diag[i-1-k*4-2] + ((a[i-1-k*4-2] == b[j-1+k*4+2]) ? -1 : 0));
     assert(result32 == diag[i-1-k*4-1] + ((a[i-1-k*4-1] == b[j-1+k*4+1]) ? -1 : 0));
@@ -472,7 +472,7 @@ static inline void performSSE(const T* a, const T* b,
 
     _mm_storeu_si128(reinterpret_cast<__m128i*>(&diag[i-k*4-3]), min);
   }
-  
+
   // We just handled 16 entries at once. Yay!
   i -= 16;
 }
@@ -613,7 +613,7 @@ static inline void performSSE_AVX2(const T* a, const T* b,
     assert(diag26 == diag2[i-k*8-1]);
     assert(diag27 == diag2[i-k*8-0]);
   }
-  
+
   for (k = 0; k < 4; ++k) {
     int sc0 = _mm256_extract_epi32(substitutionCost32[k], 0);
     int sc1 = _mm256_extract_epi32(substitutionCost32[k], 1);
@@ -659,7 +659,7 @@ static inline void performSSE_AVX2(const T* a, const T* b,
     assert(diag_i_m15 == diag[i-k*8-3]);
     assert(diag_i_m16 == diag[i-k*8-2]);
     assert(diag_i_m17 == diag[i-k*8-1]);
-    
+
     std::uint32_t diag2_i_m10 = _mm256_extract_epi32(diag2_i_m1, 0);
     std::uint32_t diag2_i_m11 = _mm256_extract_epi32(diag2_i_m1, 1);
     std::uint32_t diag2_i_m12 = _mm256_extract_epi32(diag2_i_m1, 2);
@@ -676,7 +676,7 @@ static inline void performSSE_AVX2(const T* a, const T* b,
     assert(diag2_i_m15 == diag2[i-k*8-3]);
     assert(diag2_i_m16 == diag2[i-k*8-2]);
     assert(diag2_i_m17 == diag2[i-k*8-1]);
-    
+
     std::uint32_t result30 = _mm256_extract_epi32(result3, 0);
     std::uint32_t result31 = _mm256_extract_epi32(result3, 1);
     std::uint32_t result32 = _mm256_extract_epi32(result3, 2);
@@ -685,7 +685,7 @@ static inline void performSSE_AVX2(const T* a, const T* b,
     std::uint32_t result35 = _mm256_extract_epi32(result3, 5);
     std::uint32_t result36 = _mm256_extract_epi32(result3, 6);
     std::uint32_t result37 = _mm256_extract_epi32(result3, 7);
-    
+
     assert(result30 == diag[i-1-k*8-7] + ((a[i-1-k*8-7] == b[j-1+k*8+7]) ? -1 : 0));
     assert(result31 == diag[i-1-k*8-6] + ((a[i-1-k*8-6] == b[j-1+k*8+6]) ? -1 : 0));
     assert(result32 == diag[i-1-k*8-5] + ((a[i-1-k*8-5] == b[j-1+k*8+5]) ? -1 : 0));
@@ -708,10 +708,10 @@ static inline void performSSE_AVX2(const T* a, const T* b,
 
 /**
  * Default: If we don’t know better, just use the trivial implementation.
- * 
+ *
  * This is overloaded in multiple places and is the struct whose `perform`
  * method will ultimately be called from the outer loop.
- * 
+ *
  * Vec1 and Vec2 correspond to `diag` and `diag2`, respectively.
  */
 template<typename Vec1, typename Vec2, typename Iterator1, typename Iterator2>
@@ -733,7 +733,7 @@ static inline void perform(const T* a, const T* b,
 
 /**
  * Use a wrapper to test whether we can use SSE instuctions.
- * 
+ *
  * T needs to be a scalar of size 1, 2 or 4.
  */
 template<typename Alloc1, typename Alloc2, typename T>
@@ -759,77 +759,77 @@ template<typename T, typename Iterator1, typename Iterator2>
 T levenshteinDiagonal(Iterator1 a, Iterator1 aEnd, Iterator2 b, Iterator2 bEnd) {
   const std::size_t aLen = aEnd - a;
   const std::size_t bLen = bEnd - b;
-  
+
   assert(0 < aLen);
   assert(aLen <= bLen);
-  
+
   typedef AlignmentAllocator<T, alignment> Alloc;
   std::vector<T, Alloc> diag  (aLen + 1, T(0));
   std::vector<T, Alloc> diag2 (aLen + 1, T(0));
-  
+
   std::size_t i, j, k;
-  
+
   k = 0;
   for (k = 1; ; ++k) {
     assert(k <= aLen + bLen);
-    
+
     std::size_t startRow = k > bLen ? k - bLen : 1;
     std::size_t endRow = k > aLen ? aLen : k - 1;
-    
+
     assert(endRow >= startRow || k == 1);
-    
+
     for (i = endRow; i >= startRow; ) {
       assert(i < k);
       j = k - i;
-      
+
       assert(bLen >= j);
       assert(aLen >= i);
-      
+
       LevenshteinIteration<std::vector<T, Alloc>, std::vector<T, Alloc>, Iterator1, Iterator2>
         ::perform(a, b, i, j, bLen, diag, diag2);
     }
-    
+
     diag[0] = k;
-    
+
     if (k <= aLen) {
       diag[k] = k;
     }
-    
+
     if (k == aLen + bLen) {
       assert(startRow == endRow);
       return diag[startRow];
     }
-    
+
     // switch buffers
     std::swap(diag, diag2);
   }
-  
+
   assert(0);
 }
 
 /**
  * Outer loop of the row-based variant, used for non-random-access iterators.
- * 
+ *
  * based on https://github.com/sindresorhus/leven
  */
 template<typename T, typename Iterator1, typename Iterator2>
 T levenshteinRowBased(Iterator1 a, Iterator1 aEnd, Iterator2 b, Iterator2 bEnd) {
   std::vector<T> arr;
-  
+
   std::size_t i = 0, j = 0;
   T ret(0);
-  
+
   for (Iterator1 it = a; it != aEnd; ++it) {
     arr.push_back(++i);
   }
-  
+
   arr.shrink_to_fit();
 
   for (; b != bEnd; ++b) {
     T tmp = j++;
     ret = j;
     i = 0;
-    
+
     for (Iterator1 it = a; it != aEnd; ++it, ++i) {
       T tmp2 = *b == *it ? tmp : tmp + 1;
       tmp = arr[i];
@@ -850,28 +850,28 @@ std::size_t levenshtein(Iterator1 a, Iterator1 aEnd, Iterator2 b, Iterator2 bEnd
   if (aEnd - a > bEnd - b) {
     return levenshtein(b, bEnd, a, aEnd);
   }
-  
+
   // skip common prefixes and suffixes
   while (a < aEnd && a[0] == b[0])
     ++a, ++b;
-  
+
   while (a < aEnd && aEnd[-1] == bEnd[-1])
     --aEnd, --bEnd;
-  
+
   std::size_t aLen = aEnd - a;
   std::size_t bLen = bEnd - b;
-  
+
   if (aLen == 0) {
     return bLen;
   }
-  
+
   if (aLen == 1) {
     return bLen - (std::find(b, bEnd, *a) == bEnd ? 0 : 1);
   }
-  
+
   if (aLen + bLen <= std::numeric_limits<std::uint32_t>::max())
     return levenshteinDiagonal<std::uint32_t>(a, aEnd, b, bEnd);
-  
+
   return levenshteinDiagonal<std::size_t>(a, aEnd, b, bEnd);
 }
 
@@ -885,18 +885,18 @@ std::size_t levenshtein(Iterator1 a, Iterator1 aEnd, Iterator2 b, Iterator2 bEnd
   // skip common prefixes and suffixes
   while (a != aEnd && b != bEnd && *a == *b)
     ++a, ++b;
-  
+
   while (a != aEnd && b != bEnd && *std::prev(aEnd) == *std::prev(bEnd))
     --aEnd, --bEnd;
-  
+
   if (a == aEnd) {
     return std::distance(b, bEnd);
   }
-  
+
   if (b == bEnd) {
     return std::distance(a, aEnd);
   }
-  
+
   if (std::next(a) == aEnd) {
     std::size_t ret = 0, found = 0;
     for (; b != bEnd; ++b, ++ret)
@@ -904,7 +904,7 @@ std::size_t levenshtein(Iterator1 a, Iterator1 aEnd, Iterator2 b, Iterator2 bEnd
         found = 1;
     return ret - found;
   }
-  
+
   if (std::next(b) == bEnd) {
     std::size_t ret = 0, found = 0;
     for (; a != aEnd; ++a, ++ret)
@@ -912,7 +912,7 @@ std::size_t levenshtein(Iterator1 a, Iterator1 aEnd, Iterator2 b, Iterator2 bEnd
         found = 1;
     return ret - found;
   }
-  
+
   return levenshteinRowBased<std::size_t>(a, aEnd, b, bEnd);
 }
 
