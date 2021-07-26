@@ -12,6 +12,8 @@ void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
             opts.exact_kmer_dist_ = true;
         }
     }
+
+    auto refinstart = std::chrono::high_resolution_clock::now();
     OMP_PFOR_DYN
     for(size_t i = 0; i < lists.size(); ++i) {
         const size_t lhid = i;
@@ -69,5 +71,8 @@ void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const
             //std::reverse(beg, e);
         }
     }
+    auto refinstop = std::chrono::high_resolution_clock::now();
+
+    std::fprintf(stderr, "List refinement took %Lgs.\n", std::chrono::duration<long double, std::ratio<1, 1>>(refinstop - refinstart).count());
 }
 } // namespace dashing2

@@ -37,10 +37,26 @@ std::string path2cmd(const std::string &path) {
     return std::string("cat ") + path;
 }
 
-std::tuple<void *, double, double>
+struct CompressedRet: public std::tuple<void *, long double, long double> {
+    using super = std::tuple<void *, long double, long double>;
+    CompressedRet &a(long double v) {
+        std::get<1>(*this) = v;
+        return *this;
+    }
+    CompressedRet &b(long double v) {
+        std::get<2>(*this) = v;
+        return *this;
+    }
+    long double a() const {return std::get<1>(*this);}
+    long double b() const {return std::get<2>(*this);}
+    CompressedRet(): super{nullptr, 0.L, 0.L} {
+    }
+};
+
+CompressedRet
 make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs, const std::vector<uint64_t> &kmers, bool is_edit_distance) {
     sketch::hash::CEHasher revhasher;
-    std::tuple<void *, double, double> ret = {nullptr, 0., 0.};
+    CompressedRet ret;
     if(fd >= sizeof(RegT)) return ret;
     size_t mem = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
@@ -80,13 +96,12 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         long double logbinv;
         assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
-        std::fprintf(stderr, "Truncated via setsketch, a = %Lg and b = %Lg from min, max regs %g, %g\n", a, b, minreg, maxreg);
+        std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %g, %g\n", a, b, minreg, maxreg);
         if(a == 0. || std::isinf(b)) {
             std::fprintf(stderr, "Note: setsketch compression yielded infinite value.\n");
             //throw 1;
         }
-        std::get<1>(ret) = a;
-        std::get<2>(ret) = b;
+        ret.a(a); ret.b(b);
         logbinv = 1.L / std::log1p(b - 1.L);
         if(fd == 0.5) {
             OMP_STATIC_SCHED32
@@ -98,8 +113,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         } else {
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs; ++i) {
-                RegT x = sigs[i];
-                const RegT sub = 1. - std::log(x / a) * logbinv;
+                const long double sub = 1.L - std::log(static_cast<long double>(sigs[i]) / a) * logbinv;
                 if(fd == 8) {
                     ((uint64_t *)compressed_reps)[i] = std::min(uint64_t(q + 1), uint64_t(sub));
                 } else {
@@ -136,12 +150,15 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
     }
     return ret;
 }
+static inline long double g_b(long double b, long double arg) {
+    return (1.L - std::pow(b, -arg)) / (1.L - 1.L / b);
+}
 
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
     //std::fprintf(stderr, "Calling %s for %zu/%zu\n", __PRETTY_FUNCTION__, i, j);
-    LSHDistType ret = std::numeric_limits<LSHDistType>::max();
-    const LSHDistType lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
-    const LSHDistType invdenom = 1. / opts.sketchsize_;
+    long double ret = std::numeric_limits<LSHDistType>::max();
+    const long double lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
+    const long double invdenom = 1. / opts.sketchsize_;
     auto sim2dist = [poisson_mult=-1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
     if(opts.compressed_ptr_) {
         const bool bbit_c = opts.truncation_method_ > 0;
@@ -187,32 +204,35 @@ case v: {\
         if(bbit_c) {
             // ret = ((num / denom) - (1. / 2^b)) / (1. - 1. / 2^b);
             // maps equality to 1 and down-estimates for account for collisions
-            const LSHDistType b2pow = -std::ldexp(1., -static_cast<int>(opts.fd_level_ * 8.));
-            ret = std::max(0., std::fma(res.first, invdenom, b2pow) / (1. + b2pow));
+            const long double b2pow = -std::ldexp(1.L, -static_cast<int>(opts.fd_level_ * 8.));
+            ret = std::max(0.L, std::fma(res.first, invdenom, b2pow) / (1.L + b2pow));
             if(opts.measure_ == INTERSECTION)
-                ret *= std::max((lhcard + rhcard) / (2. - (1. - ret)), 0.);
+                ret *= std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L);
             else if(opts.measure_ == CONTAINMENT)
-                ret = std::max((lhcard + rhcard) / (2. - (1. - ret)), 0.) * ret / lhcard;
+                ret = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L) * ret / lhcard;
             else if(opts.measure_ == POISSON_LLR)
                 ret = sim2dist(ret);
             else if(opts.measure_ == SYMMETRIC_CONTAINMENT)
-                ret = std::max((lhcard + rhcard) / (2. - (1. - ret)), 0.) * ret / std::min(lhcard, rhcard);
+                ret = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L) * ret / std::min(lhcard, rhcard);
         } else {
+            //std::fprintf(stderr, "alpha gt: %zu. beta gt: %zu\n", res.first, res.second);
             auto alpha = res.first * invdenom;
             auto beta = res.second * invdenom;
-            const LSHDistType b = opts.compressed_b_;
-            LSHDistType mu;
+            const auto b = opts.compressed_b_;
+            static_assert(sizeof(b) == 16, "b must be a long double");
+            long double mu;
             if(opts.fd_level_ < sizeof(RegT)) {
-                alpha = sketch::setsketch::g_b(b, alpha);
-                beta = sketch::setsketch::g_b(b, beta);
+                alpha = g_b(b, alpha);
+                beta = g_b(b, beta);
             }
             if(alpha + beta >= 1.) {
                 mu = lhcard + rhcard;
             } else {
-                mu = std::max((lhcard + rhcard) / (2. - alpha - beta), 0.);
+                mu = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
             }
             auto triple = std::make_tuple(alpha, beta, mu);
-            ret = std::max(1. - (std::get<0>(triple) + std::get<1>(triple)), 0.);
+            //std::fprintf(stderr, "Triple: %Lg apha, %Lg beta, %Lg mu\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple));
+            ret = std::max(1.L - (std::get<0>(triple) + std::get<1>(triple)), 0.L);
             if(opts.measure_ == INTERSECTION)
                 ret *= mu;
             else if(opts.measure_ == CONTAINMENT)
@@ -230,14 +250,14 @@ case v: {\
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET && opts.truncation_method_ <= 0) {
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
-            LSHDistType alpha, beta, eq, lhcard, ucard, rhcard;
+            long double alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
-            lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
+            lhcard = result.cardinalities_[i], rhcard = result.cardinalities_[j];
             eq = (1. - alpha - beta);
             if(eq <= 0.)
                 return opts.measure_ != POISSON_LLR ? 0.: std::numeric_limits<double>::max();
-            ucard = std::max(lhcard + rhcard / (2. - alpha - beta), 0.);
+            ucard = std::max(lhcard + rhcard / (2.L - alpha - beta), 0.L);
             LSHDistType isz = ucard * eq, sim = eq;
             ret = opts.measure_ == SIMILARITY ? sim
                 : opts.measure_ == INTERSECTION ? isz
@@ -256,9 +276,9 @@ case v: {\
             const auto neq = sketch::eq::count_eq(&sptr[opts.sketchsize_ * i], &sptr[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
             if(opts.measure_ == INTERSECTION) {
-                ret *= std::max((lhcard + rhcard) / (1. + ret), 0.);
-            } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / std::min(lhcard, rhcard);
-            else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1. + ret), 0.) / lhcard;
+                ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L);
+            } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L) / std::min(lhcard, rhcard);
+            else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L) / lhcard;
             else if(opts.measure_ == POISSON_LLR) ret = sim2dist(ret);
         }
     } else {
@@ -479,7 +499,8 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
-    std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE);
+    CompressedRet cret = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE);
+    std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = cret;
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS || opts.output_kind_ == PANEL) {
         emit_rectangular(opts, result);
         return;

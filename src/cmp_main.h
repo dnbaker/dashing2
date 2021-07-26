@@ -54,8 +54,8 @@ struct Dashing2DistOptions: public Dashing2Options {
     int num_neighbors_ = -1; // Only emits top-"nn" neighbors
     double min_similarity_ = -1.; // Only emit similarities which are above min_similarity_ if nonnegative
     void *compressed_ptr_ = nullptr;
-    double compressed_b_ = -1.;
-    double compressed_a_ = -1.;
+    long double compressed_b_ = -1.;
+    long double compressed_a_ = -1.;
     mutable Measure measure_ = SIMILARITY;
     std::string outfile_path_;
     bool exact_kmer_dist_ = false;
@@ -71,9 +71,8 @@ struct Dashing2DistOptions: public Dashing2Options {
         truncation_method_ = truncate_method;
         num_neighbors_ = nneighbors;
         min_similarity_ = minsim;
-        if(this->kmer_result_ >= FULL_MMER_SET) {
+        if(this->kmer_result_ >= FULL_MMER_SET)
             exact_kmer_dist_ = true;
-        }
         if(outfile_path_.empty() || outfile_path_ == "-") outfile_path_ = "/dev/stdout";
         validate();
     }

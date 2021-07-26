@@ -17,6 +17,7 @@ OBJDBG=$(patsubst %.o,%.do,$(OFS))
 OBJADD=$(patsubst %.o,%.sano,$(OFS))
 OBJLTO=$(patsubst %.o,%.lto,$(OFS))
 OBJ0=$(patsubst %.o,%.0,$(OFS))
+OBJV=$(patsubst %.o,%.vo,$(OFS))
 
 all: dashing2 dashing2-f dashing2-ld
 unit: readfx readbw readbed
@@ -32,6 +33,7 @@ endif
 OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp src/bwreduce.cpp
 LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))
 LIB0=$(patsubst %.cpp,%.0,$(OBJFS))
+LIBV=$(patsubst %.cpp,%.vo,$(OBJFS))
 DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS))
 GLIBOBJ=$(patsubst %.cpp,%.go,$(OBJFS))
 FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
@@ -39,10 +41,14 @@ LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 
 dashing2: $(OBJ) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
+
+
 dashing2-0: $(OBJ0) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
+dashing2-v: $(OBJV) libBigWig.a $(wildcard src/*.h)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJV) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-d0: $(OBJDBG) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-add: $(OBJADD) libBigWig.a
@@ -66,6 +72,8 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
 %.0: %.cpp
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O1
+%.vo: %.cpp
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O3
 %.lto: %.cpp
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
 %.do: %.cpp $(wildcard src/*.h)
