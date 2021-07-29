@@ -86,13 +86,14 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         RegT minreg = sigs[0], maxreg = minreg;
         OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
         for(size_t i = 0; i < nsigs; ++i) {
-            if(sigs[i] == std::numeric_limits<RegT>::max())
+            const auto v = sigs[i];
+            if(v == 0 || v == std::numeric_limits<RegT>::max())
                 continue;
-            minreg = std::min(minreg, sigs[i]);
-            maxreg = std::max(maxreg, sigs[i]);
+            minreg = std::min(minreg, v);
+            maxreg = std::max(maxreg, v);
         }
-        //std::fprintf(stderr, "regs: %g->%g\n", minreg, maxreg);
-        double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
+        std::fprintf(stderr, "Tailoring setsketch parameters with min/max register values, fd = %g: %g->%g\n", fd, minreg, maxreg);
+        long double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
         long double logbinv;
         assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
@@ -181,6 +182,7 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = ske
                 }
                 default: __builtin_unreachable();
             }
+            //std::fprintf(stderr, "%zu equal registers out of %zu\n", size_t(equal_regs), opts.sketchsize_);
         } else {
             switch(int(2. * opts.fd_level_)) {
 #define CASE_ENTRY(v, TYPE)\
@@ -270,11 +272,14 @@ case v: {\
                 // If RegT are the same size as k-mers, compare the k-mers themselves
                 // instead of the doubles
                 // Since we're only comparing for equality, this can only improve accuracy
-                if(result.kmers_.size() == result.signatures_.size())
+                if(result.kmers_.size() == result.signatures_.size() && !opts.use128()) {
+                    std::fprintf(stderr, "Comparing k-mers sampled rather than the items themselves\n");
                     sptr = reinterpret_cast<const RegT *>(result.kmers_.data());
+                }
             }
             const auto neq = sketch::eq::count_eq(&sptr[opts.sketchsize_ * i], &sptr[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
+            //std::fprintf(stderr, "%zu matching out of %zu\n", neq, opts.sketchsize_);
             if(opts.measure_ == INTERSECTION) {
                 ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L);
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L) / std::min(lhcard, rhcard);
@@ -409,18 +414,22 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
     if(ofp != stdout) std::fclose(ofp);
 }
 
+
 template<typename MHT, typename KMT>
 inline void densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
 {
-    std::vector<uint32_t> empty_indices;
+    const long long unsigned int ne = std::count(minhashes, minhashes + sketchsize, empty);
+    if(ne == sketchsize  || ne == 0) return;
     for(size_t i = 0; i < sketchsize; ++i) {
-        if(minhashes[i] == empty)
-            empty_indices.push_back(i);
-    }
-    if(empty_indices.empty() || empty_indices.size() == sketchsize) return;
-    for(const uint32_t i: empty_indices) {
-        size_t j = i;
-        for(wy::WyRand<uint32_t> rng(i ^ 0xd63af43ad731df95);minhashes[j] == empty;j = div.mod(rng()));
+        if(minhashes[i] != empty) continue;
+        uint64_t j = i;
+        uint64_t rng = i;
+        while(minhashes[j] == empty) {
+            static constexpr uint32_t PRIMEMOD = 4000003913;
+            auto a = (wy::wyhash64_stateless(&rng) % PRIMEMOD), b = (wy::wyhash64_stateless(&rng) % PRIMEMOD), c = (wy::wyhash64_stateless(&rng) % PRIMEMOD);
+            j = div.mod((((a * b) % PRIMEMOD + c) % PRIMEMOD));
+            rng = j;
+        }
         minhashes[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
     }
@@ -469,7 +478,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
             if(ifp) ::pclose(ifp);
         }
     }
-    if(opts.kmer_result_ == ONE_PERM && opts.truncation_method_ > 0) {
+    if(opts.kmer_result_ == ONE_PERM /*&& opts.truncation_method_ > 0*/) {
         const schism::Schismatic<uint64_t> sd(opts.sketchsize_);
         const size_t n = result.cardinalities_.size();
         uint64_t *const kp= result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;

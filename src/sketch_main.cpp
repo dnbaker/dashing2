@@ -25,7 +25,7 @@ int sketch_main(int argc, char **argv) {
     int c;
     int k = 16, w = -1, nt = -1;
     SketchSpace sketch_space = SPACE_SET;
-    KmerSketchResultType res = ONE_PERM;
+    KmerSketchResultType res = FULL_SETSKETCH;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true;
     bool exact_kmer_dist = false, hpcompress = false;
     bool refine_exact = false;
