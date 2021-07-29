@@ -67,6 +67,7 @@ std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashin
     std::unique_ptr<std::mutex[]> mutexes(new std::mutex[ns]);
     auto idxstart = std::chrono::high_resolution_clock::now();
     // Build the index
+    OMP_PFOR
     for(size_t i  = 0; i < ns; ++i) {
         if(index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
             switch(int(opts.fd_level_)) {

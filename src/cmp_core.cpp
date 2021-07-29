@@ -534,6 +534,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     using SSI = SetSketchIndex<uint64_t, LSHIDType>;
     SSI idx(opts.kmer_result_ < FULL_MMER_SET ? SSI(opts.sketchsize_, nperhashes, nperrows): SSI());
 
+
     // Step 2: Build nearest-neighbor candidate table
     if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {
         std::vector<pqueue> neighbor_lists = build_index(idx, opts, result);
