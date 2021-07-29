@@ -39,6 +39,7 @@ enum OptArg{
     OPTARG_SPACING,
     OPTARG_RANDOM_SEED,
     OPTARG_FILTERSET,
+    OPTARG_PARSEBYSEQ,
     OPTARG_DUMMY
 };
 
@@ -98,7 +99,10 @@ enum OptArg{
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
     {"refine-exact", no_argument, 0, OPTARG_REFINEEXACT},\
     {"edit-distance", no_argument, 0, 'E'},\
-    {"full-setsketch", no_argument, 0, 'Z'},\
+    {"oneperm-setsketch", no_argument, 0, 'Z'},\
+    {"oneperm", no_argument, 0, 'Z'},\
+    {"oph", no_argument, 0, 'Z'},\
+    {"doph", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
     {"protein", no_argument, 0, OPTARG_PROTEIN},\
     {"protein20", no_argument, 0, OPTARG_PROTEIN},\
@@ -114,14 +118,20 @@ enum OptArg{
     {"spacing", required_argument, 0, OPTARG_SPACING},\
     {"seed", required_argument, 0, OPTARG_RANDOM_SEED},\
     {"filterset", required_argument, 0, OPTARG_FILTERSET},\
-    {"parse-by-seq", no_argument, (int *)&parse_by_seq, 1},\
+    {"parse-by-seq", no_argument, 0, OPTARG_PARSEBYSEQ},\
 
 
 
 #define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
 #define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
-#define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atof(optarg); break;}
+#define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atof(optarg);\
+            if(nbytes_for_fastdists != 8. && nbytes_for_fastdists != 4. && nbytes_for_fastdists != 2. && nbytes_for_fastdists != 1. && nbytes_for_fastdists != .5){\
+                std::fprintf(stderr, "--fastcmp must have 8, 4, 2, 1, or 0.5 as the argument. These are the only register sizes supported.\n");\
+                throw std::runtime_error("See usage for --fastcmp instructions.");\
+            }\
+            break;\
+            }
 #define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN20; canon = false; std::fprintf(stderr, "Using standard canon\n"); break;} \
     case OPTARG_PROTEIN6: {rht = bns::PROTEIN_6; canon = false; break;}\
     case OPTARG_PROTEIN14: {rht = bns::PROTEIN14; canon = false; break;}\
@@ -156,7 +166,7 @@ enum OptArg{
         case 'W': cache = true; break;\
         case 'B': sketch_space = SPACE_MULTISET; res = FULL_SETSKETCH; break;\
         case 'P': sketch_space = SPACE_PSET; res = FULL_SETSKETCH; break;\
-        case 'Z': res = FULL_SETSKETCH; break;\
+        case 'Z': res = ONE_PERM; break;\
         case OPTARG_ISZ: measure = INTERSECTION; break;\
         case OPTARG_OUTPREF: {\
             outprefix = optarg; break;\
@@ -170,6 +180,7 @@ enum OptArg{
         case OPTARG_SPACING: spacing = optarg; canon = false; break;\
         case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;\
         case OPTARG_FILTERSET: fsarg = optarg; break;\
+        case OPTARG_PARSEBYSEQ: parse_by_seq = true; break;\
 
 
 
@@ -223,7 +234,7 @@ static constexpr const char *siglen =
         "        Aliases: --pminhash, --probs, --pmh, --PMH\n"\
         "-B/--multiset: Sketch m-mers into BagMinHash. Treats weighted sets as multisets.\n"\
         "        Aliases: --bagminhash, --bmh, --BMH\n"\
-        "-Z/--full-setsketch: Full setsketch (not stochastically-averaged)\n"\
+        "-Z/--doph/--oneperm/--oneperm-setsketch: Stochastically-averaged setsketch. This is faster at sketching, but has a small probability of failure which grows with sketch size. Big one-permutation sketches may perform poorly.\n"\
         "This should perform similarly to default setsketch behavior, but has better behaviors with large sketches and small sets\n"\
         "It typically comes at 2-4x runtime cost, depending on sketch size\n"\
         "-c/--countsketch-size: Use Count-Sketch counting instead of exact counting, using [arg] as the size.\n    "\
