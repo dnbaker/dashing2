@@ -39,6 +39,7 @@ enum OptArg{
     OPTARG_SPACING,
     OPTARG_RANDOM_SEED,
     OPTARG_FILTERSET,
+    OPTARG_PARSEBYSEQ,
     OPTARG_DUMMY
 };
 
@@ -117,7 +118,7 @@ enum OptArg{
     {"spacing", required_argument, 0, OPTARG_SPACING},\
     {"seed", required_argument, 0, OPTARG_RANDOM_SEED},\
     {"filterset", required_argument, 0, OPTARG_FILTERSET},\
-    {"parse-by-seq", no_argument, (int *)&parse_by_seq, 1},\
+    {"parse-by-seq", no_argument, 0, OPTARG_PARSEBYSEQ},\
 
 
 
@@ -179,6 +180,7 @@ enum OptArg{
         case OPTARG_SPACING: spacing = optarg; canon = false; break;\
         case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;\
         case OPTARG_FILTERSET: fsarg = optarg; break;\
+        case OPTARG_PARSEBYSEQ: parse_by_seq = true; break;\
 
 
 
