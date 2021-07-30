@@ -626,10 +626,9 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
                 // Uses 96 bits of precision
             } else {
                 auto tv = rv * INVMUL64;
-                const FT bv = -1. / m_;
                 // Filter with fast log first
-                nv = bv * flog(tv) * FT(.7);
-                if(nv < mv) nv = bv * std::log(tv);
+                nv = mi * flog(tv) * FT(.7);
+                if(nv < mv) nv = mi * std::log(tv);
             }
             if(nv >= mv)
                 potentials_.erase(nv);
