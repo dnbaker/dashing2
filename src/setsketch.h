@@ -597,7 +597,9 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         CSetSketch<FT>::reset();
         potentials_.clear();
     }
-    template<typename OFT, typename=typename std::enable_if<std::is_arithmetic<OFT>::value>::type> void update(const uint64_t id, OFT) {update(id);}
+    // If a weight is passed, ignore it
+    template<typename OFT, typename=typename std::enable_if<std::is_arithmetic<OFT>::value>::type>
+    void update(const uint64_t id, OFT) {update(id);}
     using super::mycard_;
     using super::total_updates_;
     using super::idcounts_;
@@ -607,16 +609,20 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
     using super::max;
     using super::ls_;
     using super::getbeta;
+    long double id2ldv(uint64_t *rv, double mi) const {
+        auto lrv = __uint128_t(*rv) << 64;
+        lrv |= wy::wyhash64_stateless(rv);
+        long double tv = (lrv >> 32) * 1.2621774483536188887e-29L;
+        return mi * std::log(tv);
+    }
     void trim_potentials(FT mv) {
         using fastlog::flog;
         for(auto it = potentials_.begin(); it != potentials_.end(); ++it) {
+            const FT mi = -1.L / m_;
             FT nv;
             uint64_t rv = it->first;
             if constexpr(sizeof(FT) > 8) {
-                auto lrv = __uint128_t(rv) << 64;
-                const FT bv = -1. / m_;
-                lrv |= wy::wyhash64_stateless(&rv);
-                nv = bv * std::log(static_cast<long double>((lrv >> 32) * 1.2621774483536188887e-29L));
+                nv = id2ldv(&rv, mi);
                 // Uses 96 bits of precision
             } else {
                 auto tv = rv * INVMUL64;
@@ -629,7 +635,6 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
                 potentials_.erase(nv);
         }
     }
-    // If a weight is passed, ignore it
     void update(const uint64_t id) {
         using fastlog::flog;
         if(mc_ <= 1u) return CSetSketch<FT>::update(id);
@@ -642,36 +647,28 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         FT ev;
         FT mv = max();
         CONST_IF(sizeof(FT) > 8) {
-            auto lrv = __uint128_t(rv) << 64;
-            const FT bv = -1. / m_;
-            lrv |= wy::wyhash64_stateless(&rv);
-            FT tv = static_cast<long double>((lrv >> 32) * 1.2621774483536188887e-29L);
-            ev = bv * std::log(tv);
-            if(ev > mv) return;
+            if((ev = id2ldv(&rv, -1.L / m_)) > mv) return;
         } else {
             auto tv = rv * INVMUL64;
             const FT bv = -1. / m_;
             // Filter with fast log first
-            if(bv * flog(tv) * FT(.7) > mv) return;
-            ev = bv * std::log(tv);
-            if(ev > mv) return;
+            if(bv * flog(tv) * FT(.7) > mv || (ev = bv * std::log(tv)) > mv) return;
         }
         auto pit = potentials_.find(id);
         if(pit == potentials_.end()) {
             potentials_.emplace(id, 1);
             return;
-        } else {
-            if(pit->second >= mc_) {
-                ++pit->second; // Already added
-                return;
-            } else if(++pit->second < mc_) return;
-
-            // WHat's left now is that we have just reached the minimum count
-            // We will periodically remove unnecessary k-mers as the sketch becomes filled.
-            // This is done randomly as a function of the random id;
-            if((hid & 0x1fffffull) == 0ull) {
-                trim_potentials(mv);
-            }
+        }
+        if(pit->second >= mc_) {
+            ++pit->second; // Already added
+            return;
+        }
+        if(++pit->second < mc_) return;
+        // What's left now is that we have just reached the minimum count
+        // We will periodically remove unnecessary k-mers as the sketch becomes filled.
+        // This is done randomly as a function of the random id;
+        if((hid & 0x1fffffull) == 0ull) {
+            trim_potentials(mv);
         }
         ls_.reset();
         ls_.seed(rv);
@@ -694,8 +691,8 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
             CONST_IF(sizeof(FT) > 8) {
                 auto lrv = __uint128_t(rv) << 64;
                 lrv |= wy::wyhash64_stateless(&rv);
-                const FT increment = bv * std::log((lrv >> 32) * 1.2621774483536188887e-29L);
-                if(kahan::update(ev, kahan_carry, increment) > mv) break;
+                if(kahan::update(ev, kahan_carry, bv * std::log((lrv >> 32) * 1.2621774483536188887e-29L)) > mv)
+                    break;
             } else {
                 const FT nv = rv * INVMUL64;
                 if(bv * flog(nv) * FT(.7) + ev > mv) {
