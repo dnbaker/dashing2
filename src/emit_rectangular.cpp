@@ -2,13 +2,29 @@
 
 namespace dashing2 {
 
+struct QTup: public std::tuple<std::unique_ptr<float[]>, size_t, size_t, size_t> {
+    using super = std::tuple<std::unique_ptr<float[]>, size_t, size_t, size_t>;
+    template<typename...Args>
+    QTup(Args &&...args): super(std::forward<Args>(args)...) {}
+    auto data() {return std::get<0>(*this).get();}
+    auto data() const {return std::get<0>(*this).get();}
+    auto &ptr() {return std::get<0>(*this);}
+    auto &ptr() const {return std::get<0>(*this);}
+    auto &start() {return std::get<1>(*this);}
+    const auto start() const {return std::get<1>(*this);}
+    auto &stop() {return std::get<2>(*this);}
+    const auto stop() const {return std::get<2>(*this);}
+    auto &nwritten() {return std::get<3>(*this);}
+    const auto nwritten() const {return std::get<3>(*this);}
+};
+
 void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t ns = result.names_.size();
     std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
     std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
-    std::deque<std::pair<std::unique_ptr<float[]>, size_t>> datq;
+    std::deque<QTup> datq;
     volatile int loopint = 0;
     std::mutex datq_lock;
     if(opts.output_format_ == MACHINE_READABLE) {
@@ -37,48 +53,97 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
         while(loopint == 0 || datq.size()) {
             if(datq.empty()) {
                 std::this_thread::sleep_for(std::chrono::duration<size_t, std::nano>(2000));
-            } else {
-                auto &f = datq.front();
-                const size_t nwritten = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - f.second - 1;
-                if(opts.output_format_ == HUMAN_READABLE) {
-                    auto datp = f.first.get();
-                    auto &seqn = result.names_[f.second];
+                continue;
+            }
+            auto &f = datq.front();
+            auto fs = f.start(), fe = f.stop();
+            if(opts.output_format_ == HUMAN_READABLE) {
+                auto datp = f.data();
+                for(size_t i = fs; i < fe; ++i) {
+                    auto &seqn = result.names_[i];
                     std::string fn(seqn);
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
                     std::fwrite(fn.data(), 1, fn.size(), ofp);
-                    for(size_t i = 0; i < nwritten;std::fprintf(ofp, "\t%0.9g", datp[i++]));
+                    const size_t jend = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - i - 1;
+                    for(size_t j = 0; j < jend; ++j)
+                        std::fprintf(ofp, "\t%0.9g", *datp++);
                     std::fputc('\n', ofp);
-                } else if(opts.output_format_ == MACHINE_READABLE) {
-                    if(std::fwrite(datq.front().first.get(), sizeof(float), nwritten, ofp) != nwritten)
-                        THROW_EXCEPTION(std::runtime_error(std::string("Failed to write row ") + std::to_string(datq.front().second) + " to disk"));
-                } // else throw std::runtime_error("This should never happen");
-                std::lock_guard<std::mutex> guard(datq_lock);
-                datq.pop_front();
+                }
+            } else if(opts.output_format_ == MACHINE_READABLE) {
+                const size_t nwritten = datq.front().nwritten();
+                if(std::fwrite(datq.front().data(), sizeof(float), nwritten, ofp) != nwritten)
+                    THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(datq.front().start()) + "-" + std::to_string(datq.front().stop()) + " to disk"));
             }
+            std::lock_guard<std::mutex> guard(datq_lock);
+            datq.pop_front();
         }
     });
+    const size_t batch_size = opts.cmp_batch_size_;
     if(opts.output_kind_ == PANEL) {
-        for(size_t i = 0; i < nf; ++i) {
-            std::unique_ptr<float[]> dat(new float[nq]);
-            OMP_PFOR_DYN
-            for(size_t j = 0; j < nq; ++j) {
-                dat[j] = compare(opts, result, i, j + nf);
+        if(batch_size <= 1) {
+            for(size_t i = 0; i < nf; ++i) {
+                std::unique_ptr<float[]> dat(new float[nq]);
+                OMP_PFOR_DYN
+                for(size_t j = 0; j < nq; ++j) {
+                    dat[j] = compare(opts, result, i, j + nf);
+                }
+                std::lock_guard<std::mutex> guard(datq_lock);
+                datq.emplace_back(QTup{std::move(dat), i, i + 1, nq});
             }
-            std::lock_guard<std::mutex> guard(datq_lock);
-            datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
+        } else {
+            const size_t nbatches = (nf + batch_size - 1) / batch_size;
+            for(size_t bi = 0; bi < nbatches; ++bi) {
+                const size_t firstrow = bi * batch_size;
+                const size_t erow = std::min((bi + 1) * batch_size, nf);
+                const size_t nrow = erow - firstrow;
+                const size_t nwritten = nq * nrow;
+                std::unique_ptr<float[]> dat(new float[nwritten]);
+                OMP_PFOR_DYN
+                for(size_t i = 0; i < nrow; ++i) {
+                    for(size_t j = 0; j < nq; ++j)
+                        dat[i * nq + j] = compare(opts, result, i + firstrow, j + nf);
+                }
+                std::lock_guard<std::mutex> guard(datq_lock);
+                datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
+            }
         }
     } else {
-        for(size_t i = 0; i < ns; ++i) {
-            // TODO: batch queries together for cache efficiency (distmat::parallel_fill for an example)
-            size_t nelem = asym ? ns: ns - i - 1;
-            std::unique_ptr<float[]> dat(new float[nelem]);
-            const auto datp = dat.get() - (asym ? size_t(0): i + 1);
-            OMP_PFOR_DYN
-            for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
-                datp[start] = compare(opts, result, i, start);
+        if(batch_size <= 1 || ns < 5) {
+            for(size_t i = 0; i < ns; ++i) {
+                size_t nelem = asym ? ns: ns - i - 1;
+                std::unique_ptr<float[]> dat(new float[nelem]);
+                const auto datp = dat.get() - (asym ? size_t(0): i + 1);
+                OMP_PFOR_DYN
+                for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
+                    datp[start] = compare(opts, result, i, start);
+                }
+                std::lock_guard<std::mutex> guard(datq_lock);
+                datq.emplace_back(QTup{std::move(dat), i, i + 1, nelem});
             }
-            std::lock_guard<std::mutex> guard(datq_lock);
-            datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
+        } else {
+            const size_t nbatches = (ns + batch_size - 1) / batch_size;
+            for(size_t bi = 0; bi < nbatches; ++bi) {
+                const size_t firstrow = bi * batch_size;
+                const size_t erow = std::min((bi + 1) * batch_size, ns);
+                size_t nwritten = 0;
+                std::vector<size_t> offsets{0};
+                for(size_t fs = firstrow; fs < erow; ++fs) {
+                    const auto n = asym ? ns: ns - fs - 1;
+                    nwritten += n;
+                    offsets.push_back(n);
+                }
+                std::unique_ptr<float[]> dat(new float[nwritten]);
+                OMP_PFOR_DYN
+                for(size_t fs = firstrow; fs < erow; ++fs) {
+                    auto datp = &dat[offsets[fs - firstrow]];
+                    const size_t start = asym ? 0: fs + 1;
+                    datp -= start;
+                    for(size_t j = start; j < ns;
+                        datp[j++] = compare(opts, result, fs, start));
+                }
+                std::lock_guard<std::mutex> guard(datq_lock);
+                datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
+            }
         }
     }
     loopint = 1;

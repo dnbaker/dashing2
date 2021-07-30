@@ -45,6 +45,7 @@ int sketch_main(int argc, char **argv) {
     bool parse_by_seq = false;
     double downsample_frac = 1.;
     uint64_t seedseed = 0;
+    size_t batch_size = 16;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
     std::string fsarg;
@@ -120,6 +121,7 @@ int sketch_main(int argc, char **argv) {
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
         distopts.measure_ = measure;
+        distopts.cmp_batch_size_ = batch_size;
         cmp_core(distopts, result);
     }
     return 0;

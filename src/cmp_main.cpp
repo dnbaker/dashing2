@@ -133,6 +133,7 @@ int cmp_main(int argc, char **argv) {
     std::string fsarg;
     Measure measure = SIMILARITY;
     uint64_t seedseed = 0;
+    size_t batch_size = 16;
     std::string spacing;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -190,6 +191,7 @@ int cmp_main(int argc, char **argv) {
     opts.downsample(downsample_frac);
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
     distopts.measure_ = measure;
+    distopts.cmp_batch_size_ = batch_size;
     SketchingResult result;
     if(presketched) {
         std::set<std::string> suffixset;

@@ -41,6 +41,7 @@ enum OptArg{
     OPTARG_FILTERSET,
     OPTARG_PARSEBYSEQ,
     OPTARG_HELP,
+    OPTARG_CMP_BATCH_SIZE,
     OPTARG_DUMMY
 };
 
@@ -120,7 +121,8 @@ enum OptArg{
     {"seed", required_argument, 0, OPTARG_RANDOM_SEED},\
     {"filterset", required_argument, 0, OPTARG_FILTERSET},\
     {"parse-by-seq", no_argument, 0, OPTARG_PARSEBYSEQ},\
-    {"help", no_argument, 0, OPTARG_HELP}\
+    {"help", no_argument, 0, OPTARG_HELP},\
+    {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE}
 
 
 
@@ -183,6 +185,7 @@ enum OptArg{
         case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;\
         case OPTARG_FILTERSET: fsarg = optarg; break;\
         case OPTARG_PARSEBYSEQ: parse_by_seq = true; break;\
+        case OPTARG_CMP_BATCH_SIZE: batch_size = std::strtoull(optarg, 0, 10); break;
 
 
 
@@ -287,6 +290,8 @@ static constexpr const char *siglen =
         "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
+        "--batch-size [16] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
+        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"
 
 
 

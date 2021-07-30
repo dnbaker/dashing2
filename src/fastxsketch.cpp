@@ -107,6 +107,7 @@ struct KSeqHolder {
         for(auto p = kseqs_; p < kseqs_ + n_; ++p)
             ks_resize(&p->seq, 1<<20);
     }
+private:
     void free_item(kseq_t &seq) {
         std::free(seq.name.s);
         std::free(seq.comment.s);
@@ -114,11 +115,13 @@ struct KSeqHolder {
         std::free(seq.qual.s);
         ks_destroy(seq.f);
     }
+public:
     ~KSeqHolder() {
         for(size_t i = 0; i < n_; free_item(kseqs_[i++]));
         std::free(kseqs_);
     }
 };
+
 INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     double s = 0.;
 #if _OPENMP >= 201307L

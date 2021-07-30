@@ -60,6 +60,7 @@ struct Dashing2DistOptions: public Dashing2Options {
     std::string outfile_path_;
     bool exact_kmer_dist_ = false;
     bool refine_exact_ = false;
+    size_t cmp_batch_size_ = 16;
     Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false, bool refine_exact=false): Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact)
     {
         if(nbytes_for_fastdists < 0) nbytes_for_fastdists = sizeof(RegT);
