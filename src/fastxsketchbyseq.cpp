@@ -88,16 +88,16 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
             if(opts.count_threshold_ > 0) sketcher.opss->set_mincount(opts.count_threshold_);
         } else sketcher.fss.reset(new FullSetSketch(opts.sketchsize_, save_ids, save_idcounts));
     } else if(opts.sspace_ == SPACE_MULTISET) {
-            std::fprintf(stderr, "Using BMH\n");
+            //std::fprintf(stderr, "Using BMH\n");
         sketcher.bmh.reset(new BagMinHash(opts.sketchsize_, save_ids, save_idcounts));
     } else if(opts.sspace_ == SPACE_PSET) {
         sketcher.pmh.reset(new ProbMinHash(opts.sketchsize_));
-        std::fprintf(stderr, "Setting sketcher.pmh: %p\n", (void *)sketcher.pmh.get());
+        //std::fprintf(stderr, "Setting sketcher.pmh: %p\n", (void *)sketcher.pmh.get());
     } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         sketcher.omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
-        std::fprintf(stderr, "Setting sketcher.omh: %p\n", (void *)sketcher.omh.get());
+        //std::fprintf(stderr, "Setting sketcher.omh: %p\n", (void *)sketcher.omh.get());
     } else THROW_EXCEPTION(std::runtime_error("Should have been set space, multiset, probset, or edit distance"));
-    if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET || (opts.sspace_ == SPACE_SET && opts.kmer_result_ == FULL_SETSKETCH && opts.count_threshold_ > 0.)) {
+    if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
         sketcher.ctr.reset(new Counter(opts.cssize()));
     }
 
@@ -257,7 +257,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     ptr = sketchers.opss ? sketchers.opss->data(): sketchers.fss->data();
                     ret.cardinalities_[i] = sketchers.opss ? sketchers.opss->getcard(): sketchers.fss->getcard();
                     if(ret.cardinalities_[i] < 10 * opts.sketchsize_) {
-                        ska::flat_hash_set<uint64_t> ids;
+                        flat_hash_set<uint64_t> ids;
                         ids.reserve(opts.sketchsize_);
                         sketchers.for_each([&](auto x) {
                             x = maskfn(x);
@@ -295,16 +295,13 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     std::copy(sketchers.pmh->idcounts().begin(), sketchers.pmh->idcounts().end(), kmercounts.begin());
                 }
             } else THROW_EXCEPTION(std::runtime_error("Not yet implemented?"));
-            //std::fprintf(stderr, "Copying from %p to container of size %zu at %zu\n", (void *)ptr, ret.signatures_.size(), size_t(i * opts.sketchsize_));
             std::copy(ptr, ptr + opts.sketchsize_, &ret.signatures_[i * opts.sketchsize_]);
             if(kmer_ptr && ret.kmers_.size()) {
                 //std::fprintf(stderr, "Copying k-mers out, kmers size %zu, idx = %zu\n", ret.kmers_.size(), i * opts.sketchsize_);
                 std::copy(kmer_ptr, kmer_ptr + opts.sketchsize_, &ret.kmers_[i * opts.sketchsize_]);
             }// else std::fprintf(stderr, "k-mers not saved\n");
             if(kmercounts.size() && ret.kmercounts_.size()) {
-                //std::fprintf(stderr, "Copying k-mer counts out\n");
                 std::copy(kmercounts.begin(), kmercounts.end(), &ret.kmercounts_[i * opts.sketchsize_]);
-                //std::fprintf(stderr, "Copied k-mer counts out\n");
             }
         }
     }

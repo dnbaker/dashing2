@@ -96,6 +96,7 @@ struct Dashing2DistOptions: public Dashing2Options {
 };
 void cmp_core(Dashing2DistOptions &ddo, SketchingResult &res);
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
+void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result);
 
 }
 

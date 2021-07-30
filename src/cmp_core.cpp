@@ -156,10 +156,9 @@ static inline long double g_b(long double b, long double arg) {
 }
 
 LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
-    //std::fprintf(stderr, "Calling %s for %zu/%zu\n", __PRETTY_FUNCTION__, i, j);
     long double ret = std::numeric_limits<LSHDistType>::max();
     const long double lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
-    const long double invdenom = 1. / opts.sketchsize_;
+    const long double invdenom = 1.L / opts.sketchsize_;
     auto sim2dist = [poisson_mult=-1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
     if(opts.compressed_ptr_) {
         const bool bbit_c = opts.truncation_method_ > 0;
@@ -168,12 +167,14 @@ LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, si
             auto &equal_regs = std::get<0>(res);
             switch(int(2. * opts.fd_level_)) {
 
+#define CASEPOW2 \
+                CASE_ENTRY(16, uint64_t)\
+                CASE_ENTRY(8, uint32_t)\
+                CASE_ENTRY(4, uint16_t)\
+                CASE_ENTRY(2, uint8_t)
 #define CASE_ENTRY(v, TYPE)\
 case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = sketch::eq::count_eq(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
-                CASE_ENTRY(16, uint64_t)
-                CASE_ENTRY(8, uint32_t)
-                CASE_ENTRY(4, uint16_t)
-                CASE_ENTRY(2, uint8_t)
+                CASEPOW2
 #undef CASE_ENTRY
                 case 1: {
                     uint8_t *ptr = static_cast<uint8_t *>(opts.compressed_ptr_);
@@ -189,15 +190,12 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = ske
 case v: {\
     TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_);\
     res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
-                CASE_ENTRY(16, uint64_t)
-                CASE_ENTRY(8, uint32_t)
-                CASE_ENTRY(4, uint16_t)
-                CASE_ENTRY(2, uint8_t)
+                CASEPOW2
 #undef CASE_ENTRY
+#undef CASEPOW2
                 case 1: {
                     uint8_t *ptr = static_cast<uint8_t *>(opts.compressed_ptr_);
                     res = sketch::eq::count_gtlt_nibbles(ptr + i * opts.sketchsize_ / 2, ptr + j * opts.sketchsize_ / 2, opts.sketchsize_);
-                    //std::fprintf(stderr, "gt/lt/eq: %zu/%zu/%zu\n", size_t(res.first), size_t(res.second), size_t(opts.sketchsize_ - res.first - res.second));
                     break;
                 }
                 default: __builtin_unreachable();
@@ -218,9 +216,9 @@ case v: {\
                 ret = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L) * ret / std::min(lhcard, rhcard);
         } else {
             //std::fprintf(stderr, "alpha gt: %zu. beta gt: %zu\n", res.first, res.second);
-            auto alpha = res.first * invdenom;
-            auto beta = res.second * invdenom;
-            const auto b = opts.compressed_b_;
+            long double alpha = res.first * invdenom;
+            long double beta = res.second * invdenom;
+            const long double b = opts.compressed_b_;
             static_assert(sizeof(b) == 16, "b must be a long double");
             long double mu;
             if(opts.fd_level_ < sizeof(RegT)) {
@@ -273,13 +271,12 @@ case v: {\
                 // instead of the doubles
                 // Since we're only comparing for equality, this can only improve accuracy
                 if(result.kmers_.size() == result.signatures_.size() && !opts.use128()) {
-                    std::fprintf(stderr, "Comparing k-mers sampled rather than the items themselves\n");
+                    DBG_ONLY(std::fprintf(stderr, "Comparing k-mers sampled rather than the items themselves. This should be more specific, since there is 0 chance of collisions.\n");)
                     sptr = reinterpret_cast<const RegT *>(result.kmers_.data());
                 }
             }
             const auto neq = sketch::eq::count_eq(&sptr[opts.sketchsize_ * i], &sptr[opts.sketchsize_ * j], opts.sketchsize_);
             ret = invdenom * neq;
-            //std::fprintf(stderr, "%zu matching out of %zu\n", neq, opts.sketchsize_);
             if(opts.measure_ == INTERSECTION) {
                 ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L);
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L) / std::min(lhcard, rhcard);
@@ -296,12 +293,8 @@ case v: {\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
-        //std::fprintf(stderr, "Paths %zu/%zu are %s/%s\n", i, j, lpath.data(), rpath.data());
         std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
-        std::string lcmd = path2cmd(lpath);
-        std::string rcmd = path2cmd(rpath);
-        //std::cerr << lcmd << '\n';
-        //std::cerr << rcmd << '\n';
+        std::string lcmd = path2cmd(lpath), rcmd = path2cmd(rpath);
         if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
         if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'"));
         if(result.kmercountfiles_.size()) {
@@ -331,90 +324,6 @@ case v: {\
     if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<double>::max();
     return ret;
 }
-void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) {
-    const size_t ns = result.names_.size();
-    std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: std::fopen(opts.outfile_path_.data(), "w");
-    if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
-    std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
-    const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
-    std::deque<std::pair<std::unique_ptr<float[]>, size_t>> datq;
-    volatile int loopint = 0;
-    std::mutex datq_lock;
-    if(opts.output_format_ == MACHINE_READABLE) {
-        std::fprintf(stderr, "Emitting machine-readable: %s\n", to_string(opts.output_format_).data());
-    } else {
-        std::fprintf(stderr, "Emitting human-readable: %s\n", to_string(opts.output_format_).data());
-    }
-    // Emit Header
-    if(opts.output_format_ == HUMAN_READABLE) {
-        std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": "PHYLIP pairwise");
-        std::fprintf(ofp, "#Dashing2Options: %s\n", opts.to_string().data());
-        std::fprintf(ofp, "#Sources");
-        for(size_t i = 0; i < result.names_.size(); ++i) {
-            std::fprintf(ofp, "\t%s", result.names_[i].data());
-        }
-        std::fputc('\n', ofp);
-        std::fprintf(ofp, "%zu\n", ns);
-    }
-    /*
-     *  This is a worker thread which processes and emits
-     *  data in the datq which computation is done in parallel by other threads.
-     *  If the queue is empty, it sleeps.
-     */
-    const size_t nq = result.nqueries(), nf = ns - nq;
-    std::thread sub = std::thread([&](){
-        while(loopint == 0 || datq.size()) {
-            if(datq.empty()) {
-                std::this_thread::sleep_for(std::chrono::duration<size_t, std::nano>(2000));
-            } else {
-                auto &f = datq.front();
-                const size_t nwritten = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - f.second - 1;
-                if(opts.output_format_ == HUMAN_READABLE) {
-                    auto datp = f.first.get();
-                    auto &seqn = result.names_[f.second];
-                    std::string fn(seqn);
-                    if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
-                    std::fwrite(fn.data(), 1, fn.size(), ofp);
-                    for(size_t i = 0; i < nwritten;std::fprintf(ofp, "\t%0.9g", datp[i++]));
-                    std::fputc('\n', ofp);
-                } else if(opts.output_format_ == MACHINE_READABLE) {
-                    if(std::fwrite(datq.front().first.get(), sizeof(float), nwritten, ofp) != nwritten)
-                        THROW_EXCEPTION(std::runtime_error(std::string("Failed to write row ") + std::to_string(datq.front().second) + " to disk"));
-                } // else throw std::runtime_error("This should never happen");
-                std::lock_guard<std::mutex> guard(datq_lock);
-                datq.pop_front();
-            }
-        }
-    });
-    if(opts.output_kind_ == PANEL) {
-        for(size_t i = 0; i < nf; ++i) {
-            std::unique_ptr<float[]> dat(new float[nq]);
-            OMP_PFOR_DYN
-            for(size_t j = 0; j < nq; ++j) {
-                dat[j] = compare(opts, result, i, j + nf);
-            }
-            std::lock_guard<std::mutex> guard(datq_lock);
-            datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
-        }
-    } else {
-        for(size_t i = 0; i < ns; ++i) {
-            // TODO: batch queries together for cache efficiency (distmat::parallel_fill for an example)
-            size_t nelem = asym ? ns: ns - i - 1;
-            std::unique_ptr<float[]> dat(new float[nelem]);
-            const auto datp = dat.get() - (asym ? size_t(0): i + 1);
-            OMP_PFOR_DYN
-            for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
-                datp[start] = compare(opts, result, i, start);
-            }
-            std::lock_guard<std::mutex> guard(datq_lock);
-            datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
-        }
-    }
-    loopint = 1;
-    if(sub.joinable()) sub.join();
-    if(ofp != stdout) std::fclose(ofp);
-}
-
 
 template<typename MHT, typename KMT>
 inline void densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
@@ -455,7 +364,6 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
                 else if(endswith(fn, ".gz")) ft = 1;
                 else ft = 0;
                 std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
-                //std::fprintf(stderr, "Checking with command = '%s'\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
                 size_t c = 0;
@@ -469,7 +377,6 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
                 std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
                 if(cmd == "unknowncommand") THROW_EXCEPTION(std::runtime_error("Failure"));
                 cmd += result.kmercountfiles_[i];
-                //std::fprintf(stderr, "Calling %s\n", cmd.data());
                 if(!(ifp = ::popen(cmd.data(), "r")))
                     THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
                 double x, c, s;

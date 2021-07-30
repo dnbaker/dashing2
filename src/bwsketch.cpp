@@ -10,7 +10,7 @@ namespace dashing2 {
 static constexpr uint32_t default_BW_READ_BUFFER = 1<<30;
 
 uint32_t BW_READ_BUFFER = default_BW_READ_BUFFER;
-std::vector<RegT> reduce(const ska::flat_hash_map<std::string, std::vector<RegT>> &map);
+std::vector<RegT> reduce(const flat_hash_map<std::string, std::vector<RegT>> &map);
 std::vector<std::pair<int, bwOverlapIterator_t *>> get_iterators(bigWigFile_t *fp);
 
 
@@ -43,7 +43,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     if(opts.count() != EXACT_COUNTING) {
         throw std::invalid_argument("Counting format must be exact for BigWigs. (No Count-Sketch approximation). This may change in the future.");
     }
-    ska::flat_hash_map<std::string, std::vector<RegT>> retmap;
+    flat_hash_map<std::string, std::vector<RegT>> retmap;
     std::fprintf(stderr, "Space: %s\n", opts.sspace_ == SPACE_SET ? "Set": opts.sspace_ == SPACE_MULTISET ? "Multist": opts.sspace_ == SPACE_PSET ? "Probdist": "Editdist");
     if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_MULTISET && opts.sspace_ != SPACE_PSET)
         throw std::invalid_argument("Can't do edit distance for BigWig files");
@@ -64,13 +64,15 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
 
     for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
         if(opts.sspace_ == SPACE_SET) {
-            if(opts.one_perm()) opss.emplace_back(ss);
-            else fss.emplace_back(ss);
-        } else if(opts.sspace_ == SPACE_MULTISET) {
+            if(opts.one_perm()) {
+                opss.emplace_back(ss);
+                if(opts.count_threshold_ > 1) opss.back().set_mincount(opts.count_threshold_);
+            } else
+                fss.emplace_back(opts.count_threshold_, ss);
+        } else if(opts.sspace_ == SPACE_MULTISET)
             bmhs.emplace_back(ss);
-        } else {
+        else
             pmhs.emplace_back(ss);
-        }
     }
     long double total_weight = 0.;
     OMP_PRAGMA("omp parallel for schedule(dynamic) reduction(+:total_weight)")
@@ -135,7 +137,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     bwCleanup();
     ret.global_.reset(new std::vector<RegT>(std::move(reduce(retmap))));
     if(opts.by_chrom_)
-        ret.chrmap_.reset(new ska::flat_hash_map<std::string, std::vector<RegT>>(std::move(retmap)));
+        ret.chrmap_.reset(new flat_hash_map<std::string, std::vector<RegT>>(std::move(retmap)));
     return ret;
 }
 

@@ -164,8 +164,11 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         if(opts.kmer_result_ == ONE_PERM) {
             make(opss);
             for(auto &x: opss) x.set_mincount(opts.count_threshold_);
-        } else if(opts.kmer_result_ == FULL_SETSKETCH)
-            make_save(fss);
+        } else if(opts.kmer_result_ == FULL_SETSKETCH) {
+            fss.reserve(nt);
+            for(size_t i = 0; i < nt; ++i)
+                fss.emplace_back(opts.count_threshold_, ss, opts.save_kmers_ || opts.build_mmer_matrix_, opts.save_kmercounts_ || opts.build_count_matrix_);
+        }
     } else if(opts.sspace_ == SPACE_MULTISET) make_save(bmhs);
     else if(opts.sspace_ == SPACE_PSET) make(pmhs);
     else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
@@ -348,10 +351,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
 #undef FUNC_FE
                 }, path);
             };
-            const bool setsketch_with_counts = (opts.kmer_result_ == FULL_SETSKETCH) && (opts.save_kmercounts_ || opts.count_threshold_ > 0);
             if(
                 (opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET || opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_COUNTDICT)
-                 || setsketch_with_counts
             )
             {
                 auto &ctr = ctrs[tid];
@@ -375,10 +376,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     ctr.finalize(pmhs[tid], opts.count_threshold_);
                     std::copy(pmhs[tid].data(), pmhs[tid].data() + ss, &ret.signatures_[mss]);
                     ret.cardinalities_[myind] = pmhs[tid].total_weight();
-                } else if(setsketch_with_counts) {
-                    assert(fss.size());
-                    ctr.finalize(fss[tid], opts.count_threshold_);
-                    ret.cardinalities_[myind] = fss[tid].getcard();
                 } else THROW_EXCEPTION(std::runtime_error("Unexpected space for counter-based m-mer encoding"));
                     // Make bottom-k if we generated full k-mer sets or k-mer count dictionaries, and copy then over
                 if(kmervec64.size() || kmervec128.size()) {
@@ -411,10 +408,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     buf = (const void *)pmhs[tid].data();
                     nb = ss * sizeof(RegT);
                     srcptr = pmhs[tid].data();
-                } else if((opts.kmer_result_ ==  ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH)) {
-                    buf = (const void *)fss[tid].data();
-                    nb = ss * sizeof(RegT);
-                    srcptr = fss[tid].data();
                 } else nb = 0, srcptr = nullptr;
                 if(srcptr && ret.signatures_.size())
                     std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
@@ -488,10 +481,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 std::free(dptr);
                 std::fclose(ofp);
             } else if(opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) {
-                // These occur twice, because if the user asks for counts, or if the user asks for a minimum count level for inclusion.
-                // Because of this, we have to generate the key-count map.
-                // Those cases are handled above with the count-based methods.
-                //std::fprintf(stderr, "kmer result is oneperm or setsketch. Dest: %s\n", destination.data());
                 std::FILE * ofp;
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr)
                     THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));

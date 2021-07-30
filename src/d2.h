@@ -7,9 +7,8 @@
 #include <memory>
 #include <vector>
 #include "bonsai/encoder.h"
-#include "flat_hash_map/flat_hash_map.hpp"
 #include "xxHash/xxh3.h"
-#include "sketch/setsketch.h"
+#include "./setsketch.h"
 #include "sketch/bmh.h"
 #include "counter.h"
 #include "oph.h"
@@ -33,8 +32,9 @@ using LSHDistType = DASHING2_INDEX_FLOAT_TYPE;
 #undef DASHING2_INDEX_FLOAT_TYPE
 
 
+
 struct IntervalSketchResult {
-    using Map = ska::flat_hash_map<std::string, std::vector<RegT>>;
+    using Map = flat_hash_map<std::string, std::vector<RegT>>;
     std::unique_ptr<Map> chrmap_;
     std::unique_ptr<std::vector<RegT>> global_;
     double card_;
@@ -93,7 +93,7 @@ struct Dashing2Options {
     bool parse_by_seq_ = false;
     bool trim_chr_ = true;
     size_t sketchsize_ = 2048;
-    double count_threshold_ = 0.;
+    uint32_t count_threshold_ = 0;
     KmerSketchResultType kmer_result_;
     bool by_chrom_ = false;
     bool bed_parse_normalize_intervals_ = false;
@@ -219,13 +219,13 @@ INLINE uint64_t maskfn(uint64_t x) {return x ^ XORMASK;}
 INLINE u128_t maskfn(u128_t x) {return x ^ XORMASK2;}
 
 using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
-using FullSetSketch = sketch::CSetSketch<RegT>;
+using FullSetSketch = sketch::setsketch::CountFilteredCSetSketch<RegT>;
 using OPSetSketch = LazyOnePermSetSketch<KmerSigT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
 using ProbMinHash = sketch::pmh2_t<RegT>;
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
 
 } // namespace dashing2
-//std::vector<RegT> reduce(ska::flat_hash_map<std::string, std::vector<RegT>> &map);
+//std::vector<RegT> reduce(flat_hash_map<std::string, std::vector<RegT>> &map);
 
 #endif

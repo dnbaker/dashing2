@@ -15,7 +15,7 @@ void reduce_pair(T &lhs, T &rhs) {
         lhs[i] = std::min(lhs[i], rhs[i]);
     }
 }
-std::vector<RegT> reduce(const ska::flat_hash_map<std::string, std::vector<RegT>> &map) {
+std::vector<RegT> reduce(const flat_hash_map<std::string, std::vector<RegT>> &map) {
     const size_t n = map.size();
     const unsigned int ln = static_cast<int>(std::ceil(n));
     std::vector<std::vector<RegT>> vals(n);

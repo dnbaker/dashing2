@@ -156,7 +156,7 @@ enum OptArg{
         case 'J': res = FULL_MMER_COUNTDICT; break;\
         case 'G': res = FULL_MMER_SEQUENCE; break;\
         case '2': use128 = true; break;\
-        case 'm': count_threshold = std::atof(optarg); break;\
+        case 'm': count_threshold = std::atoi(optarg); break;\
         case 'F': ffile = optarg; break;\
         case 'Q': qfile = optarg; ok = PANEL; break;\
         case OPTARG_BED_NORMALIZE: normalize_bed = true; break;\

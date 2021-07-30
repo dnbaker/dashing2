@@ -13,7 +13,7 @@ std::string Dashing2Options::to_string() const {
     if(trim_chr_) pos += std::sprintf(&ret[pos], ";trimchr");
     pos += std::sprintf(&ret[pos], ";sketchsize:%zu", sketchsize_);
     if(count_threshold_ > 0)
-        pos += std::sprintf(&ret[pos], ";%0.8g", count_threshold_);
+        pos += std::sprintf(&ret[pos], ";%u", count_threshold_);
     pos += std::sprintf(&ret[pos], ";sketchtype:%s",
             kmer_result_ == ONE_PERM ? "onepermsetsketch"
                   : kmer_result_ == FULL_SETSKETCH ? (sspace_ == SPACE_SET ? "fullsetsketch": sspace_ == SPACE_MULTISET ? "bagminhash": sspace_ == SPACE_PSET ? "probminhash": sspace_ == SPACE_EDIT_DISTANCE ? "orderminhash": "unknown")

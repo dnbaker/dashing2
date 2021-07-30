@@ -17,7 +17,7 @@ void pqueue::erase(typename std::priority_queue<PairT>::container_type::iterator
 }
 
 
-void update(pqueue &x, ska::flat_hash_set<LSHIDType> &xset, const PairT &item, const int topk, size_t k, std::mutex &mut) {
+void update(pqueue &x, flat_hash_set<LSHIDType> &xset, const PairT &item, const int topk, size_t k, std::mutex &mut) {
     const auto [dist, id] = item;
     if(xset.find(id) != xset.end()) {
         DBG_ONLY(std::fprintf(stderr, "id %u is already present\n", int(id));)
@@ -63,7 +63,7 @@ std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashin
     if(opts.output_kind_ == KNN_GRAPH && opts.num_neighbors_ > 0)
         for(auto &n: neighbor_lists)
             n.reserve(opts.num_neighbors_);
-    std::vector<ska::flat_hash_set<LSHIDType>> neighbor_sets(ns);
+    std::vector<flat_hash_set<LSHIDType>> neighbor_sets(ns);
     std::unique_ptr<std::mutex[]> mutexes(new std::mutex[ns]);
     auto idxstart = std::chrono::high_resolution_clock::now();
     // Build the index

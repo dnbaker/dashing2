@@ -29,7 +29,8 @@ int sketch_main(int argc, char **argv) {
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true;
     bool exact_kmer_dist = false, hpcompress = false;
     bool refine_exact = false;
-    double count_threshold = 0., similarity_threshold = -1.;
+    double similarity_threshold = -1.;
+    unsigned int count_threshold = 0.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
     int option_index = 0;
