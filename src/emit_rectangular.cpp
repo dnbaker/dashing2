@@ -41,7 +41,7 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
             std::fprintf(ofp, "\t%s", result.names_[i].data());
         }
         std::fputc('\n', ofp);
-        std::fprintf(ofp, "%zu\n", ns);
+        if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS) std::fprintf(ofp, "%zu\n", ns);
     }
     /*
      *  This is a worker thread which processes and emits
@@ -78,8 +78,9 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
             datq.pop_front();
         }
     });
-    const size_t batch_size = opts.cmp_batch_size_;
+    const size_t batch_size = std::max(opts.cmp_batch_size_, size_t(1));
     if(opts.output_kind_ == PANEL) {
+#if 0
         if(batch_size <= 1) {
             for(size_t i = 0; i < nf; ++i) {
                 std::unique_ptr<float[]> dat(new float[nq]);
@@ -91,6 +92,7 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
                 datq.emplace_back(QTup{std::move(dat), i, i + 1, nq});
             }
         } else {
+#endif
             const size_t nbatches = (nf + batch_size - 1) / batch_size;
             for(size_t bi = 0; bi < nbatches; ++bi) {
                 const size_t firstrow = bi * batch_size;
@@ -105,7 +107,9 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
                 }
                 std::lock_guard<std::mutex> guard(datq_lock);
                 datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
-            }
+#if 0
+        }
+#endif
         }
     } else {
         if(batch_size <= 1 || ns < 5) {
