@@ -396,18 +396,19 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
             std::lock_guard<std::mutex> guard(datq_lock);
             datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
         }
-    }
-    for(size_t i = 0; i < ns; ++i) {
-        // TODO: batch queries together for cache efficiency (distmat::parallel_fill for an example)
-        size_t nelem = asym ? ns: ns - i - 1;
-        std::unique_ptr<float[]> dat(new float[nelem]);
-        const auto datp = dat.get() - (asym ? size_t(0): i + 1);
-        OMP_PFOR_DYN
-        for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
-            datp[start] = compare(opts, result, i, start);
+    } else {
+        for(size_t i = 0; i < ns; ++i) {
+            // TODO: batch queries together for cache efficiency (distmat::parallel_fill for an example)
+            size_t nelem = asym ? ns: ns - i - 1;
+            std::unique_ptr<float[]> dat(new float[nelem]);
+            const auto datp = dat.get() - (asym ? size_t(0): i + 1);
+            OMP_PFOR_DYN
+            for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
+                datp[start] = compare(opts, result, i, start);
+            }
+            std::lock_guard<std::mutex> guard(datq_lock);
+            datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
         }
-        std::lock_guard<std::mutex> guard(datq_lock);
-        datq.emplace_back(std::pair<std::unique_ptr<float[]>, size_t>{std::move(dat), i});
     }
     loopint = 1;
     if(sub.joinable()) sub.join();
