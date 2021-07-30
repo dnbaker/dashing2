@@ -112,15 +112,20 @@ int main_usage() {
     std::fprintf(stderr, "sketch: converts FastX into k-mer sets/sketches, and sketches BigWig and BED files; also contains functionality from cmp, for one-step sketch and comparisons\n"
                          "This is probably the most common subcommand to use.\n"
     );
-    std::fprintf(stderr, "cmp, a.k.a. dist: compres previously sketched/decomposed k-mer sets and emits results.\n");
+    std::fprintf(stderr, "cmp: compares previously sketched/decomposed k-mer sets and emits results. alias: dist\n");
     std::fprintf(stderr, "wsketch: Takes a tuple of [1-3] input binary files [(u32 or u64), (float or double), (u32 or u64)] and performs weighted minhash sketching.\n"
-                         "sketch is for parsing and sketching (from Fast{qa}, BED, BigWig) and wsketch is for sketching binary files which have already been summed\n");
+                         "Three files are treated as Compressed Sparse Row (CSR)-format, where the third file contains indptr values, specifying the lengths of consecutive runs of pairs in the first two files corresponding to each row.\n"
+                         "wsketch is for sketching binary files which have already been summed, whereas sketch is for parsing and sketching (from Fast{qa}, BED, BigWig)\n");
     return 1;
 }
 using namespace dashing2;
 
 
 int main(int argc, char **argv) {
+    if(auto pos = std::find_if(argv, argv + argc, [](auto x) {return (std::strcmp(x, "--help") && std::strcmp(x, "-h")) == 0;});
+       pos != argv + argc) {
+        return main_usage();
+    }
     if(argc > 1) {
         if(std::strcmp(argv[1], "sketch") == 0)
             return sketch_main(argc - 1, argv + 1);

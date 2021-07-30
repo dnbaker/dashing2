@@ -50,6 +50,7 @@ void load_copy(const std::string &path, T *ptr) {
         std::FILE *fp = ::popen((std::string("xz -dc ") + path).data(), "r");
         for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
         ::pclose(fp);
+        return;
     }
     std::FILE *fp = std::fopen(path.data(), "rb");
     if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + path));

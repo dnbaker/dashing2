@@ -55,7 +55,7 @@ int sketch_main(int argc, char **argv) {
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:CNs2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
             SHARED_FIELDS
-            case '?': case 'h': sketch_usage(); return 1;
+            case OPTARG_HELP: case '?': case 'h': sketch_usage(); return 1;
         }
         //std::fprintf(stderr, "After getopt argument %d, of is %s\n",c , to_string(of).data());
     }

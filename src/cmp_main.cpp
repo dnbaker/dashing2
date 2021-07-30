@@ -138,7 +138,7 @@ int cmp_main(int argc, char **argv) {
     CMP_OPTS(cmp_long_options);
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
         SHARED_FIELDS
-        case '?': case 'h': cmp_usage(); return 1;
+        case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
     }}
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
