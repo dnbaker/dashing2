@@ -669,12 +669,8 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
             // WHat's left now is that we have just reached the minimum count
             // We will periodically remove unnecessary k-mers as the sketch becomes filled.
             // This is done randomly as a function of the random id;
-            if((hid & 0x1ffffull) == 0ull) {
-                std::fprintf(stderr, "Trimming potentials. Size now: %zu\n", potentials_.size());
-                auto ts = std::chrono::high_resolution_clock::now();
+            if((hid & 0x1fffffull) == 0ull) {
                 trim_potentials(mv);
-                auto tsp = std::chrono::high_resolution_clock::now();
-                std::fprintf(stderr, "Trimmed potentials. Size now: %zu after %gs\n", potentials_.size(), std::chrono::duration<double>(tsp - ts).count());
             }
         }
         ls_.reset();
