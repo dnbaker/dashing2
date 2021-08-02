@@ -8,6 +8,14 @@ struct FHasher {
     using FastRevHash = hash::CEHasher;
     FastRevHash rhasher_;
     FHasher() {}
+    template<typename T>
+    INLINE decltype(auto) hash(T x) const {
+        return this->operator()(x);
+    }
+    template<typename T>
+    static INLINE decltype(auto) hashi(T x) {
+        return FHasher()(x);
+    }
     INLINE uint32_t operator()(uint32_t x) const {
         return rhasher_(x);
     }

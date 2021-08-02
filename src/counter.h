@@ -6,10 +6,22 @@
 #include "hash.h"
 
 
+namespace std {
+template<>
+struct hash<dashing2::u128_t>{
+    template<typename T>
+    INLINE decltype(auto) operator()(const T val) const {
+        return dashing2::FHasher::hashi(val);
+    }
+};
+
+}
 
 namespace dashing2 {
 
-template<typename Key, typename V, typename Hash=robin_hood::hash<Key>> using flat_hash_map = robin_hood::unordered_flat_map<Key, V, Hash>;
+template<typename Key, typename V,
+         typename Hash=std::conditional_t<std::is_same_v<u128_t, Key>, FHasher, robin_hood::hash<Key>>>
+using flat_hash_map = robin_hood::unordered_flat_map<Key, V, Hash>;
 
 template<typename Key> using flat_hash_set = robin_hood::unordered_flat_set<Key>;
 

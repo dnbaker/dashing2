@@ -19,7 +19,7 @@ OBJLTO=$(patsubst %.o,%.lto,$(OFS))
 OBJ0=$(patsubst %.o,%.0,$(OFS))
 OBJV=$(patsubst %.o,%.vo,$(OFS))
 
-all: dashing2 dashing2-f dashing2-ld
+all: dashing2
 unit: readfx readbw readbed
 obh: echo $(OBJ)
 
