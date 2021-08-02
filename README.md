@@ -2,7 +2,7 @@
 
 Dashing2 is the second version of the Dashing sequence sketching and comparison system.
 
-There have been several major changes, but you can still can get a quick start to compare a group of sequence collections (#QuickStart)[here].
+There have been several major changes, but you can still can get a quick start to compare a group of sequence collections (here)[#quickstart].
 
 ### New Features
 
@@ -139,6 +139,7 @@ ProbMinHash is usually significantly (2-20+x) faster than BagMinHash, although m
 For instance, expression and chromatic accessibility might be better considered discrete probability distributions and therefore fit ProbMinHash, whereas genomic sequences better match the multiset concept and benefit from BagMinHash, which is a MinHash algorithm for weighted sets.
 
 
+
 #### QuickStart
 
 We expect most usage to involve the `sketch` subcommand; to sketch and perform distances, add `--cmpout <file>`, where <file> is the destination file or '-' to represent stdout.
@@ -167,6 +168,9 @@ Alternate file-types supported include BigWigs (`--bigwig`), BED (`--bed`), and 
 
 Clustering: scipy.cluster.hierarchy and fastcluster.hierarchy yield fast, concise clusterings, if distances are emitted.
 
+To perform query-set vs reference-set comparison, see `-Q/--qfile` usage -- this yields a full rectangular matrix.
+
+This is particularly useful for asymmetric similarities, such as containment.
 
 
 **Use 2 -- Sketch \+ Top-k NN graphs**
@@ -197,3 +201,27 @@ The output file will be a table with the names and similarities for the nearest 
 Clustering: This can be used for spectral clustering community detection algorithms such as Louvain and Leiden.
 
 
+
+**Use 4 -- Protein sequence similarity similarity**
+
+The feature `--parse-by-seq` allows us to sketch and compute similarities between collections of sequences in a single file;
+in particular, this is useful for sequence files of protein sequences.
+
+The default similarity/distance is k-mer set comparisons in sketch space; however, edit distance is perhaps more useful for protein sequences.
+Also, sketch sizes for proteins should be substantially smaller than for a full genome sequence.
+
+```
+dashing2 sketch -S256 --cmpout prot.k5.table --parse-by-seq -k5 {--protein,--protein14,--protein8,--protein6} uniref50.fa
+```
+
+If `--edit-distance` is enabled, OrderMinHash (Guillaume Marcais, et al.) is used to build an LSH table, and comparisons are generated between OrderMinHash sketches;
+this is only allowed in parse-by-seq mode, as it is undefined on a collection of sequences as opposed to a single sequence.
+
+```
+dashing2 sketch --topk 25 --edit-distance --compute-edit-distance -S256 --cmpout prot.top25.k5.table --parse-by-seq -k5 {--protein,--protein14,--protein8,--protein6} uniref50.fa
+
+```
+
+If either `--refine-exact` and `--compute-edit-distance` is enabled, then the final distances will be computed via edit distance.
+
+This is particularly useful if the result is Jaccard or top-k thresholded, allowing linear-time top-k nearest neighbor lists.
