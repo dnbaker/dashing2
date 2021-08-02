@@ -292,6 +292,7 @@ case v: {\
             else if(measure == CONTAINMENT) res /= lhc;\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
+        std::fprintf(stderr, "Dest paths are %s, %s. Loading from them\n", lpath.data(), rpath.data());
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
         std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
         std::string lcmd = path2cmd(lpath), rcmd = path2cmd(rpath);
