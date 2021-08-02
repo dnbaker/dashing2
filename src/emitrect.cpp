@@ -80,7 +80,6 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
     });
     const size_t batch_size = std::max(opts.cmp_batch_size_, size_t(1));
     if(opts.output_kind_ == PANEL) {
-#if 0
         if(batch_size <= 1) {
             for(size_t i = 0; i < nf; ++i) {
                 std::unique_ptr<float[]> dat(new float[nq]);
@@ -92,7 +91,6 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
                 datq.emplace_back(QTup{std::move(dat), i, i + 1, nq});
             }
         } else {
-#endif
             const size_t nbatches = (nf + batch_size - 1) / batch_size;
             for(size_t bi = 0; bi < nbatches; ++bi) {
                 const size_t firstrow = bi * batch_size;
@@ -107,46 +105,73 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
                 }
                 std::lock_guard<std::mutex> guard(datq_lock);
                 datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
-#if 0
-        }
-#endif
+            }
         }
     } else {
-        if(batch_size <= 1 || ns < 5) {
-            for(size_t i = 0; i < ns; ++i) {
-                size_t nelem = asym ? ns: ns - i - 1;
-                std::unique_ptr<float[]> dat(new float[nelem]);
-                const auto datp = dat.get() - (asym ? size_t(0): i + 1);
-                OMP_PFOR_DYN
-                for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
-                    datp[start] = compare(opts, result, i, start);
-                }
-                std::lock_guard<std::mutex> guard(datq_lock);
-                datq.emplace_back(QTup{std::move(dat), i, i + 1, nelem});
-            }
-        } else {
+        if(asym) {
             const size_t nbatches = (ns + batch_size - 1) / batch_size;
             for(size_t bi = 0; bi < nbatches; ++bi) {
                 const size_t firstrow = bi * batch_size;
                 const size_t erow = std::min((bi + 1) * batch_size, ns);
-                size_t nwritten = 0;
-                std::vector<size_t> offsets{0};
-                for(size_t fs = firstrow; fs < erow; ++fs) {
-                    const auto n = asym ? ns: ns - fs - 1;
-                    nwritten += n;
-                    offsets.push_back(n);
-                }
+                std::fprintf(stderr, "Batch %zu, ranges from %zu to %zu\n", bi, firstrow, erow);
+                const size_t diff = erow - firstrow;
+                const size_t nwritten = ns * diff;
                 std::unique_ptr<float[]> dat(new float[nwritten]);
                 OMP_PFOR_DYN
                 for(size_t fs = firstrow; fs < erow; ++fs) {
-                    auto datp = &dat[offsets[fs - firstrow]];
-                    const size_t start = asym ? 0: fs + 1;
-                    datp -= start;
-                    for(size_t j = start; j < ns;
-                        datp[j++] = compare(opts, result, fs, start));
+                    auto datp = &dat[(fs - firstrow) * ns];
+                    for(size_t j = 0; j < ns; ++j) {
+                        datp[j] = compare(opts, result, fs, j);
+                    }
                 }
                 std::lock_guard<std::mutex> guard(datq_lock);
                 datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
+            }
+        } else { // all-pairs symmetric! (upper-triangular)
+            if(batch_size <= 1) {
+                for(size_t i = 0; i < ns; ++i) {
+                    size_t nelem = asym ? ns: ns - i - 1;
+                    std::unique_ptr<float[]> dat(new float[nelem]);
+                    const auto datp = dat.get() - (asym ? size_t(0): i + 1);
+                    OMP_PFOR_DYN
+                    for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
+                        datp[start] = compare(opts, result, i, start);
+                    }
+                    std::lock_guard<std::mutex> guard(datq_lock);
+                    datq.emplace_back(QTup{std::move(dat), i, i + 1, nelem});
+                }
+            } else {
+                const size_t nbatches = (ns + batch_size - 1) / batch_size;
+                std::fprintf(stderr, "Gothere\n");
+                for(size_t bi = 0; bi < nbatches; ++bi) {
+                
+                    const size_t firstrow = bi * batch_size;
+                    const size_t erow = std::min((bi + 1) * batch_size, ns);
+                    std::fprintf(stderr, "Batch %zu, ranges from %zu to %zu\n", bi, firstrow, erow);
+                    std::vector<size_t> offsets{0};
+                    for(size_t fs = firstrow; fs < erow; ++fs) {
+                        offsets.push_back(ns - fs - 1 + offsets.back());
+                    }
+                    const size_t nwritten = std::accumulate(offsets.begin(), offsets.end(), size_t(0));
+                    std::fprintf(stderr, "%zu written, for %zu as batch size\n", nwritten, batch_size);
+                    std::unique_ptr<float[]> dat(new float[nwritten]);
+                    std::fill_n(dat.get(), nwritten, -13.f);
+                    OMP_PFOR_DYN
+                    for(size_t fs = firstrow; fs < erow; ++fs) {
+                        auto myoff = fs - firstrow;
+                        std::fprintf(stderr, "row %zu at offset %zu\n", fs, offsets[myoff]);
+                        size_t shouldoff = 0;
+                        for(size_t ofs = firstrow; ofs < fs; ++ofs) shouldoff += ns - ofs - 1;
+                        assert(shouldoff == offsets[myoff] || !std::fprintf(stderr, "Expected %zu for offsets, found %zu\n", shouldoff, offsets[myoff]));
+                        auto datp = &dat[offsets[myoff]];
+                        for(size_t j = fs; ++j < ns;) {
+                            std::fprintf(stderr, "Data at offset %zu is being set fo %zu/%zu\n", j - fs, fs, j);
+                            datp[j - fs] = compare(opts, result, fs, j);
+                        }
+                    }
+                    std::lock_guard<std::mutex> guard(datq_lock);
+                    datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
+                }
             }
         }
     }

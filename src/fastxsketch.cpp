@@ -58,6 +58,9 @@ void load_copy(const std::string &path, T *ptr) {
     if(::fstat(::fileno(fp), &st))
         THROW_EXCEPTION(std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp))));
     DBG_ONLY(std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), size_t(st.st_size));)
+    if(st.st_size == 0u) {
+        std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+    }
     size_t nb = std::fread(ptr, 1, st.st_size, fp);
     if(nb != size_t(st.st_size)) {
         std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, size_t(st.st_size), nb);
