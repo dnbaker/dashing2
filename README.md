@@ -6,11 +6,11 @@ There have been several major changes, but you can still can get a quick start t
 
 ### New Features
 
-tl;dr:
-    1. Faster and more accurate distances.
-    2. Weight-informed sketching.
-    3. Near-linear K-nearest neighbor and thresholded neighbor graphs via LSH tables.
-    4. Minimizer sequence transduction.
+tl;dr --
+1. Faster and more accurate distances.
+2. Weight-informed sketching.
+3. Near-linear K-nearest neighbor and thresholded neighbor graphs via LSH tables.
+4. Minimizer sequence transduction.
 
 Input Formats -- See [#Inputs](inputs) below for details.
  1. Fastq/Fasta -- enhanced alphabet support
