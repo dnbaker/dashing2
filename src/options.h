@@ -40,6 +40,8 @@ enum OptArg{
     OPTARG_RANDOM_SEED,
     OPTARG_FILTERSET,
     OPTARG_PARSEBYSEQ,
+    OPTARG_HELP,
+    OPTARG_CMP_BATCH_SIZE,
     OPTARG_DUMMY
 };
 
@@ -119,6 +121,8 @@ enum OptArg{
     {"seed", required_argument, 0, OPTARG_RANDOM_SEED},\
     {"filterset", required_argument, 0, OPTARG_FILTERSET},\
     {"parse-by-seq", no_argument, 0, OPTARG_PARSEBYSEQ},\
+    {"help", no_argument, 0, OPTARG_HELP},\
+    {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE}
 
 
 
@@ -132,9 +136,9 @@ enum OptArg{
             }\
             break;\
             }
-#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN20; canon = false; std::fprintf(stderr, "Using standard canon\n"); break;} \
-    case OPTARG_PROTEIN6: {rht = bns::PROTEIN_6; canon = false; break;}\
-    case OPTARG_PROTEIN14: {rht = bns::PROTEIN14; canon = false; break;}\
+#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN20; canon = false; std::fprintf(stderr, "Parsing 20-character amino acod sequences\n"); break;} \
+    case OPTARG_PROTEIN6: {rht = bns::PROTEIN_6; canon = false; std::fprintf(stderr, "Parsing amino acid sequences with 6-letter compressed alphabet.\n"); break;}\
+    case OPTARG_PROTEIN14: {rht = bns::PROTEIN14; canon = false; std::fprintf(stderr, "Parsing amino acid sequences with 14-letter compressed alphabet.\n"); break;}\
     case OPTARG_PROTEIN8: {rht = bns::PROTEIN8; canon = false; std::fprintf(stderr, "Using 3-bit protein encoding\n"); break;}
 #define REFINEEXACT_FIELD case OPTARG_REFINEEXACT: {refine_exact = true; break;}
 
@@ -150,11 +154,11 @@ enum OptArg{
         case 'S': sketchsize = std::atoi(optarg); break;\
         case 'N': save_kmers = save_kmercounts = true; break;\
         case 's': save_kmers = true; break;\
-        case OPTARG_SET: case 'H': res = FULL_MMER_SET; std::fprintf(stderr, "Result should now be FULL_MMER_SET %s\n", to_string(res).data()); break;\
+        case OPTARG_SET: case 'H': res = FULL_MMER_SET; break;\
         case 'J': res = FULL_MMER_COUNTDICT; break;\
         case 'G': res = FULL_MMER_SEQUENCE; break;\
         case '2': use128 = true; break;\
-        case 'm': count_threshold = std::atof(optarg); break;\
+        case 'm': count_threshold = std::atoi(optarg); break;\
         case 'F': ffile = optarg; break;\
         case 'Q': qfile = optarg; ok = PANEL; break;\
         case OPTARG_BED_NORMALIZE: normalize_bed = true; break;\
@@ -181,6 +185,7 @@ enum OptArg{
         case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;\
         case OPTARG_FILTERSET: fsarg = optarg; break;\
         case OPTARG_PARSEBYSEQ: parse_by_seq = true; break;\
+        case OPTARG_CMP_BATCH_SIZE: batch_size = std::strtoull(optarg, 0, 10); break;
 
 
 
@@ -285,6 +290,8 @@ static constexpr const char *siglen =
         "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
+        "--batch-size [16] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
+        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"
 
 
 

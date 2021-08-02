@@ -29,7 +29,8 @@ int sketch_main(int argc, char **argv) {
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true;
     bool exact_kmer_dist = false, hpcompress = false;
     bool refine_exact = false;
-    double count_threshold = 0., similarity_threshold = -1.;
+    double similarity_threshold = -1.;
+    unsigned int count_threshold = 0.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
     int option_index = 0;
@@ -44,6 +45,7 @@ int sketch_main(int argc, char **argv) {
     bool parse_by_seq = false;
     double downsample_frac = 1.;
     uint64_t seedseed = 0;
+    size_t batch_size = 16;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
     std::string fsarg;
@@ -55,7 +57,7 @@ int sketch_main(int argc, char **argv) {
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:CNs2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
             SHARED_FIELDS
-            case '?': case 'h': sketch_usage(); return 1;
+            case OPTARG_HELP: case '?': case 'h': sketch_usage(); return 1;
         }
         //std::fprintf(stderr, "After getopt argument %d, of is %s\n",c , to_string(of).data());
     }
@@ -119,6 +121,7 @@ int sketch_main(int argc, char **argv) {
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
         distopts.measure_ = measure;
+        distopts.cmp_batch_size_ = std::max(batch_size, size_t(distopts.nthreads()));
         cmp_core(distopts, result);
     }
     return 0;

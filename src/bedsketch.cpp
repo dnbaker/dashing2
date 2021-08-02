@@ -8,7 +8,7 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
         throw std::invalid_argument("Can't normalize BED rows in set space. Use SPACE_MULTISET or SPACE_PSET");
     std::ifstream ifs(path);
     const bool op = opts.one_perm();
-    FullSetSketch ss(opts.sketchsize_);
+    FullSetSketch ss(opts.count_threshold_, opts.sketchsize_);
     OPSetSketch opss(opts.sketchsize_);
     Counter ctr(opts.cssize_);
     std::pair<std::vector<RegT>, double> ret({std::vector<RegT>(opts.sketchsize_), 0.});

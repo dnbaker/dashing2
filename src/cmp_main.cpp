@@ -113,7 +113,8 @@ int cmp_main(int argc, char **argv) {
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true, presketched = false;
     bool exact_kmer_dist = false;
     bool refine_exact = false; // This uses sketching for K-NN graph generation, then uses exact distances for NN refinement
-    double count_threshold = 0., similarity_threshold = -1.;
+    unsigned int count_threshold = 0.;
+    double similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
     std::string ffile, outfile, qfile;
     int option_index = 0;
@@ -132,13 +133,14 @@ int cmp_main(int argc, char **argv) {
     std::string fsarg;
     Measure measure = SIMILARITY;
     uint64_t seedseed = 0;
+    size_t batch_size = 16;
     std::string spacing;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     CMP_OPTS(cmp_long_options);
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
         SHARED_FIELDS
-        case '?': case 'h': cmp_usage(); return 1;
+        case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
     }}
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
@@ -189,6 +191,7 @@ int cmp_main(int argc, char **argv) {
     opts.downsample(downsample_frac);
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
     distopts.measure_ = measure;
+    distopts.cmp_batch_size_ = std::max(batch_size, size_t(distopts.nthreads()));
     SketchingResult result;
     if(presketched) {
         std::set<std::string> suffixset;

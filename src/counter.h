@@ -1,17 +1,23 @@
 #ifndef DASHING2_COUNTER_H__
 #define DASHING2_COUNTER_H__
 #include "enums.h"
-#include "flat_hash_map/flat_hash_map.hpp"
+#include "robin_hood.h"
 #include "sketch/div.h"
 #include "hash.h"
 
+
+
 namespace dashing2 {
 
+template<typename Key, typename V, typename Hash=robin_hood::hash<Key>> using flat_hash_map = robin_hood::unordered_flat_map<Key, V, Hash>;
+
+template<typename Key> using flat_hash_set = robin_hood::unordered_flat_set<Key>;
+
 struct Counter {
-    ska::flat_hash_map<uint64_t, int32_t> c64_;
-    ska::flat_hash_map<u128_t, int32_t, FHasher> c128_;
-    ska::flat_hash_map<uint64_t, double> c64d_;
-    ska::flat_hash_map<u128_t, double, FHasher> c128d_;
+    flat_hash_map<uint64_t, int32_t> c64_;
+    flat_hash_map<u128_t, int32_t, FHasher> c128_;
+    flat_hash_map<uint64_t, double> c64d_;
+    flat_hash_map<u128_t, double, FHasher> c128d_;
     std::vector<double> count_sketch_;
     schism::Schismatic<uint64_t> s64_;
     CountingType ct() const {return count_sketch_.size() ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}

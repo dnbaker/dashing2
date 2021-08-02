@@ -13,7 +13,6 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
     const size_t npaths = paths.size();
     if(opts.dtype_ == DataType::FASTX) {
         result = fastx2sketch(opts, paths);
-        std::fprintf(stderr, "Made fastx2sketch %s\n", __FILE__);
     } else if(opts.dtype_ == DataType::LEAFCUTTER) {
         auto res = lf2sketch(paths, opts);
         result.signatures_ = std::move(res.registers());

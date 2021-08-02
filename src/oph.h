@@ -85,7 +85,7 @@ private:
     // is already enough to pass Rabbit/SmallCrush
     schism::Schismatic<uint64_t> div_;
     double mincount_ = 0.;
-    std::vector<btree::map<T, uint32_t>> potentials_;
+    std::vector<flat_hash_map<T, uint32_t>> potentials_;
     double card_ = -1.;
 public:
     LazyOnePermSetSketch(const LazyOnePermSetSketch &o): div_(o.div_) {
