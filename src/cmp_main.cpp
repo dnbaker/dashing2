@@ -191,7 +191,7 @@ int cmp_main(int argc, char **argv) {
     opts.downsample(downsample_frac);
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
     distopts.measure_ = measure;
-    distopts.cmp_batch_size_ = batch_size;
+    distopts.cmp_batch_size_ = std::max(batch_size, size_t(distopts.nthreads()));
     SketchingResult result;
     if(presketched) {
         std::set<std::string> suffixset;

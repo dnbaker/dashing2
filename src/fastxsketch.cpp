@@ -61,6 +61,7 @@ void load_copy(const std::string &path, T *ptr) {
     if(st.st_size == 0u) {
         std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
     }
+    DBG_ONLY(std::fprintf(stderr, "Loading sketch of size %zu from %s\n", size_t(st.st_size), path.data());)
     size_t nb = std::fread(ptr, 1, st.st_size, fp);
     if(nb != size_t(st.st_size)) {
         std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, size_t(st.st_size), nb);
@@ -130,8 +131,10 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
 #if _OPENMP >= 201307L
     #pragma omp simd reduction(+:s)
 #endif
-    for(size_t i = 0; i < m; ++i)
+    for(size_t i = 0; i < m; ++i) {
         s += ptr[i];
+    }
+    DBG_ONLY(std::fprintf(stderr, "Sum manually is %g, compared to accumulate with ld %g\n", s, double(std::accumulate(ptr, ptr + m, 0.L)));)
     return m / s;
 }
 
@@ -313,13 +316,14 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     if(ret.signatures_.size()) {
                         load_copy(destination, &ret.signatures_[mss]);
                         ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
+                        DBG_ONLY(std::fprintf(stderr, "Sketch was loaded from %s and has card %g\n", destination.data(), ret.cardinalities_[myind]);)
                     }
                     if(ret.kmers_.size())
                         load_copy(destkmer, &ret.kmers_[mss]);
                     if(ret.kmercounts_.size())
                         load_copy(destkmercounts, &ret.kmercounts_[mss]);
                 } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
-                    std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());
+                    DBG_ONLY(std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());)
                 }
                 if(ret.kmerfiles_.size() > myind) {
                     ret.kmerfiles_[myind] = destkmer;
