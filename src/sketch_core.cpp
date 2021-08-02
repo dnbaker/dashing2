@@ -75,7 +75,6 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
 #ifndef NDEBUG
             auto totaln = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
             std::fprintf(stderr, "%zu total minimizers, signature size is %zu\n", totaln, result.signatures_.size());
-            const size_t sigsz = result.signatures_.size();
 #endif
             size_t offset = 0;
             const uint64_t terminus = uint64_t(-1);

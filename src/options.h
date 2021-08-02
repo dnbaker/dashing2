@@ -224,7 +224,7 @@ static constexpr const char *siglen =
         "to place them all into a single sketch instead.\n"\
         "-F/--ffile: read paths from file in addition to positional arguments\n"\
         "-Q/--qfile: read query paths from file; this is used for asymmetric queries (e.g., containment)\n"\
-        "This accelerates weighted sketching at the cost of some approximation.\n"\
+        "This accelerates weighted sketching at the cost of some approximation.\n\n"\
         "K-mer Filtering\n\n"\
         "If there are a set of common k-mers or artefactual sequence, you can specify --filterset to skip k-mers in this file when sketching other files.\n"\
         "By default, this converts it into a sorted hash set and skips k-mers which are found in the set.\n"\

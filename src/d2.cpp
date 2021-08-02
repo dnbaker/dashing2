@@ -122,10 +122,6 @@ using namespace dashing2;
 
 
 int main(int argc, char **argv) {
-    if(auto pos = std::find_if(argv, argv + argc, [](auto x) {return (std::strcmp(x, "--help") && std::strcmp(x, "-h")) == 0;});
-       pos != argv + argc) {
-        return main_usage();
-    }
     if(argc > 1) {
         if(std::strcmp(argv[1], "sketch") == 0)
             return sketch_main(argc - 1, argv + 1);

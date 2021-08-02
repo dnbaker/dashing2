@@ -2,7 +2,7 @@
 
 Dashing2 is the second version of the Dashing sequence sketching and comparison system.
 
-There have been several major changes, but you can still can get a quick start to compare a group of sequence collections [#QuickStart](here).
+There have been several major changes, but you can still can get a quick start to compare a group of sequence collections (#QuickStart)[here].
 
 ### New Features
 
@@ -24,7 +24,7 @@ Input Formats -- See [#Inputs](inputs) below for details.
    7. Exact multiset comparisons (`--countdict`)
    8. Weight-aware sketching -- multiset and probability distribution
      1. We use BagMinHash for weighted sets (`--bagminhash` or `--multiset`), and ProbMinHash for discrete probability distributions (`--prob`)
-   9. Minimizer sequence transduciton
+   9. Minimizer sequence transduction
      1. By enabling `--seq`, a sequence of minimizer values are emitted as a string.
      2. This can be used for simple minimizer generation, or these minimizer sequences's edit distances can be compared in downstream analysis.
  2. Splicing data
@@ -143,13 +143,57 @@ For instance, expression and chromatic accessibility might be better considered 
 
 We expect most usage to involve the `sketch` subcommand; to sketch and perform distances, add `--cmpout <file>`, where <file> is the destination file or '-' to represent stdout.
 
+**Use 1 -- Sketch \+ All-pairs Compare Sequence Collections**
+
 ```
-dashing2 sketch [options] genome1.fa genome2.fa <...>
+dashing2 sketch [options] --cmpout <outfile> genome1.fa genome2.fa <...>
+# Alternate, if filenames are in F.txt
+# dashing2 sketch [options] --cmpout <outfile> -F F.txt
 ```
 
 Full usage is found via `dashing2 --help` and `dashing2 <subcommand> --help`, where  <subcommand> is one of the dashing2 subcommands.
 
 `dashing2 sketch` performs sketching/summarization of a set of input files, or sequence-by-sequence processing of one or more sequence files.
 It also optionally performs comparisons and emits results to `--cmpout`.
+
+Adding `--cache` causes Dashing2 to cache sketches to disk adjacent to the input files;
+     this location can be changed with `--outprefix`.
+
+
+We support a variety of alphabets -- DNA, Protein, and reduced amino acid alphabets for long-range homology (--protein14, --protein8, --protein6).
+
+Alternate file-types supported include BigWigs (`--bigwig`), BED (`--bed`), and LeafCutter outputs (`--leafcutter`).
+
+
+Clustering: scipy.cluster.hierarchy and fastcluster.hierarchy yield fast, concise clusterings, if distances are emitted.
+
+
+
+**Use 2 -- Sketch \+ Top-k NN graphs**
+
+For many applications, the quadratic space and time complexity of pairwise comparisons is prohibitive;
+we use locality-sensitive hashing (LSH) table to only perform comparisons between candidates highly probable to be nearest neighbors.
+
+To generate a K-NN graph between a collection of sequences, with k = 250:
+
+```
+dashing2 sketch <comparison options...> --cmpout <outfile> --topk 250 -F F.txt
+```
+
+The output file will be a table with the names and similarities for the nearest neighbors so generated; the corresponding binary output is Compressed Sparse Row-notation results.
+
+Clustering: This can be used for spectral clustering community detection algorithms such as Louvain and Leiden.
+
+**Use 3 -- Sketch \+ Jaccard-thresholded similarity graphs**
+
+Alternative to `--topk [k]`, once can select a Jaccard similarity threshold below which the algorithm can ignore.
+
+```
+dashing2 sketch <comparison options...> --cmpout <outfile> --similarity-threshold 0.7 -F F.txt
+```
+
+The output file will be a table with the names and similarities for the nearest neighbors so generated; the corresponding binary output is Compressed Sparse Row-notation results.
+
+Clustering: This can be used for spectral clustering community detection algorithms such as Louvain and Leiden.
 
 
