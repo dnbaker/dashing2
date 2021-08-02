@@ -156,16 +156,16 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
                     }
                     const size_t nwritten = std::accumulate(offsets.begin(), offsets.end(), size_t(0));
                     std::unique_ptr<float[]> dat(new float[nwritten]);
+                    DBG_ONLY(std::fill_n(dat.get(), std::numeric_limits<float>::infinity(), nwritten);)
                     OMP_PFOR_DYN
                     for(size_t fs = firstrow; fs < erow; ++fs) {
                         auto myoff = fs - firstrow;
                         size_t shouldoff = 0;
                         for(size_t ofs = firstrow; ofs < fs; ++ofs) shouldoff += ns - ofs - 1;
                         assert(shouldoff == offsets[myoff] || !std::fprintf(stderr, "Expected %zu for offsets, found %zu\n", shouldoff, offsets[myoff]));
-                        auto datp = &dat[offsets[myoff] - fs - 1];
-                        for(size_t j = fs + 1; j < ns; ++j) {
-                            datp[j - fs - 1] = compare(opts, result, fs, j);
-                        }
+                        auto datp = &dat[offsets[myoff]] - fs - 1;
+                        for(size_t j = fs + 1; j < ns; ++j)
+                            datp[j] = compare(opts, result, fs, j);
                     }
                     std::lock_guard<std::mutex> guard(datq_lock);
                     datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
