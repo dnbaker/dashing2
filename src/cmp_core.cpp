@@ -92,7 +92,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
             minreg = std::min(minreg, v);
             maxreg = std::max(maxreg, v);
         }
-        std::fprintf(stderr, "Tailoring setsketch parameters with min/max register values, fd = %g: %g->%g\n", fd, minreg, maxreg);
+        std::fprintf(stderr, "Tailoring setsketch parameters with min/max register values, fd = %g: %Lg->%Lg\n", fd, static_cast<long double>(minreg), static_cast<long double>(maxreg));
         long double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
         long double logbinv;
         assert(q > 0.);
