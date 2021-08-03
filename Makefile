@@ -13,6 +13,8 @@ OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp))
 OBJ=$(OFS)
 OBJLD=$(patsubst %.o,%.ldo,$(OFS))
 OBJF=$(patsubst %.o,%.fo,$(OFS))
+OBJF64=$(patsubst %.o,%.f64o,$(OFS))
+OBJLD64=$(patsubst %.o,%.ld64o,$(OFS))
 OBJ64=$(patsubst %.o,%.64o,$(OFS))
 OBJDBG=$(patsubst %.o,%.do,$(OFS))
 OBJADD=$(patsubst %.o,%.sano,$(OFS))
@@ -20,11 +22,11 @@ OBJLTO=$(patsubst %.o,%.lto,$(OFS))
 OBJ0=$(patsubst %.o,%.0,$(OFS))
 OBJV=$(patsubst %.o,%.vo,$(OFS))
 
-all: dashing2
+all: dashing2 dashing2-64
 unit: readfx readbw readbed
 obh: echo $(OBJ)
 
-all3d: dashing2 dashing2-f dashing2-ld
+all3d: dashing2 dashing2-f dashing2-ld dashing2-64 dashing2-f64 dashing2-ld64
 SEDSTR=
 ifeq ($(shell uname -s ),Darwin)
     SEDSTR = " '' "
@@ -63,6 +65,10 @@ dashing2-ld: $(OBJLD) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
 dashing2-f: $(OBJF) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
+dashing2-f64: $(OBJF64) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+dashing2-ld64: $(OBJLD64) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 read%: test/read%.o $(LIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 read%-ld: test/read%.ldo $(LDLIBOBJ)
@@ -92,6 +98,11 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto
 %.fo: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
+%.ld64o: %.cpp $(wildcard src/*.h)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+%.f64o: %.cpp $(wildcard src/*.h)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
+
 
 
 

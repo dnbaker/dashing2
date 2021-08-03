@@ -101,9 +101,10 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         long double logbinv;
         assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
-        std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %g, %g\n", a, b, minreg, maxreg);
+        std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %Lg, %Lg\n", a, b, static_cast<long double>(minreg), static_cast<long double>(maxreg));
         if(a == 0. || std::isinf(b)) {
-            std::fprintf(stderr, "Note: setsketch compression yielded infinite value.\n");
+            std::fprintf(stderr, "Note: setsketch compression yielded infinite value; falling back to b-bit compression\n");
+            return make_compressed(1, fd, sigs, kmers, is_edit_distance);
             //throw 1;
         }
         ret.a(a); ret.b(b);
