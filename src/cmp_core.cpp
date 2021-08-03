@@ -7,10 +7,11 @@
 #include "mio.hpp"
 #include "wcompare.h"
 #include "levenshtein-sse.hpp"
-#include "minispan.h"
 
 
 namespace dashing2 {
+std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result);
+void dedup_emit(std::vector<size_t> &, std::vector<std::vector<size_t>> &constituents, Dashing2DistOptions &opts, const SketchingResult &result);
 //using sketch::lsh::SetSketchIndex;
 static INLINE uint64_t reg2sig(RegT x) {
     uint64_t seed = 0;
@@ -448,7 +449,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
             np = opts.sketchsize_  * 16 / nh;
         } else np = opts.sketchsize_ * 32 / nh;
     }
-    using SSI = SetSketchIndex<uint64_t, LSHIDType>;
+    using SSI = SetSketchIndex<LSHIDType, LSHIDType>;
     SSI idx(opts.kmer_result_ < FULL_MMER_SET ? SSI(opts.sketchsize_, nperhashes, nperrows): SSI());
 
 
@@ -460,63 +461,8 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     } else if(opts.output_kind_ == DEDUP) {
         // The ID corresponds to the representative of a cluster;
         // Constituents is a vector of IDs per cluster;
-        std::vector<size_t> ids;
-        std::vector<std::vector<size_t>> constituents;
-
-        std::mutex mut; // Lock for IDs and constituents
-        std::vector<size_t> order(result.names_.size());
-        std::iota(order.begin(), order.end(), size_t(0));
-        std::sort(order.begin(), order.end(), [&v=result.cardinalities_](auto x, auto y) {return v[x] < v[y];});
-        const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
-        // General strategy:
-        // Use a given similarity threshold to then group items into the cluster
-        // to which they are most similar if they are > than
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < order.size(); ++i) {
-            auto oid = order[i];
-            auto [hits, counts, nper] = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_), 3);
-            std::vector<LSHIDType> vals(hits.size());
-            const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
-            auto vp = vals.data();
-            // These ids are indexes into the vector of results with ids/constiuents, so we access ids
-            for(const auto id: hits) {
-                const auto repid = ids[id];
-                *vp++ = mult * compare(opts, result, oid, repid);
-            }
-            auto mv = std::min_element(vals.data(), vp);
-            std::transform(vals.data(), vp, vals.data(), [mult](auto x) {return x * mult;});
-            // auto v = compare(opts, result, lhid, id);
-            if(hits.empty() || (mv != vp && *mv < simt)) {
-                // The LSH index is thread-safe, so we only need to lock these.
-                {
-                    std::lock_guard<std::mutex> lock(mut);
-                    ids.push_back(oid);
-                    constituents.emplace_back();
-                }
-                idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
-                std::fprintf(stderr, "Added item %zu; %zu clusters so far (%%%0.4g)\n", idx.size(), ids.size(), double(ids.size()) / idx.size());
-            } else {
-                if(mv == vp) continue;
-                auto pos = mv - &vals[0];
-                auto cluster_id = hits[pos];
-                std::lock_guard<std::mutex> lock(mut);
-                constituents[cluster_id].push_back(oid);
-            }
-        }
-        std::string &outname = opts.outfile_path_;
-        std::FILE *ofp = stdout;
-        if(outname.size() && (ofp = std::fopen(outname.data(), "wb")) == nullptr) {
-            THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file ") + outname + " for writing"));
-        }
-        std::fprintf(ofp, "#%zu clusters of average size %0.4g, separated by minimum similarity %g\n", ids.size(), double(ids.size()) / order.size(), simt);
-        for(size_t cid = 0;cid < ids.size(); ++cid) {
-            std::fprintf(ofp, "Cluster-%zu\t%s:%zu", cid, result.names_[ids[cid]].data(), ids[cid]);
-            for(const auto child: constituents[cid])
-                std::fprintf(ofp, "\t%s:%zu", result.names_[ids[child]].data(), ids[child]);
-            std::fputc('\n', ofp);
-        }
-        // TODO: Add in binary output
-        if(ofp != stdout) std::fclose(ofp);
+        auto [ids, constituents] = dedup_core(idx, opts, result);
+        dedup_emit(ids, constituents, opts, result);
     }
 }
 

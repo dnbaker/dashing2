@@ -52,7 +52,7 @@ void update(pqueue &x, flat_hash_set<LSHIDType> &xset, const PairT &item, const 
                CASE_N(1, uint8_t);\
                 default: __builtin_unreachable();
 
-std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed) {
+std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed) {
     // Builds the LSH index and populates nearest-neighbor lists in parallel
     const size_t ns = result.names_.size();
     const int topk = opts.min_similarity_ > 0. ? -1: opts.num_neighbors_ > 0 ? 1: 0;

@@ -13,6 +13,7 @@ OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp))
 OBJ=$(OFS)
 OBJLD=$(patsubst %.o,%.ldo,$(OFS))
 OBJF=$(patsubst %.o,%.fo,$(OFS))
+OBJ64=$(patsubst %.o,%.64o,$(OFS))
 OBJDBG=$(patsubst %.o,%.do,$(OFS))
 OBJADD=$(patsubst %.o,%.sano,$(OFS))
 OBJLTO=$(patsubst %.o,%.lto,$(OFS))
@@ -37,6 +38,7 @@ LIBV=$(patsubst %.cpp,%.vo,$(OBJFS))
 DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS))
 GLIBOBJ=$(patsubst %.cpp,%.go,$(OBJFS))
 FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
+LONGLIBOBJ=$(patsubst %.cpp,%.64o,$(OBJFS))
 LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 
 dashing2: $(OBJ) libBigWig.a $(wildcard src/*.h)
@@ -45,6 +47,8 @@ dashing2: $(OBJ) libBigWig.a $(wildcard src/*.h)
 
 dashing2-0: $(OBJ0) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
+dashing2-64: $(OBJ64) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -DLSHIDTYPE="uint64_t"
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-v: $(OBJV) libBigWig.a $(wildcard src/*.h)
@@ -69,7 +73,9 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
 	# $(wildcard src/*.h)
 %.o: %.cpp
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3
+%.64o: %.cpp
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t"
 %.0: %.cpp
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O1
 %.vo: %.cpp
