@@ -1,6 +1,6 @@
 #ifndef DASHING2_INDEX_BUILD_H__
 #define DASHING2_INDEX_BUILD_H__
-#include "sketch/ssi.h"
+#include "src/ssi.h"
 #include "src/cmp_main.h"
 namespace dashing2 {
 

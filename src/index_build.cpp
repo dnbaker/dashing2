@@ -1,5 +1,4 @@
 #include "cmp_main.h"
-#include "sketch/ssi.h"
 #include "minispan.h"
 #include <vector>
 #include <mutex>
