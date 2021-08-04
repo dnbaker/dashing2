@@ -43,14 +43,14 @@ private:
     using HashV = std::vector<HashMap>;
     std::vector<HashV> packed_maps_;
     std::vector<uint64_t> regs_per_reg_;
-    std::atomic<size_t> total_ids_;
+    size_t total_ids_;
     std::vector<std::vector<std::mutex>> mutexes_;
     bool is_bottomk_only_ = false;
 public:
     using key_type = KeyT;
     using id_type = IdT;
     size_t m() const {return m_;}
-    size_t size() const {return total_ids_.load();}
+    size_t size() const {return total_ids_;}
     size_t ntables() const {return packed_maps_.size();}
     template<typename IT, typename Alloc, typename OIT, typename OAlloc>
     SetSketchIndex(size_t m, const std::vector<IT, Alloc> &nperhashes, const std::vector<OIT, OAlloc> &nperrows): m_(m) {
@@ -64,20 +64,11 @@ public:
             packed_maps_.emplace_back(v2);
             mutexes_.emplace_back(v2);
         }
-        total_ids_.store(0);
-    }
-    SetSketchIndex(const SetSketchIndex &o) = delete;
-    SetSketchIndex(SetSketchIndex &&o) = default;
-    SetSketchIndex(): SetSketchIndex(1, std::vector<IdT>{1}) {
-        packed_maps_.resize(1);
-        packed_maps_.front().resize(1);
-        mutexes_.emplace_back(1);
-        regs_per_reg_ = {1};
-        is_bottomk_only_ = true;
+        total_ids_ = 0;
     }
     template<typename IT, typename Alloc>
     SetSketchIndex(size_t m, const std::vector<IT, Alloc> &nperhashes): m_(m) {
-        total_ids_.store(0);
+        total_ids_ = 0;
         for(const auto v: nperhashes) {
             regs_per_reg_.push_back(v);
             packed_maps_.emplace_back(HashV(m_ / v));
@@ -85,7 +76,7 @@ public:
         }
     }
     SetSketchIndex(size_t m, bool densified=false): m_(m) {
-        total_ids_.store(0);
+        total_ids_ = 0;
         uint64_t rpr = 1;
         const size_t nrpr = densified ? m: size_t(ilog2(sketch::integral::roundup(m)));
         regs_per_reg_.reserve(nrpr);
@@ -101,12 +92,48 @@ public:
             }
         }
     }
+
+    SetSketchIndex &operator=(const SetSketchIndex &o) {
+        total_ids_ = o.total_ids_;
+        regs_per_reg_ = o.regs_per_reg_;
+        packed_maps_ = o.packed_maps_;
+        mutexes_.resize(o.mutexes_.size());
+        is_bottomk_only_ = o.is_bottomk_only_;
+        return *this;
+    }
+    SetSketchIndex(const SetSketchIndex &o) {*this = o;}
+
+    SetSketchIndex &operator=(SetSketchIndex &&o) = default;
+    SetSketchIndex(SetSketchIndex &&o) = default;
+    SetSketchIndex(): SetSketchIndex(1, std::vector<IdT>{1}) {
+        packed_maps_.resize(1);
+        packed_maps_.front().resize(1);
+        mutexes_.emplace_back(1);
+        regs_per_reg_ = {1};
+        is_bottomk_only_ = true;
+    }
+    static SetSketchIndex clone_like(const SetSketchIndex &o) {
+        if(o.is_bottomk_only_)
+            return SetSketchIndex();
+        SetSketchIndex res;
+        res.packed_maps_.resize(o.packed_maps_.size());
+        res.regs_per_reg_ = o.regs_per_reg_;
+        for(size_t i = 0; i < o.packed_maps_.size(); ++i) {
+            res.packed_maps_[i].resize(o.packed_maps_[i].size());
+            res.mutexes_.emplace_back(o.mutexes_[i].size());
+        }
+        res.is_bottomk_only_ = o.is_bottomk_only_;
+        return res;
+    }
+    SetSketchIndex clone() const {
+        return clone_like(*this);
+    }
     template<typename Sketch>
     std::tuple<std::vector<IdT>, std::vector<uint32_t>, std::vector<uint32_t>>
     update_query(const Sketch &item, size_t maxcand, size_t starting_idx = size_t(-1)) {
         if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
         if(starting_idx == size_t(-1) || starting_idx > regs_per_reg_.size()) starting_idx = regs_per_reg_.size();
-        const size_t my_id = std::atomic_fetch_add(&total_ids_, size_t(1));
+        const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
         //std::fprintf(stderr, "Inserting id = %zu\n", my_id);
         const size_t n_subtable_lists = regs_per_reg_.size();
         ska::flat_hash_map<IdT, uint32_t> rset;
@@ -158,7 +185,7 @@ public:
         std::fprintf(stderr, "Warning: bottom-k update-query is untested\n");
         std::map<IdT, uint32_t> matches;
         auto &map = packed_maps_.front().front();
-        const size_t my_id = std::atomic_fetch_add(&total_ids_, size_t(1));
+        const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
         for(const auto v: item) {
             auto it = map.find(v);
             if(it == map.end()) map.emplace(v, std::vector<IdT>{static_cast<IdT>(my_id)});
@@ -196,7 +223,7 @@ public:
     template<typename Sketch>
     size_t update(const Sketch &item) {
         if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
-        const size_t my_id = std::atomic_fetch_add(&total_ids_, size_t(1));
+        const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
         if(is_bottomk_only_) {
             insert_bottomk(item, my_id);
             return my_id;
