@@ -318,8 +318,8 @@ static constexpr const char *siglen =
         "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"\
         "LSH options\n"\
         "There are a variety of heuristics in the LSH tables; however, the most important besides sketch size is the number of hash tables used.\n"\
-        "--nlsh <int>\t This sets the number of LSH tables. The first 3 tables use powers of 2, and subsequent tables use 2 times the index.\n"\
-        "If 3 is used (default), these will be of sizes (1, 2, 4), but 4 yields (1, 2, 4, 6) and 5 yields (1, 2, 4, 6, 8).\n"\
+        "--nlsh <int=2>\t This sets the number of LSH tables. The first 3 tables use powers of 2, and subsequent tables use 2 times the index.\n"\
+        "If 2 is used (default), these will be of sizes (1, 2), but 4 yields (1, 2, 4, 6) and 5 yields (1, 2, 4, 6, 8).\n"\
         "Increase this number to pay more memory/time for higher accuracy.\n"\
         "Decrease this number for higher speed and lower accuracy.\n"\
 

@@ -266,7 +266,7 @@ public:
         return my_id;
     }
     template<typename Sketch>
-    KeyT hash_index(const Sketch &item, size_t i, size_t j) const {
+    INLINE KeyT hash_index(const Sketch &item, size_t i, size_t j) const {
         if(is_bottomk_only_) {
             return item[j];
         }

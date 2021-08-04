@@ -100,10 +100,6 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
     }
     auto mv = std::min_element(vals.data(), vp);
     if(hits.empty() || (mv != vp && mult * *mv < simt)) {
-#ifndef NDEBUG
-        if(mv != vp && mult * *mv < simt)
-            std::fprintf(stderr, "Max similarity is %g vs %g vs %g\n", mult * *mv, simt, *std::max_element(vals.data(), vp));
-#endif
         ids.push_back(oid);
         DBG_ONLY(size_t nids = ids.size();)
         constituents.emplace_back();
@@ -112,11 +108,6 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
             idx.update(mp);
         DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / result.names_.size());)
     } else {
-        if(mv == vp) {
-            std::fprintf(stderr, "hits not empty (%zu) , but mv is out of range\n", hits.size());
-            // This shouldn't happen, but could if there are NANs in the data.
-            return;
-        }
         auto pos = mv - vals.data();
         assert(size_t(pos) < hits.size());
         auto cluster_id = hits[pos];
@@ -141,17 +132,6 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
 
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t nelem = result.names_.size();
-#if 0
-    std::unique_ptr<LSHIDType[]> order(new LSHIDType[nelem]);
-#if _OPENMP >= 201307L
-    #pragma omp parallel for simd schedule(static, 4096)
-#endif
-    for(size_t i = 0; i < nelem; ++i) {
-        order[i] = i;
-    }
-    assert(std::all_of(order.get(), order.get() + nelem, [&](auto &x) {return x == uint64_t(&x - order.get());}));
-    std::sort(order.get(), order.get() + nelem, [&v=result.cardinalities_](auto x, auto y) {return v[x] < v[y];});
-#endif
 
     int nt = 1;
 #ifdef _OPENMP
