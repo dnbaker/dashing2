@@ -120,9 +120,18 @@ public:
         res.regs_per_reg_ = o.regs_per_reg_;
         for(size_t i = 0; i < o.packed_maps_.size(); ++i) {
             res.packed_maps_[i].resize(o.packed_maps_[i].size());
-            res.mutexes_.emplace_back(o.mutexes_[i].size());
         }
+        res.mutexes_.clear();
+        for(size_t i = 0; i < o.mutexes_.size(); ++i)
+            res.mutexes_.emplace_back(o.mutexes_[i].size());
         res.is_bottomk_only_ = o.is_bottomk_only_;
+        assert(res.is_bottomk_only_ == o.is_bottomk_only_);
+        assert(res.mutexes_.size() == o.mutexes_.size() || !std::fprintf(stderr, "mutex sizes: %zu, %zu\n", res.mutexes_.size(), o.mutexes_.size()));
+#ifndef NDEBUG
+        for(size_t i = 0; i < res.mutexes_.size(); ++i) {
+            assert(res.mutexes_[i].size() == o.mutexes_[i].size());
+        }
+#endif
         return res;
     }
     SetSketchIndex clone() const {

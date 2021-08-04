@@ -32,7 +32,6 @@ struct GreedyClustering {
     {
         simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
         mult = distance(opts.measure_)  ? 1.: -1.;
-        assert(sketchsize > 0);
     }
     GreedyClustering &operator +=(const GreedyClustering &o) {
         const size_t osz = o.ids_.size();
@@ -63,7 +62,10 @@ struct GreedyClustering {
             } else {
                 cv.push_back(orep);
             }
-            cv.insert(cv.end(), ocon.begin(), ocon.end());
+            if(ocon.size()) {
+                std::fprintf(stderr, "Inserting range of size %zu\n", ocon.size());
+                cv.insert(cv.end(), ocon.begin(), ocon.end());
+            }
         }
         return *this;
     }
@@ -87,35 +89,46 @@ void par_reduce(T *x, size_t n) {
 
 
 
-void update_res(size_t oid, std::vector<size_t> &ids, std::vector<std::vector<size_t>> &constituents,
+void update_res(const size_t oid, std::vector<size_t> &ids, std::vector<std::vector<size_t>> &constituents,
                 sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result,
                 bool earlystop=false, size_t mincand=MINCAND)
 {
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
+    assert(opts.sketchsize_ * oid < result.signatures_.size());
     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
     auto [hits, counts, nper] = idx.query_candidates(span, mincand, size_t(-1), earlystop);
     std::vector<LSHDistType> vals(hits.size());
     auto vp = vals.data();
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     for(const auto id: hits) {
+        assert(id < ids.size());
         *vp++ = mult * compare(opts, result, oid, ids[id]);
     }
     auto mv = std::min_element(vals.data(), vp);
     if(hits.empty() || (mv != vp && mult * *mv < simt)) {
-#if 0
         if(mv != vp && mult * *mv < simt)
             std::fprintf(stderr, "Max similarity is %g vs %g vs %g\n", mult * *mv, simt, *std::max_element(vals.data(), vp));
-#endif
+        //std::fprintf(stderr, "About to append to ids of current size %zu\n", ids.size());
         ids.push_back(oid);
         DBG_ONLY(size_t nids = ids.size();)
+        //std::fprintf(stderr, "About to append to constituents of current size %zu\n", constituents.size());
         constituents.emplace_back();
-        DBG_ONLY(size_t myid = )
-            idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
-        DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / order.size());)
+        minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+        //std::fprintf(stderr, "Made span for id %zu\n", oid);
+        size_t myid = idx.update(mp);
+        DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / result.names_.size());)
     } else {
-        if(mv == vp) return;
-        auto pos = mv - &vals[0];
+        if(mv == vp) {
+            std::fprintf(stderr, "hits not empty (%zu) , but mv is out of range\n", hits.size());
+            return;
+        }
+        auto pos = mv - vals.data();
+        assert(pos < hits.size());
         auto cluster_id = hits[pos];
+        assert(ids.size() == constituents.size());
+        assert(cluster_id < constituents.size());
+        assert(cluster_id < ids.size());
+        //std::fprintf(stderr, "Now about to update\n");
         auto &cv = constituents[cluster_id];
         auto &rep = ids[cluster_id];
         cv.push_back(oid);
@@ -141,12 +154,12 @@ std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sket
     int nt = 1;
 #ifdef _OPENMP
     _Pragma("omp parallel")
-    {nt = omp_get_num_threads();}
+    {nt = std::max(omp_get_num_threads(), 1);}
 #endif
     // General strategy:
     // Use a given similarity threshold to then group items into the cluster
     // to which they are most similar if they are > than
-    if(nt == 1) {
+    if(nt <= 0) {
         std::vector<size_t> ids;
         std::vector<std::vector<size_t>> constituents;
         auto &idx = retidx;
@@ -161,10 +174,13 @@ std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sket
             subs.emplace_back(result, opts, retidx, false, MINCAND);
         OMP_PFOR
         for(size_t i = 0; i < order.size(); ++i) {
-            const int tid = OMP_ELSE(omp_get_num_threads(), 0);
+            const int tid = OMP_ELSE(omp_get_thread_num(), 0);
+            //std::fprintf(stderr, "%zu from %d\n", i, tid);
+            assert(tid < subs.size());
             auto &lres = subs[tid];
-            auto oid = order[i];
-            update_res(oid, lres.ids_, lres.constituents_, lres.idx_, opts, result);
+            //std::fprintf(stderr, "lres ptr: %p\n", &lres);
+            update_res(order[i], lres.ids_, lres.constituents_, lres.idx_, opts, result);
+            //std::fprintf(stderr, "Finished %zu from %d\n", i, tid);
         }
         par_reduce(subs.data(), subs.size());
         retidx = std::move(subs.front().idx_);
@@ -179,9 +195,11 @@ void dedup_emit(const std::vector<size_t> &ids, const std::vector<std::vector<si
         THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file ") + outname + " for writing"));
     }
     const size_t nclusters = ids.size();
-    std::fprintf(stderr, "#%zu clusters of average size %0.4g, separated by minimum similarity %g\n", ids.size(), double(ids.size()) / result.names_.size(), opts.min_similarity_);
+    const size_t nitems = result.names_.size();
+    const double avgsize = double(nitems) / nclusters;
+    DBG_ONLY(std::fprintf(stderr, "#%zu clusters of average size %0.4g, separated by minimum similarity %g\n", ids.size(), avgsize, opts.min_similarity_);)
     if(opts.output_format_ == HUMAN_READABLE) {
-        std::fprintf(ofp, "#%zu clusters of average size %0.4g, separated by minimum similarity %g\n", ids.size(), double(ids.size()) / result.names_.size(), opts.min_similarity_);
+        std::fprintf(ofp, "#%zu clusters of average size %0.4g, separated by minimum similarity %g\n", ids.size(), avgsize, opts.min_similarity_);
         for(size_t cid = 0;cid < ids.size(); ++cid) {
             std::fprintf(ofp, "Cluster-%zu\t%s:%zu", cid, result.names_[ids[cid]].data(), ids[cid]);
             for(const auto child: constituents[cid]) {
