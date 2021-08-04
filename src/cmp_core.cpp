@@ -10,18 +10,22 @@
 
 
 namespace dashing2 {
+std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result);
+void dedup_emit(const std::vector<size_t> &, const std::vector<std::vector<size_t>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result);
 //using sketch::lsh::SetSketchIndex;
 static INLINE uint64_t reg2sig(RegT x) {
     uint64_t seed = 0;
     CONST_IF(sizeof(RegT) <= 8) {
         std::memcpy(&seed, &x, sizeof(x));
-        return wy::wyhash64_stateless(&seed);
+        seed ^= static_cast<uint64_t>(0xa3407fb23cd20ef);
+        seed = wy::wyhash64_stateless(&seed);
     } else {
         std::memcpy(&seed, &x, std::min(sizeof(x), sizeof(seed)));
         uint64_t nextseed = wy::wyhash64_stateless(&seed);
         nextseed ^= ((uint64_t *)&x)[1];
-        return wy::wyhash64_stateless(&nextseed);
+        seed = wy::wyhash64_stateless(&nextseed);
     }
+    return seed;
 }
 
 #ifdef _OPENMP
@@ -97,9 +101,10 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         long double logbinv;
         assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
-        std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %g, %g\n", a, b, minreg, maxreg);
+        std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %Lg, %Lg\n", a, b, static_cast<long double>(minreg), static_cast<long double>(maxreg));
         if(a == 0. || std::isinf(b)) {
-            std::fprintf(stderr, "Note: setsketch compression yielded infinite value.\n");
+            std::fprintf(stderr, "Note: setsketch compression yielded infinite value; falling back to b-bit compression\n");
+            return make_compressed(1, fd, sigs, kmers, is_edit_distance);
             //throw 1;
         }
         ret.a(a); ret.b(b);
@@ -139,9 +144,14 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
                 ptr[i] = (sig1 & 0xfu) | ((sig2 & 0xfu) << 4);
             }
         } else {
+            static constexpr int shift [] {0, 58, 48, 0, 32, 0, 0, 0, 0, 0};
+            static_assert(shift[1] == 58, "Shift 1 must be 58");
+            static_assert(shift[2] == 48, "Shift 2 must be 48");
+            static_assert(shift[4] == 32, "Shift 4 must be 32");
+            static_assert(shift[8] == 0, "Shift 8 must be 0");
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs; ++i) {
-                const uint64_t sig = getsig(i);
+                const uint64_t sig = getsig(i) >> shift[int(fd)];
                 if(fd == 8) ((uint64_t *)compressed_reps)[i] = sig;
                 else if(fd == 4) ((uint32_t *)compressed_reps)[i] = sig;
                 else if(fd == 2) ((uint16_t *)compressed_reps)[i] = sig;
@@ -440,7 +450,7 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
             np = opts.sketchsize_  * 16 / nh;
         } else np = opts.sketchsize_ * 32 / nh;
     }
-    using SSI = SetSketchIndex<uint64_t, LSHIDType>;
+    using SSI = SetSketchIndex<LSHIDType, LSHIDType>;
     SSI idx(opts.kmer_result_ < FULL_MMER_SET ? SSI(opts.sketchsize_, nperhashes, nperrows): SSI());
 
 
@@ -450,19 +460,10 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
         refine_results(neighbor_lists, opts, result);
         emit_neighbors(neighbor_lists, opts, result);
     } else if(opts.output_kind_ == DEDUP) {
-        std::vector<size_t> ids;
-        std::vector<std::vector<size_t>> constituents;
-        //const double simthres = 0.9; // This will be changed in the future, but for now, this is hard-coded and dumb
-        std::vector<size_t> order(result.names_.size());
-        std::iota(order.begin(), order.end(), size_t(0));
-        std::sort(order.begin(), order.end(), [&result](auto x, auto y) {return result.cardinalities_[x] < result.cardinalities_[y];});
-        // General strategy:
-        // Use a given similarity threshold to then group items into the cluster
-        // to which they are most similar if they are > than
-        for(size_t idx = 0; idx < order.size(); ++idx) {
-            //auto oid = order[idx];
-        }
-        THROW_EXCEPTION(std::runtime_error("Not implemented: Deduplication"));
+        // The ID corresponds to the representative of a cluster;
+        // Constituents is a vector of IDs per cluster;
+        auto [ids, constituents] = dedup_core(idx, opts, result);
+        dedup_emit(ids, constituents, opts, result);
     }
 }
 

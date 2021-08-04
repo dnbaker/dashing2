@@ -42,6 +42,7 @@ enum OptArg{
     OPTARG_PARSEBYSEQ,
     OPTARG_HELP,
     OPTARG_CMP_BATCH_SIZE,
+    OPTARG_GREEDY,
     OPTARG_DUMMY
 };
 
@@ -122,12 +123,14 @@ enum OptArg{
     {"filterset", required_argument, 0, OPTARG_FILTERSET},\
     {"parse-by-seq", no_argument, 0, OPTARG_PARSEBYSEQ},\
     {"help", no_argument, 0, OPTARG_HELP},\
-    {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE}
+    {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE},\
+    {"greedy", required_argument, 0, OPTARG_GREEDY}
 
 
 
 #define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
 #define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
+#define GREEDY_FIELD case OPTARG_GREEDY: {ok = OutputKind::DEDUP; similarity_threshold = std::atof(optarg); break;}
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
 #define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atof(optarg);\
             if(nbytes_for_fastdists != 8. && nbytes_for_fastdists != 4. && nbytes_for_fastdists != 2. && nbytes_for_fastdists != 1. && nbytes_for_fastdists != .5){\
@@ -142,7 +145,9 @@ enum OptArg{
     case OPTARG_PROTEIN8: {rht = bns::PROTEIN8; canon = false; std::fprintf(stderr, "Using 3-bit protein encoding\n"); break;}
 #define REFINEEXACT_FIELD case OPTARG_REFINEEXACT: {refine_exact = true; break;}
 
-#define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD CMPOUT_FIELD FASTCMP_FIELD PROT_FIELD REFINEEXACT_FIELD \
+#define SHARED_FIELDS TOPK_FIELD SIMTHRESH_FIELD \
+        CMPOUT_FIELD FASTCMP_FIELD PROT_FIELD REFINEEXACT_FIELD \
+        GREEDY_FIELD \
         case 'E': sketch_space = SPACE_EDIT_DISTANCE; break;\
         case 'C': canon = false; break;\
         case 'p': nt = std::atoi(optarg); break;\
@@ -273,7 +278,20 @@ static constexpr const char *siglen =
         "Use this if you want to compare a set of queries to a set of references rather than complete all-pairs. Note: -F must be provided, or reference files should be added as positional arguments\n"\
         "\t For asymmetric pairwise, this emits a flat distance matrix in f32\n"\
         "\t For top-k filtered, this emits a matrix of min(k, |N|) x |N| of IDs and distances\n"\
-        "\t For similarity-thresholded distances, this emits a compressed-sparse row (CSR) formatted matrix\n"\
+        "\t For similarity-thresholded distances, this emits a compressed-sparse row (CSR) formatted matrix with 64-bit indptr, 32-bit indices, and 32-bit floats for distances\n"\
+        "Greedy Clustering\n"\
+        "--greedy <float (0-1]> For greedy clustering by a given similarity threshold; this selects representative sequences or sequence sets.\n"\
+        "For human-readable, this has a line per cluster listing its constituents, ordered by size\n"\
+        "For machine-readable, this file consists of 2 64-bit integers (nclusters, nsets), followed by (nclusters + 1) 64-bit integers, followed by nsets 64-bit integers, identifying which sets belonged to which clusters.\n"\
+        "This is a vector in Compressed-Sparse notation.\n"\
+        "Example Python code:\n"\
+        "def parsef(fpath):\n"\
+        "    import numpy as np;data = np.memmap(fpath)\n"\
+        "    nclusters, nsets = data[:16].view(np.uint64)[:2]\n"\
+        "    endp = 16 + 8 * nclusters\n"\
+        "    indptr = data[16:endp].view(np.uint64)\n"\
+        "    indices = data[endp:].view(np.uint64)\n"\
+        "    return [indices[start:end] for start, end in zip(indptr[:-1],indptr[1:])]\n"\
         "--fastcmp [arg]\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are set-sketch compressed\n"\
         "For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
         "\t If --bbit-sigs is enabled, this random signatures truncated to [arg] bytes will be replaced.\n"\
