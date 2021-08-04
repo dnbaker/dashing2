@@ -47,7 +47,8 @@ void load_copy(const std::string &path, T *ptr) {
         gzclose(fp);
         return;
     } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
-        std::FILE *fp = ::popen((std::string("xz -dc ") + path).data(), "r");
+        auto cmd = std::string("xz -dc ") + path;
+        std::FILE *fp = ::popen(cmd.data(), "r");
         for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
         ::pclose(fp);
         return;
@@ -134,7 +135,7 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     for(size_t i = 0; i < m; ++i) {
         s += ptr[i];
     }
-    DBG_ONLY(std::fprintf(stderr, "Sum manually is %g, compared to accumulate with ld %g\n", s, double(std::accumulate(ptr, ptr + m, 0.L)));)
+    DBG_ONLY(std::fprintf(stderr, "Sum manually is %g, compared to accumulate with ld %g. diff: %0.20Lg\n", s, double(std::accumulate(ptr, ptr + m, 0.L)), std::accumulate(ptr, ptr + m, 0.L) - static_cast<long double>(s));)
     return m / s;
 }
 

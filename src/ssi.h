@@ -230,13 +230,15 @@ public:
         XXH64_state_t state;
         XXH64_reset(&state, seed);
         const schism::Schismatic<uint32_t> div(m_);
-        for(size_t ri = 0; ri < nreg; ++ri)
-            XXH64_update(&state, &item[div.mod(wyhash64_stateless(&seed))], ITEMSIZE);
+        for(size_t ri = 0; ri < nreg; ++ri) {
+            auto pos = div.mod(wyhash64_stateless(&seed));
+            XXH64_update(&state, &item[pos], ITEMSIZE);
+        }
         return XXH64_digest(&state);
     }
     template<typename Sketch>
     std::tuple<std::vector<IdT>, std::vector<uint32_t>, std::vector<uint32_t>>
-    query_candidates(const Sketch &item, size_t maxcand, size_t starting_idx = size_t(-1)) const {
+    query_candidates(const Sketch &item, size_t maxcand, size_t starting_idx = size_t(-1), bool early_stop=true) const {
         if(starting_idx == size_t(-1) || starting_idx > regs_per_reg_.size()) starting_idx = regs_per_reg_.size();
         /*
          *  Returns ids matching input minhash sketches, in order from most specific/least sensitive
@@ -256,7 +258,7 @@ public:
                         if(rit2 == rset.end()) {
                             rset.emplace(id, 1);
                             passing_ids.push_back(id);
-                            if(rset.size() == maxcand)
+                            if(early_stop && rset.size() == maxcand)
                                 goto bk_end;
                             ++rit2->second;
                         }
@@ -277,17 +279,15 @@ public:
                     auto it = m[j].find(myhash);
                     if(it != m[j].end()) {
                         for(const auto id: it->second) {
-                            auto rit2 = rset.find(id);
-                            if(rit2 == rset.end()) {
+                            //auto rit2 = rset.find(id);
+                            if(auto rit2 = rset.find(id); rit2 == rset.end()) {
                                 rset.emplace(id, 1);
                                 passing_ids.push_back(id);
-                                if(rset.size() == maxcand) {
+                                if(early_stop && rset.size() == maxcand) {
                                     items_per_row.push_back(passing_ids.size() - items_before);
                                     goto end;
                                 }
-                            } else {
-                                ++rit2->second;
-                            }
+                            } else ++rit2->second;
                         }
                     }
                 }

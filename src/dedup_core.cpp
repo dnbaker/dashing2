@@ -21,59 +21,66 @@ std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sket
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     std::vector<size_t> ids;
     std::vector<std::vector<size_t>> constituents;
+    const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     // General strategy:
     // Use a given similarity threshold to then group items into the cluster
     // to which they are most similar if they are > than
-    OMP_PFOR_DYN
+#ifdef _OPENMP
+    //#pragma omp parallel for schedule(dynamic)
+#endif
     for(size_t i = 0; i < order.size(); ++i) {
         auto oid = order[i];
-        auto [hits, counts, nper] = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_), 3);
+        size_t oldsz = idx.size();
+        const auto mp = minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+        static constexpr size_t MINCAND = 10;
+        //auto getcand = [&](){return idx.query_candidates(mp, MINCAND, size_t(-1), false);};
+        auto [hits, counts, nper] = idx.query_candidates(mp, MINCAND, size_t(-1));
         std::vector<LSHDistType> vals(hits.size());
-        const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
         auto vp = vals.data();
         // These ids are indexes into the vector of results with ids/constiuents, so we access ids
         for(const auto id: hits) {
             DBG_ONLY(std::fprintf(stderr, "ID %u is a hit\n", int(id));)
-            const auto repid = ids[id];
-            auto res = compare(opts, result, oid, repid);
-            auto v = mult * res;
-            *vp++ = v;
+            *vp++ = mult * compare(opts, result, oid, ids[id]);
         }
         auto mv = std::min_element(vals.data(), vp);
-        std::transform(vals.data(), vp, vals.data(), [mult](auto x) {return x * mult;});
+        //std::transform(vals.data(), vp, vals.data(), [mult](auto x) {return x * mult;});
         VERBOSE_ONLY(
             if(mv != vp) std::fprintf(stderr, "Min element is %g, compared to\n", *mv);
             for(const auto v: vals) {
-                std::fprintf(stderr, "Dist %g\n", v);
+                std::fprintf(stderr, "Dist %g\n", v * mult);
             }
         )
         // auto v = compare(opts, result, lhid, id);
-        if(hits.empty() || (mv != vp && *mv < simt)) {
+        if(hits.empty() || (mv != vp && mult * *mv < simt)) {
 #ifndef NDEBUG
-            if(mv != vp && *mv < simt) {
-                std::fprintf(stderr, "Max similarity is %g vs %g\n", *mv, simt);
+            if(mv != vp && mult * *mv < simt) {
+                std::fprintf(stderr, "Max similarity is %g vs %g vs %g\n", mult * *mv, simt, *std::max_element(vals.data(), vp));
             }
 #endif
+            size_t myid, nids;
             // The LSH index is thread-safe, so we only need to lock these.
             {
-                std::lock_guard<std::mutex> lock(mut);
+                //std::lock_guard<std::mutex> lock(mut);
                 ids.push_back(oid);
+                nids = ids.size();
                 constituents.emplace_back();
             }
-            const size_t myid = idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
-            std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), ids.size(), ids.size() * 100. / order.size());
+            myid = idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
+            std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / order.size());
         } else {
             if(mv == vp) continue;
             auto pos = mv - &vals[0];
             auto cluster_id = hits[pos];
-            std::lock_guard<std::mutex> lock(mut);
+            //std::lock_guard<std::mutex> lock(mut);
             auto &cv = constituents[cluster_id];
             cv.push_back(oid);
             DBG_ONLY(std::fprintf(stderr, "Cluster with rep %s is adding new item named %s\n", result.names_[ids[cluster_id]].data(), result.names_[oid].data());)
             if(result.cardinalities_[cv.back()] > result.cardinalities_[ids[cluster_id]]) {
                 // In case the items are unsorted with respect to cardinality due to the parallelism, swap it out.
                 // That way, we'll keep the highest-cardinality set as the representative
-                std::swap(cv.back(), ids[cluster_id]);
+                //std::fprintf(stderr, "swapped in %g for %g\n", result.cardinalities_[cv.back()], result.cardinalities_[ids[pos]]);
+                std::swap(cv.back(), ids[pos]);
+                //std::fprintf(stderr, "swapped out %g for %g\n", result.cardinalities_[cv.back()], result.cardinalities_[ids[pos]]);
             }
         }
     }

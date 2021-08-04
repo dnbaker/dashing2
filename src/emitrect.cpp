@@ -151,22 +151,32 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
                     const size_t firstrow = bi * batch_size;
                     const size_t erow = std::min((bi + 1) * batch_size, ns);
                     std::vector<size_t> offsets{0};
+                    DBG_ONLY(size_t sum = 0;)
                     for(size_t fs = firstrow; fs < erow; ++fs) {
                         offsets.push_back(ns - fs - 1 + offsets.back());
+                        DBG_ONLY(sum += (ns - fs - 1);)
                     }
-                    const size_t nwritten = std::accumulate(offsets.begin(), offsets.end(), size_t(0));
-                    std::unique_ptr<float[]> dat(new float[nwritten]);
-                    DBG_ONLY(std::fill_n(dat.get(), std::numeric_limits<float>::infinity(), nwritten);)
+                    const size_t nwritten = offsets.back();
+                    assert(nwritten == sum);
+                    auto dat = std::make_unique<float[]>(nwritten);
+                    DBG_ONLY(std::fill_n(dat.get(), nwritten, -137);)
+                    std::atomic<size_t> totalused(0);
                     OMP_PFOR_DYN
                     for(size_t fs = firstrow; fs < erow; ++fs) {
                         auto myoff = fs - firstrow;
+#ifndef NDEBUG
                         size_t shouldoff = 0;
                         for(size_t ofs = firstrow; ofs < fs; ++ofs) shouldoff += ns - ofs - 1;
-                        assert(shouldoff == offsets[myoff] || !std::fprintf(stderr, "Expected %zu for offsets, found %zu\n", shouldoff, offsets[myoff]));
+                        assert(shouldoff == offsets.at(myoff) || !std::fprintf(stderr, "Expected %zu for offsets, found %zu\n", shouldoff, offsets.at(myoff)));
+#endif
                         auto datp = &dat[offsets[myoff]] - fs - 1;
-                        for(size_t j = fs + 1; j < ns; ++j)
+                        for(size_t j = fs + 1; j < ns; ++j) {
+                            DBG_ONLY(++totalused;)
                             datp[j] = compare(opts, result, fs, j);
+                        }
                     }
+                    assert(totalused.load() == nwritten);
+                    assert(std::all_of(dat.get(), dat.get() + nwritten, [](auto x) {return !std::isinf(x);}));
                     std::lock_guard<std::mutex> guard(datq_lock);
                     datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
                 }
@@ -175,6 +185,7 @@ void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) 
     }
     loopint = 1;
     if(sub.joinable()) sub.join();
+    assert(datq.empty());
     if(ofp != stdout) std::fclose(ofp);
 }
 
