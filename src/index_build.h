@@ -1,6 +1,6 @@
 #ifndef DASHING2_INDEX_BUILD_H__
 #define DASHING2_INDEX_BUILD_H__
-#include "sketch/ssi.h"
+#include "src/ssi.h"
 #include "src/cmp_main.h"
 namespace dashing2 {
 
@@ -28,7 +28,7 @@ struct pqueue: public std::priority_queue<PairT> {
 };
 
 
-std::vector<pqueue> build_index(SetSketchIndex<uint64_t, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed=false);
+std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed=false);
 
 } // namespace dashing2
 

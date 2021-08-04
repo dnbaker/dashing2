@@ -243,3 +243,11 @@ See `dashing2 wsketch --help` for usage and examples.
 Easiest installation is `git clone --recursive https://github.com/dnbaker/dashing2 && make -j4`.
 
 Dashing2 is written in C++17, and therefore needs a relatively recent compiler.
+
+
+## Versions
+
+To process more than `std::numeric_limits<uint32_t>::max()` = 0xFFFFFFFF IDs in a table, you must use `dashing2-64`, which uses 64-bit identifiers.
+
+The default version of Dashing2 is dashing2, which uses 32-bit LSH keys and ID types in its NN tables;
+this is faster and more memory-efficient, but less specific;
