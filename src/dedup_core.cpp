@@ -1,7 +1,6 @@
 #include "cmp_main.h"
 #include "src/ssi.h"
 #include "minispan.h"
-#include "fastiota.h"
 #ifdef _OPENMP
 #include "omp.h"
 #endif
@@ -141,10 +140,16 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
 
 
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, Dashing2DistOptions &opts, const SketchingResult &result) {
-    std::vector<LSHIDType> order(result.names_.size());
-    fastiota::iota(order.data(), order.size());
-    assert(std::all_of(order.begin(), order.end(), [&](auto &x) {return x == uint64_t(&x - order.data());}));
-    std::sort(order.begin(), order.end(), [&v=result.cardinalities_](auto x, auto y) {return v[x] < v[y];});
+    const size_t nelem = result.names_.size();
+    std::unique_ptr<LSHIDType[]> order(new LSHIDType[nelem]);
+#if _OPENMP >= 201307L
+    #pragma omp parallel for simd schedule(static, 4096)
+#endif
+    for(size_t i = 0; i < nelem; ++i) {
+        order[i] = i;
+    }
+    assert(std::all_of(order.get(), order.get() + nelem, [&](auto &x) {return x == uint64_t(&x - order.data());}));
+    std::sort(order.get(), order.get() + nelem, [&v=result.cardinalities_](auto x, auto y) {return v[x] < v[y];});
 
     int nt = 1;
 #ifdef _OPENMP
@@ -158,7 +163,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         std::vector<LSHIDType> ids;
         std::vector<std::vector<LSHIDType>> constituents;
         auto &idx = retidx;
-        for(size_t i = 0; i < order.size(); ++i) {
+        for(size_t i = 0; i < nelem; ++i) {
             update_res(order[i], ids, constituents, idx, opts, result);
         }
         return std::make_pair(ids, constituents);
@@ -168,7 +173,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         while(subs.size() < unsigned(nt))
             subs.emplace_back(result, opts, retidx, false, MINCAND);
         OMP_PFOR_DYN
-        for(size_t i = 0; i < order.size(); ++i) {
+        for(size_t i = 0; i < nelem; ++i) {
             const int tid = OMP_ELSE(omp_get_thread_num(), 0);
             //std::fprintf(stderr, "%zu from %d\n", i, tid);
             assert(tid < int(subs.size()));
