@@ -308,8 +308,7 @@ public:
                             passing_ids.push_back(id);
                             if(early_stop && rset.size() == maxcand)
                                 goto bk_end;
-                            ++rit2->second;
-                        }
+                        } else ++rit2->second;
                     }
                 }
             }

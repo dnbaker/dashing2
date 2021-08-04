@@ -172,7 +172,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         retidx.unlock();
         subs.reserve(nt);
         while(subs.size() < unsigned(nt))
-            subs.emplace_back(result, opts, retidx, false, MINCAND);
+            subs.emplace_back(result, opts, retidx, true, MINCAND);
         OMP_PFOR_DYN
         for(size_t i = 0; i < nelem; ++i) {
             const int tid = OMP_ELSE(omp_get_thread_num(), 0);
