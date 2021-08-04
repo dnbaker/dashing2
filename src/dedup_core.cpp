@@ -148,7 +148,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
     for(size_t i = 0; i < nelem; ++i) {
         order[i] = i;
     }
-    assert(std::all_of(order.get(), order.get() + nelem, [&](auto &x) {return x == uint64_t(&x - order.data());}));
+    assert(std::all_of(order.get(), order.get() + nelem, [&](auto &x) {return x == uint64_t(&x - order.get());}));
     std::sort(order.get(), order.get() + nelem, [&v=result.cardinalities_](auto x, auto y) {return v[x] < v[y];});
 
     int nt = 1;
@@ -169,6 +169,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         return std::make_pair(ids, constituents);
     } else {
         std::vector<GreedyClustering> subs;
+        retidx.unlock();
         subs.reserve(nt);
         while(subs.size() < unsigned(nt))
             subs.emplace_back(result, opts, retidx, false, MINCAND);
