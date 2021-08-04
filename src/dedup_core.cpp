@@ -167,7 +167,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         subs.reserve(nt);
         while(subs.size() < unsigned(nt))
             subs.emplace_back(result, opts, retidx, false, MINCAND);
-        OMP_PFOR
+        OMP_PFOR_DYN
         for(size_t i = 0; i < order.size(); ++i) {
             const int tid = OMP_ELSE(omp_get_thread_num(), 0);
             //std::fprintf(stderr, "%zu from %d\n", i, tid);
@@ -231,7 +231,7 @@ void dedup_emit(const std::vector<LSHIDType> &ids, const std::vector<std::vector
         checked_fwrite(ofp, indptr.data(), (indptr.size() * sizeof(uint64_t)));
         for(size_t i = 0; i < nclusters; ++i) {
             auto &v = constituents[i];
-            checked_fwrite(ofp, &ids[i], sizeof(std::decay_t<decltype(ids[i])>));
+            checked_fwrite(ofp, &ids[i], sizeof(LSHIDType));
             checked_fwrite(ofp, v.data(), (v.size() * sizeof(LSHIDType)));
         }
     }
