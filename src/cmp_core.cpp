@@ -437,7 +437,10 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     // thresholded nn graphs
 
     // Step 1: Build LSH Index
-    std::vector<uint64_t> nperhashes{1, 2, 3, 4};
+    std::vector<uint64_t> nperhashes;
+    while(nperhashes.size() < opts.nLSH) {
+        nperhashes.emplace_back(nperhashes.size() < 3 ? (1ull << nperhashes.size()): static_cast<unsigned long long>(nperhashes.size() * 2));
+    }
     std::vector<uint64_t> nperrows(nperhashes.size());
     for(size_t i = 0; i < nperhashes.size(); ++i) {
         const auto nh = nperhashes[i];

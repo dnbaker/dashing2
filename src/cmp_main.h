@@ -61,7 +61,9 @@ struct Dashing2DistOptions: public Dashing2Options {
     bool exact_kmer_dist_ = false;
     bool refine_exact_ = false;
     size_t cmp_batch_size_ = 16;
-    Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false, bool refine_exact=false): Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact)
+    unsigned int nLSH = 3;
+    Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false, bool refine_exact=false, int nlshsubs=3):
+        Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact), nLSH(nlshsubs)
     {
         if(nbytes_for_fastdists < 0) nbytes_for_fastdists = sizeof(RegT);
         if(std::fmod(nbytes_for_fastdists, 1.)) {
@@ -75,6 +77,7 @@ struct Dashing2DistOptions: public Dashing2Options {
         if(this->kmer_result_ >= FULL_MMER_SET)
             exact_kmer_dist_ = true;
         if(outfile_path_.empty() || outfile_path_ == "-") outfile_path_ = "/dev/stdout";
+        if(nLSH < 1) nLSH = 1;
         validate();
     }
     ~Dashing2DistOptions() {

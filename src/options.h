@@ -43,6 +43,7 @@ enum OptArg{
     OPTARG_HELP,
     OPTARG_CMP_BATCH_SIZE,
     OPTARG_GREEDY,
+    OPTARG_NLSH,
     OPTARG_DUMMY
 };
 
@@ -124,7 +125,8 @@ enum OptArg{
     {"parse-by-seq", no_argument, 0, OPTARG_PARSEBYSEQ},\
     {"help", no_argument, 0, OPTARG_HELP},\
     {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE},\
-    {"greedy", required_argument, 0, OPTARG_GREEDY}
+    {"greedy", required_argument, 0, OPTARG_GREEDY},\
+    {"nlsh", required_argument, 0, OPTARG_NLSH}
 
 
 
@@ -190,7 +192,8 @@ enum OptArg{
         case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;\
         case OPTARG_FILTERSET: fsarg = optarg; break;\
         case OPTARG_PARSEBYSEQ: parse_by_seq = true; break;\
-        case OPTARG_CMP_BATCH_SIZE: batch_size = std::strtoull(optarg, 0, 10); break;
+        case OPTARG_CMP_BATCH_SIZE: batch_size = std::strtoull(optarg, 0, 10); break;\
+        case OPTARG_NLSH: nLSH = std::atoi(optarg); break;\
 
 
 
@@ -312,7 +315,13 @@ static constexpr const char *siglen =
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
         "--batch-size [16] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
-        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"
+        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"\
+        "LSH options\n"\
+        "There are a variety of heuristics in the LSH tables; however, the most important besides sketch size is the number of hash tables used.\n"\
+        "--nlsh <int>\t This sets the number of LSH tables. The first 3 tables use powers of 2, and subsequent tables use 2 times the index.\n"\
+        "If 3 is used (default), these will be of sizes (1, 2, 4), but 4 yields (1, 2, 4, 6) and 5 yields (1, 2, 4, 6, 8).\n"\
+        "Increase this number to pay more memory/time for higher accuracy.\n"\
+        "Decrease this number for higher speed and lower accuracy.\n"\
 
 
 

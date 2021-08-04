@@ -46,6 +46,7 @@ int sketch_main(int argc, char **argv) {
     double downsample_frac = 1.;
     uint64_t seedseed = 0;
     size_t batch_size = 16;
+    int nLSH = 3;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
     std::string fsarg;
@@ -119,7 +120,7 @@ int sketch_main(int argc, char **argv) {
     SketchingResult result = sketch_core(opts, paths, outfile);
     result.nqueries(nq); // TODO: use nqueries to perform asymmetric comparisons
     if(cmpout.size()) {
-        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
+        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
         distopts.measure_ = measure;
         distopts.cmp_batch_size_ = std::max(batch_size, size_t(distopts.nthreads()));
         cmp_core(distopts, result);
