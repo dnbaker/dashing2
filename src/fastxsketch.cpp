@@ -586,11 +586,8 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         std::transform(src.names_.begin(), src.names_.end(), &ret.names_[ofs], [&fname](const auto &x) {
             return x + ':' + fname;
         });
-        //std::fprintf(stderr, "Copy cardinalities of size %zu to %zu/%zu\n", src.cardinalities_.size(), ofs, ret.cardinalities_.size());
         std::copy(src.cardinalities_.begin(), src.cardinalities_.end(), &ret.cardinalities_.at(ofs));
-        //std::fprintf(stderr, "Copy sequences\n");
         if(seqsz) {
-            //std::fprintf(stderr, "Copying %zd sequences to idx %zu/%zu\n", src.sequences_.size(), ofs, ret.sequences_.size());
             std::copy(src.sequences_.begin(), src.sequences_.end(), &ret.sequences_.at(ofs));
         }
         if(!start[i].signatures_.empty())
