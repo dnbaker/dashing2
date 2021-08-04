@@ -10,8 +10,8 @@
 
 
 namespace dashing2 {
-std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result);
-void dedup_emit(const std::vector<size_t> &, const std::vector<std::vector<size_t>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result);
+std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result);
+void dedup_emit(const std::vector<LSHIDType> &, const std::vector<std::vector<LSHIDType>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result);
 //using sketch::lsh::SetSketchIndex;
 static INLINE uint64_t reg2sig(RegT x) {
     uint64_t seed = 0;

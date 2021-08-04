@@ -285,12 +285,15 @@ static constexpr const char *siglen =
         "For machine-readable, this file consists of 2 64-bit integers (nclusters, nsets), followed by (nclusters + 1) 64-bit integers, followed by nsets 64-bit integers, identifying which sets belonged to which clusters.\n"\
         "This is a vector in Compressed-Sparse notation.\n"\
         "Example Python code:\n"\
-        "def parsef(fpath):\n"\
+        "def parsef(fpath, d64=False):\n"\
         "    import numpy as np;data = np.memmap(fpath)\n"\
         "    nclusters, nsets = data[:16].view(np.uint64)[:2]\n"\
         "    endp = 16 + 8 * nclusters\n"\
         "    indptr = data[16:endp].view(np.uint64)\n"\
-        "    indices = data[endp:].view(np.uint64)\n"\
+        "    #  dashing2 uses 32-bit ids\n"\
+        "    #  dashing2-64 uses 64-bit ids\n"\
+        "    indicesdtype = np.uint64 if d64 else np.uint32\n"\
+        "    indices = data[endp:].view(indicesdtype)\n"\
         "    return [indices[start:end] for start, end in zip(indptr[:-1],indptr[1:])]\n"\
         "--fastcmp [arg]\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are set-sketch compressed\n"\
         "For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\

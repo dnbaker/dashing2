@@ -17,22 +17,20 @@ namespace dashing2 {
 static constexpr size_t MINCAND = 10;
 
 struct GreedyClustering {
-    std::vector<size_t> ids_;
-    std::vector<std::vector<size_t>> constituents_;
+    std::vector<LSHIDType> ids_;
+    std::vector<std::vector<LSHIDType>> constituents_;
     sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> idx_;
     double simt, mult;
     bool earlystop;
     size_t mincand;
     const SketchingResult &result;
     Dashing2DistOptions &opts;
-    size_t sketchsize_;
     GreedyClustering(const SketchingResult &rs, Dashing2DistOptions &opts, const sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, bool earlystop=false, size_t mincand=MINCAND)
         : idx_(idx.clone()),
         earlystop(earlystop), mincand(mincand), result(rs), opts(opts)
     {
         simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
         mult = distance(opts.measure_)  ? 1.: -1.;
-        assert(sketchsize > 0);
     }
     GreedyClustering &operator +=(const GreedyClustering &o) {
         const size_t osz = o.ids_.size();
@@ -73,7 +71,7 @@ template<typename T>
 void par_reduce(T *x, size_t n) {
     const unsigned int ln = static_cast<int>(std::ceil(std::log2(n)));
     for(size_t i = 0; i < ln; ++i) {
-        const size_t step_size = 1 << i;
+        const size_t step_size = size_t(1) << i;
         const size_t sweep_size = (i + 1) << 1;
         const size_t nsweeps = (n + (sweep_size - 1)) / sweep_size;
         OMP_PFOR
@@ -87,7 +85,7 @@ void par_reduce(T *x, size_t n) {
 
 
 
-void update_res(size_t oid, std::vector<size_t> &ids, std::vector<std::vector<size_t>> &constituents,
+void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
                 sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result,
                 bool earlystop=false, size_t mincand=MINCAND)
 {
@@ -111,7 +109,7 @@ void update_res(size_t oid, std::vector<size_t> &ids, std::vector<std::vector<si
         constituents.emplace_back();
         DBG_ONLY(size_t myid = )
             idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
-        DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / order.size());)
+        DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / result.names_.size());)
     } else {
         if(mv == vp) return;
         auto pos = mv - &vals[0];
@@ -132,8 +130,8 @@ void update_res(size_t oid, std::vector<size_t> &ids, std::vector<std::vector<si
 }
 
 
-std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, Dashing2DistOptions &opts, const SketchingResult &result) {
-    std::vector<size_t> order(result.names_.size());
+std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, Dashing2DistOptions &opts, const SketchingResult &result) {
+    std::vector<LSHIDType> order(result.names_.size());
     fastiota::iota(order.data(), order.size());
     assert(std::all_of(order.begin(), order.end(), [&](auto &x) {return x == uint64_t(&x - order.data());}));
     std::sort(order.begin(), order.end(), [&v=result.cardinalities_](auto x, auto y) {return v[x] < v[y];});
@@ -147,8 +145,8 @@ std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sket
     // Use a given similarity threshold to then group items into the cluster
     // to which they are most similar if they are > than
     if(nt == 1) {
-        std::vector<size_t> ids;
-        std::vector<std::vector<size_t>> constituents;
+        std::vector<LSHIDType> ids;
+        std::vector<std::vector<LSHIDType>> constituents;
         auto &idx = retidx;
         for(size_t i = 0; i < order.size(); ++i) {
             update_res(order[i], ids, constituents, idx, opts, result);
@@ -166,13 +164,15 @@ std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> dedup_core(sket
             auto oid = order[i];
             update_res(oid, lres.ids_, lres.constituents_, lres.idx_, opts, result);
         }
+        std::fprintf(stderr, "Updates all done\n");
         par_reduce(subs.data(), subs.size());
+        std::fprintf(stderr, "Par reduce done\n");
         retidx = std::move(subs.front().idx_);
         return std::make_pair(std::move(subs.front().ids_), std::move(subs.front().constituents_));
     }
 }
 
-void dedup_emit(const std::vector<size_t> &ids, const std::vector<std::vector<size_t>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result) {
+void dedup_emit(const std::vector<LSHIDType> &ids, const std::vector<std::vector<LSHIDType>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result) {
     const std::string &outname = opts.outfile_path_;
     std::FILE *ofp = stdout;
     if(outname.size() && (ofp = std::fopen(outname.data(), "wb")) == nullptr) {
@@ -183,9 +183,9 @@ void dedup_emit(const std::vector<size_t> &ids, const std::vector<std::vector<si
     if(opts.output_format_ == HUMAN_READABLE) {
         std::fprintf(ofp, "#%zu clusters of average size %0.4g, separated by minimum similarity %g\n", ids.size(), double(ids.size()) / result.names_.size(), opts.min_similarity_);
         for(size_t cid = 0;cid < ids.size(); ++cid) {
-            std::fprintf(ofp, "Cluster-%zu\t%s:%zu", cid, result.names_[ids[cid]].data(), ids[cid]);
+            std::fprintf(ofp, "Cluster-%zu\t%s:%zu", cid, result.names_[ids[cid]].data(), size_t(ids[cid]));
             for(const auto child: constituents[cid]) {
-                size_t childid = child; // ids.at(child);
+                const size_t childid = child; // ids.at(child);
                 std::fprintf(ofp, "\t%s:%zu", result.names_[childid].data(), childid);
             }
             std::fputc('\n', ofp);
@@ -203,7 +203,7 @@ void dedup_emit(const std::vector<size_t> &ids, const std::vector<std::vector<si
         for(size_t i = 0; i < nclusters; ++i) {
             auto &v = constituents[i];
             checked_fwrite(ofp, &ids[i], sizeof(std::decay_t<decltype(ids[i])>));
-            checked_fwrite(ofp, v.data(), (v.size() * sizeof(size_t)));
+            checked_fwrite(ofp, v.data(), (v.size() * sizeof(LSHIDType)));
         }
     }
     if(ofp != stdout) std::fclose(ofp);
