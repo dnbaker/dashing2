@@ -5,6 +5,7 @@
 #include <vector>
 #include <atomic>
 #include <cstdio>
+#include <zlib.h>
 #include <iostream>
 #include "xxHash/xxh3.h"
 #include "flat_hash_map/flat_hash_map.hpp"
@@ -110,6 +111,12 @@ public:
         return *this;
     }
     SetSketchIndex(const SetSketchIndex &o) {*this = o;}
+    bool operator==(const SetSketchIndex &o) {
+        return total_ids_ == o.total_ids_ &&
+            regs_per_reg_.size() == o.regs_per_reg_.size() &&
+            packed_maps_.size() == o.packed_maps_.size() &&
+            std::equal(packed_maps_.begin(), packed_maps_.end(), o.packed_maps_.begin());
+    }
 
     SetSketchIndex &operator=(SetSketchIndex &&o) = default;
     SetSketchIndex(SetSketchIndex &&o) = default;
@@ -402,6 +409,65 @@ public:
         std::vector<uint32_t> passing_counts(passing_ids.size());
         std::transform(passing_ids.begin(), passing_ids.end(), passing_counts.begin(), [&rset](auto x) {return rset[x];});
         return std::make_tuple(passing_ids, passing_counts, items_per_row);
+    }
+    void write(std::string path) const {
+        gzFile fp = gzopen(&path[0], "w");
+        write(fp);
+        gzclose(fp);
+    }
+    void write(gzFile fp) const {
+        gzwrite(fp, &total_ids_, sizeof(total_ids_));
+        std::fprintf(stderr, "Writing %zu ids\n", total_ids_);
+        size_t nms = packed_maps_.size();
+        gzwrite(fp, &nms, sizeof(nms));
+        for(size_t i = 0; i < nms; ++i) {
+            size_t v = packed_maps_[i].size();
+            gzwrite(fp, &v, sizeof(v));
+        }
+        gzwrite(fp, regs_per_reg_.data(), regs_per_reg_.size() * sizeof(regs_per_reg_.front()));
+        uint8_t ibk = is_bottomk_only_, islocked = !mutexes_.empty();
+        gzwrite(fp, &ibk, 1);
+        gzwrite(fp, &islocked, 1);
+    }
+    SetSketchIndex(gzFile fp, bool clear=false) {
+        size_t nmapsets;
+        std::vector<size_t> mapsizes;
+        regs_per_reg_.clear();
+
+        gzread(fp, &total_ids_, sizeof(total_ids_));
+        std::fprintf(stderr, "Reading %zu ids\n", total_ids_);
+        gzread(fp, &nmapsets, sizeof(size_t));
+        mapsizes.reserve(nmapsets);
+        packed_maps_.resize(mapsizes.size());
+        while(mapsizes.size() < nmapsets) {
+            size_t v;
+            gzread(fp, &v, sizeof(size_t));
+            mapsizes.push_back(v);
+            packed_maps_.emplace_back(HashV(v));
+        }
+        while(regs_per_reg_.size() < nmapsets) {
+            size_t v;
+            gzread(fp, &v, sizeof(size_t));
+            regs_per_reg_.push_back(v);
+        }
+        uint8_t ibk, islocked;
+        gzread(fp, &ibk, 1);
+        gzread(fp, &islocked, 1);
+        is_bottomk_only_ = ibk;
+        if(islocked) {
+            mutexes_.resize(mapsizes.size());
+            for(size_t i = 0; i < mapsizes.size(); ++i) {
+                mutexes_[i] = std::vector<std::mutex>(mapsizes[i]);
+            }
+        }
+        if(clear) gzclose(fp);
+    }
+    SetSketchIndex(std::string path): SetSketchIndex(gzopen(path.data(), "r"), true) {}
+    void clear() {
+        total_ids_ = 0;
+        packed_maps_.clear();
+        mutexes_.clear();
+        regs_per_reg_.clear();
     }
 };
 

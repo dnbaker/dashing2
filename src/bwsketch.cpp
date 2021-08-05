@@ -111,18 +111,20 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
             for(;ptr->data;ptr = bwIteratorNext(ptr)) {
                 const uint32_t numi = ptr->intervals->l;
                 float *vptr = ptr->intervals->value;
-                for(uint32_t j = 0; j < numi; ++j) {
-                    auto istart = ptr->intervals->start[j];
-                    auto iend = ptr->intervals->end[j];
-                    for(;istart < iend;++istart) {
-                        auto k = chrom_hash ^ istart;
-                        auto v = vptr[j];
-                        if(fss.size()) fss[tid].update(k);
-                        else if(opss.size()) opss[tid].update(k);
-                        else if(bmhs.size()) bmhs[tid].update(k, v);
-                        else if(pmhs.size()) pmhs[tid].update(k, v);
-                    }
+#define DO_FOR_SKETCH(item) do {\
+                for(uint32_t j = 0; j < numi; ++j) { \
+                    for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++, vptr[j]));\
+                } } while(0)
+                if(fss.size()) {
+                    DO_FOR_SKETCH(fss[tid]);
+                } else if(opss.size()) {
+                    DO_FOR_SKETCH(opss[tid]);
+                } else if(bmhs.size()) {
+                    DO_FOR_SKETCH(bmhs[tid]);
+                } else if(pmhs.size()) {
+                    DO_FOR_SKETCH(pmhs[tid]);
                 }
+#undef DO_FOR_SKETCH
 #ifndef NDEBUG
                 std::fprintf(stderr, "processed %u intervals. Now loading next batch (%s)\n", numi, chrom.data());
 #endif

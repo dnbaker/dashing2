@@ -8,7 +8,10 @@
 
 namespace dashing2 {
 
-static constexpr size_t MINCAND = 10;
+static constexpr size_t MINCAND = 5;
+#ifndef EARLYSTOP
+#define EARLYSTOP 1
+#endif
 
 struct GreedyClustering {
     std::vector<LSHIDType> ids_;
@@ -18,8 +21,8 @@ struct GreedyClustering {
     bool earlystop;
     size_t mincand;
     const SketchingResult &result;
-    Dashing2DistOptions &opts;
-    GreedyClustering(const SketchingResult &rs, Dashing2DistOptions &opts, const sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, bool earlystop=false, size_t mincand=MINCAND)
+    const Dashing2DistOptions &opts;
+    GreedyClustering(const SketchingResult &rs, const Dashing2DistOptions &opts, const sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, bool earlystop=EARLYSTOP, size_t mincand=MINCAND)
         : idx_(idx.clone()),
         earlystop(earlystop), mincand(mincand), result(rs), opts(opts)
     {
@@ -79,8 +82,8 @@ void par_reduce(T *x, size_t n) {
 
 
 void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
-                sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result,
-                bool earlystop=false, size_t mincand=MINCAND)
+                sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result,
+                bool earlystop=EARLYSTOP, size_t mincand=MINCAND)
 {
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     assert(opts.sketchsize_ * oid < result.signatures_.size());
@@ -101,7 +104,7 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
         const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
         DBG_ONLY(size_t myid = )
             idx.update(mp);
-        DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / result.names_.size());)
+        //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / result.names_.size());)
     } else {
         auto pos = mv - vals.data();
         assert(size_t(pos) < hits.size());
@@ -112,20 +115,107 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
         auto &cv = constituents[cluster_id];
         auto &rep = ids[cluster_id];
         cv.push_back(oid);
-        DBG_ONLY(std::fprintf(stderr, "Cluster with rep %s is adding new item named %s\n", result.names_[ids[cluster_id]].data(), result.names_[oid].data());)
+        //DBG_ONLY(std::fprintf(stderr, "Cluster with rep %s is adding new item named %s\n", result.names_[ids[cluster_id]].data(), result.names_[oid].data());)
         if(result.cardinalities_[cv.back()] > result.cardinalities_[rep]) {
             // In case the items are unsorted with respect to cardinality due to the parallelism, swap it out.
             // That way, we'll keep the highest-cardinality set as the representative
-            //std::fprintf(stderr, "swapped in %g for %g\n", result.cardinalities_[cv.back()], result.cardinalities_[ids[pos]]);
-            if(result.cardinalities_[cv.back()] > result.cardinalities_[rep])
-                std::swap(cv.back(), rep);
-            //std::fprintf(stderr, "swapped out %g for %g\n", result.cardinalities_[cv.back()], result.cardinalities_[ids[pos]]);
+            std::swap(cv.back(), rep);
         }
     }
 }
 
+#if 1
+void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> &ret, sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result, bool earlystop) {
+    std::fprintf(stderr, "%zu clusters before\n", ret.first.size());
+    auto ts = std::chrono::high_resolution_clock::now();
+    std::vector<size_t> indicestorm;
+    std::unique_ptr<std::mutex[]> locks(new std::mutex[ret.first.size()]);
+    const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
+    auto &constituents = ret.second;
+    auto &ids= ret.first;
+    OMP_PFOR
+    for(size_t i = 0; i < ret.first.size(); ++i) {
+        const auto oid = ret.first[i];
+        assert(oid < result.names_.size());
+        const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+        auto [hits, counts, nper] = retidx.query_candidates(span, 5, size_t(-1), earlystop);
+        for(size_t j = 0; j < hits.size(); ++j) {
+            if(hits[j] == i) {
+                std::swap(hits.back(), hits[j]);
+                hits.pop_back();
+                break;
+            }
+        }
+        if(hits.empty()) continue;
+        std::vector<LSHDistType> vals(hits.size());
+        auto vp = vals.data();
+        for(const auto id: hits) {
+            assert(id < ids.size());
+            *vp++ = mult * compare(opts, result, oid, ids[id]);
+        }
+        auto mv = std::min_element(vals.data(), vp);
+        auto pos = mv - vals.data();
+        auto cluster_id = hits[pos];
+        auto &rep = ids[cluster_id];
+        if(mv != vp && mult * *mv > opts.min_similarity_ && result.cardinalities_[oid] < result.cardinalities_[rep]) {
+            auto cluster_id = hits.at(pos);
+            auto &cv = constituents.at(cluster_id);
+            std::lock_guard<std::mutex> lock(locks[cluster_id]);
+            std::lock_guard<std::mutex> lock2(locks[i]);
+            cv.push_back(oid);
+            indicestorm.push_back(i);
+            cv.insert(cv.end(), ret.second[i].begin(), ret.second[i].end());
+            ret.second[i].clear();
+        }
+    }
+    std::fprintf(stderr, "Removing %zu indices out of %zu\n", indicestorm.size(), ret.first.size());
+    for(const auto id: indicestorm) {
+        std::swap(ret.first[id], ret.first.back()), ret.first.pop_back();
+        std::swap(ret.second[id], ret.second.back()), ret.second.pop_back();
+    }
+    std::fprintf(stderr, "%zu clusters after %gs\n", ret.first.size(), std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - ts).count());
+#if 0
+    ts = std::chrono::high_resolution_clock::now();
+    indicestorm.clear();
+    retidx.clear();
+    for(size_t i = 0; i < ret.first.size() - 1; ++i) {
+        const auto oid = ret.first[i];
+        const size_t mysz = ret.first.size() - i - 1;
+        std::unique_ptr<LSHDistType[]> dists(new LSHDistType[mysz]);
+        #pragma omp parallel for schedule(static, 8)
+        for(size_t j = 0; j < mysz; ++j) {
+            dists[j] = mult * compare(opts, result, oid, ret.first[j + i + 1]);
+        }
+        auto mv = std::min_element(dists.get(), &dists[mysz]);
+        auto pos = mv - dists.get();
+        auto cluster_id = pos + i + 1;
+        auto &rep = ids[cluster_id];
+        //std::fprintf(stderr, "mv %g\n", *mv);
+        if(mv != &dists[mysz] && *mv * mult > opts.min_similarity_ && result.cardinalities_[oid] < result.cardinalities_[rep]) {
+            assert(pos + i + 1 < ret.first.size());
+            auto &cv = constituents[cluster_id];
+            std::lock_guard<std::mutex> lock(locks[cluster_id]);
+            std::lock_guard<std::mutex> lock22(locks[i]);
+            cv.push_back(oid);
+            if(result.cardinalities_[cv.back()] > result.cardinalities_[rep])
+                std::swap(cv.back(), rep);
+            indicestorm.push_back(i);
+            cv.insert(cv.end(), ret.second[i].begin(), ret.second[i].end());
+            ret.second[i].clear();
+        }
+    }
+    for(const auto id: indicestorm) {
+        std::swap(ret.first[id], ret.first.back()), ret.first.pop_back();
+        std::swap(ret.second[id], ret.second.back()), ret.second.pop_back();
+    }
+    std::fprintf(stderr, "After exhaustive removal, %zu clusters after %gs\n", ret.first.size(), std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - ts).count());
+#endif
+}
+#endif
 
-std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, Dashing2DistOptions &opts, const SketchingResult &result) {
+
+std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result) {
+    std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> ret;
     const size_t nelem = result.names_.size();
     std::unique_ptr<LSHIDType[]> order(new LSHIDType[nelem]);
 #if _OPENMP > 201307L
@@ -150,7 +240,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         for(size_t i = 0; i < nelem; ++i) {
             update_res(order[i], ids, constituents, idx, opts, result);
         }
-        return std::make_pair(ids, constituents);
+        ret = std::make_pair(ids, constituents);
     } else {
         std::vector<GreedyClustering> subs;
         retidx.unlock();
@@ -169,8 +259,10 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         }
         par_reduce(subs.data(), subs.size());
         retidx = std::move(subs.front().idx_);
-        return std::make_pair(std::move(subs.front().ids_), std::move(subs.front().constituents_));
+        ret = std::make_pair(std::move(subs.front().ids_), std::move(subs.front().constituents_));
     }
+    cleanup(ret, retidx, opts, result, true);
+    return ret;
 }
 #ifndef NDEBUG
 template<typename T, typename Alloc, typename VAlloc>

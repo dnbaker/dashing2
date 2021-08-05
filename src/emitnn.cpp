@@ -8,9 +8,9 @@ namespace dashing2 {
 // (nids + 1) * 8 bytes: indptr in uint64_t
 // nnz * sizeof(LSHIDType): indices in LSHIDType (default uint32_t)
 // nnz * sizeof(LSHDistType): data in LSHDistType (default float)
-void emit_neighbors(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const SketchingResult &result) {
+void emit_neighbors(std::vector<pqueue> &lists, const Dashing2DistOptions &opts, const SketchingResult &result) {
     auto emitstart = std::chrono::high_resolution_clock::now();
-    std::string &outname = opts.outfile_path_;
+    const std::string &outname = opts.outfile_path_;
     std::FILE *ofp = stdout;
     if(outname.size() && (ofp = std::fopen(outname.data(), "wb")) == nullptr)
         throw std::runtime_error(std::string("Failed to open file ") + outname + " for writing");

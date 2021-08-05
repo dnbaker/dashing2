@@ -1,7 +1,7 @@
 #include "refine.h"
 namespace dashing2 {
 
-void refine_results(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const SketchingResult &result) {
+void refine_results(std::vector<pqueue> &lists, const Dashing2DistOptions &opts, const SketchingResult &result) {
     //LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     // 1. Perform full distance computations over the LSH-selected candidates

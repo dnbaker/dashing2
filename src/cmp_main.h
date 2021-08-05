@@ -53,12 +53,11 @@ struct Dashing2DistOptions: public Dashing2Options {
     // If 1 (> 0), generates b-bit signatures and truncates
     int num_neighbors_ = -1; // Only emits top-"nn" neighbors
     double min_similarity_ = -1.; // Only emit similarities which are above min_similarity_ if nonnegative
-    void *compressed_ptr_ = nullptr;
-    long double compressed_b_ = -1.;
-    long double compressed_a_ = -1.;
+    mutable void *compressed_ptr_ = nullptr;
+    mutable long double compressed_b_ = -1.L, compressed_a_ = -1.L;
     mutable Measure measure_ = SIMILARITY;
     std::string outfile_path_;
-    bool exact_kmer_dist_ = false;
+    mutable bool exact_kmer_dist_ = false;
     bool refine_exact_ = false;
     size_t cmp_batch_size_ = 16;
     unsigned int nLSH = 2;
@@ -81,7 +80,7 @@ struct Dashing2DistOptions: public Dashing2Options {
         validate();
     }
     ~Dashing2DistOptions() {
-        std::free(compressed_ptr_);
+        std::free(compressed_ptr_); compressed_ptr_ = 0;
     }
     void validate() const {
         Dashing2Options::validate();
@@ -98,9 +97,9 @@ struct Dashing2DistOptions: public Dashing2Options {
         }
     }
 };
-void cmp_core(Dashing2DistOptions &ddo, SketchingResult &res);
-LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
-void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result);
+void cmp_core(const Dashing2DistOptions &ddo, SketchingResult &res);
+LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
+void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result);
 
 }
 
