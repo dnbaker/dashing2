@@ -126,7 +126,7 @@ int cmp_main(int argc, char **argv) {
     bool normalize_bed = false;
     int topk_threshold = -1;
     int truncate_mode = 0;
-    int nLSH = 3;
+    int nLSH = 2;
     double nbytes_for_fastdists = sizeof(RegT);
     double downsample_frac = 1.;
     bool parse_by_seq = false;
@@ -174,7 +174,6 @@ int cmp_main(int argc, char **argv) {
         .cache_sketches(cache)
         .cssize(cssize)
         .sketchsize(sketchsize)
-        .save_kmers(save_kmers)
         .outprefix(outprefix)
         .save_kmercounts(save_kmercounts)
         .save_kmers(save_kmers)

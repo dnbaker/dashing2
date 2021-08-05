@@ -46,7 +46,7 @@ int sketch_main(int argc, char **argv) {
     double downsample_frac = 1.;
     uint64_t seedseed = 0;
     size_t batch_size = 16;
-    int nLSH = 3;
+    int nLSH = 2;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
     std::string fsarg;
