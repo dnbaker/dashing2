@@ -10,6 +10,7 @@
 #include "flat_hash_map/flat_hash_map.hpp"
 #include "sketch/div.h"
 #include "sketch/integral.h"
+#include "sketch/hash.h"
 #include <mutex>
 #include <optional>
 
@@ -329,15 +330,14 @@ public:
         XXH64_state_t state;
         XXH64_reset(&state, seed);
         const schism::Schismatic<uint32_t> div(m_);
-        size_t ri8 = nreg / 8;
 #define SINGLE_UPDATE \
-                XXH64_update(&state, &item[div.mod(wyhash64_stateless(&seed))], ITEMSIZE);
+    XXH64_update(&state, &item[div.mod(wyhash64_stateless(&seed))], ITEMSIZE);
         for(size_t ri8 = nreg / 8;ri8--;) {
 #define TWICE(X) X X
             TWICE(TWICE(TWICE(SINGLE_UPDATE)))
-#undef TWICE
         }
         for(size_t ri = 0; ri < nreg; ++ri) SINGLE_UPDATE
+#undef TWICE
 #undef SINGLE_UPDATE
         return XXH64_digest(&state);
     }

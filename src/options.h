@@ -10,7 +10,7 @@ namespace dashing2 {
 
 using option_struct = struct option;
 
-enum OptArg{
+enum OptArg {
     OPTARG1 = 1000,
     OPTARG_BED,
     OPTARG_BIGWIG,
@@ -44,6 +44,7 @@ enum OptArg{
     OPTARG_CMP_BATCH_SIZE,
     OPTARG_GREEDY,
     OPTARG_NLSH,
+    OPTARG_ENTROPYMIN,
     OPTARG_DUMMY
 };
 
@@ -126,7 +127,8 @@ enum OptArg{
     {"help", no_argument, 0, OPTARG_HELP},\
     {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE},\
     {"greedy", required_argument, 0, OPTARG_GREEDY},\
-    {"nlsh", required_argument, 0, OPTARG_NLSH}
+    {"nlsh", required_argument, 0, OPTARG_NLSH},\
+    {"entmin", no_argument, 0, OPTARG_ENTROPYMIN}
 
 
 
@@ -194,6 +196,7 @@ enum OptArg{
         case OPTARG_PARSEBYSEQ: parse_by_seq = true; break;\
         case OPTARG_CMP_BATCH_SIZE: batch_size = std::strtoull(optarg, 0, 10); break;\
         case OPTARG_NLSH: nLSH = std::atoi(optarg); break;\
+        case OPTARG_ENTMIN: entmin = true; \
 
 
 
@@ -215,6 +218,7 @@ static constexpr const char *siglen =
         "\n\nFastx Options:\n"\
         "-k/--kmer-length: set k\n"\
         "-w/--window-size: set window size for winnowing; by default, all m-mers are used.\n"\
+        "--entmin: If -w/--window-size is enabled, this option weights the hash value by the entropy of the k-mer itself.\nThis is only valid for k-mers short enough to be encoded exactly in 64-bit or 128-bit integers, depending on if --long-kmers is enabled.\n"\
         "--spacing: Set a spacing scheme for spaced minimizers\n"\
         "-2/--128bit/long-kmers: Use 128-bit k-mer hashes instead of 64-bit\n"\
         "-m/--threshold: Set a count threshold for inclusion. Default: 0.\n"\

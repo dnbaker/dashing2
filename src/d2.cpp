@@ -90,6 +90,11 @@ void Dashing2Options::validate() const {
     if(canonicalize() && rh_.hashtype() != bns::DNA) {
         canonicalize(false);
     }
+    const int lim = use128() ? enc_.nremperres128() : enc_.nremperres64();
+    if(entmin && (k_ > lim || !sp_.unspaced())) {
+        std::fprintf(stderr, "Warning: entropy minimization is not supported for spaced seeds or rolling hashers; falling back to random minimization.\n");
+        entmin = false;
+    }
 }
 
 uint64_t XORMASK = 0x724526e320f9967dull;
@@ -103,6 +108,7 @@ void seed_mask(uint64_t x) {
         XORMASK2 = (u128_t(rng()) << 64) | XORMASK;
     }
 }
+bool entmin = false;
 
 } // dashing2
 
