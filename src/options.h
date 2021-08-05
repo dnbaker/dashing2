@@ -196,7 +196,7 @@ enum OptArg {
         case OPTARG_PARSEBYSEQ: parse_by_seq = true; break;\
         case OPTARG_CMP_BATCH_SIZE: batch_size = std::strtoull(optarg, 0, 10); break;\
         case OPTARG_NLSH: nLSH = std::atoi(optarg); break;\
-        case OPTARG_ENTMIN: entmin = true; \
+        case OPTARG_ENTROPYMIN: entmin = true; break;\
 
 
 
