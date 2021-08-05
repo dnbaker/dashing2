@@ -124,10 +124,9 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
     }
 }
 
-#if 1
 void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> &ret, sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result, bool earlystop) {
-    std::fprintf(stderr, "%zu clusters before\n", ret.first.size());
-    auto ts = std::chrono::high_resolution_clock::now();
+    DBG_ONLY(std::fprintf(stderr, "%zu clusters before\n", ret.first.size());)
+    DBG_ONLY(auto ts = std::chrono::high_resolution_clock::now();)
     std::vector<size_t> indicestorm;
     std::unique_ptr<std::mutex[]> locks(new std::mutex[ret.first.size()]);
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
@@ -160,20 +159,27 @@ void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType
         if(mv != vp && mult * *mv > opts.min_similarity_ && result.cardinalities_[oid] < result.cardinalities_[rep]) {
             auto cluster_id = hits.at(pos);
             auto &cv = constituents.at(cluster_id);
-            std::lock_guard<std::mutex> lock(locks[cluster_id]);
-            std::lock_guard<std::mutex> lock2(locks[i]);
-            cv.push_back(oid);
-            indicestorm.push_back(i);
-            cv.insert(cv.end(), ret.second[i].begin(), ret.second[i].end());
-            ret.second[i].clear();
+            {
+                std::lock_guard<std::mutex> lock(locks[cluster_id]);
+                cv.push_back(oid);
+                cv.insert(cv.end(), ret.second[i].begin(), ret.second[i].end());
+            }
+            {
+                std::lock_guard<std::mutex> lock2(locks[i]);
+                ret.second[i].clear();
+            }
+            OMP_CRITICAL
+            {
+                indicestorm.push_back(i);
+            }
         }
     }
-    std::fprintf(stderr, "Removing %zu indices out of %zu\n", indicestorm.size(), ret.first.size());
+    DBG_ONLY(std::fprintf(stderr, "Removing %zu indices out of %zu\n", indicestorm.size(), ret.first.size());)
     for(const auto id: indicestorm) {
         std::swap(ret.first[id], ret.first.back()), ret.first.pop_back();
         std::swap(ret.second[id], ret.second.back()), ret.second.pop_back();
     }
-    std::fprintf(stderr, "%zu clusters after %gs\n", ret.first.size(), std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - ts).count());
+    DBG_ONLY(std::fprintf(stderr, "%zu clusters after %gs\n", ret.first.size(), std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - ts).count());)
 #if 0
     ts = std::chrono::high_resolution_clock::now();
     indicestorm.clear();
@@ -211,7 +217,6 @@ void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType
     std::fprintf(stderr, "After exhaustive removal, %zu clusters after %gs\n", ret.first.size(), std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - ts).count());
 #endif
 }
-#endif
 
 
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result) {
