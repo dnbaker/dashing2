@@ -94,19 +94,19 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     sketcher.rh128_ = opts.rh128_;
     if(opts.sspace_ == SPACE_SET) {
         if(opts.one_perm()) {
-            //std::fprintf(stderr, "Using OPSS\n");
+            DBG_ONLY(std::fprintf(stderr, "Using OPSS\n");)
             sketcher.opss.reset(new OPSetSketch(opts.sketchsize_));
             if(opts.count_threshold_ > 0) sketcher.opss->set_mincount(opts.count_threshold_);
-        } else sketcher.fss.reset(new FullSetSketch(opts.sketchsize_, save_ids, save_idcounts));
+        } else sketcher.fss.reset(new FullSetSketch(opts.count_threshold_, opts.sketchsize_, save_ids, save_idcounts));
     } else if(opts.sspace_ == SPACE_MULTISET) {
-            //std::fprintf(stderr, "Using BMH\n");
+            DBG_ONLY(std::fprintf(stderr, "Using BMH\n");)
         sketcher.bmh.reset(new BagMinHash(opts.sketchsize_, save_ids, save_idcounts));
     } else if(opts.sspace_ == SPACE_PSET) {
         sketcher.pmh.reset(new ProbMinHash(opts.sketchsize_));
-        //std::fprintf(stderr, "Setting sketcher.pmh: %p\n", (void *)sketcher.pmh.get());
+        DBG_ONLY(std::fprintf(stderr, "Setting sketcher.pmh: %p\n", (void *)sketcher.pmh.get());)
     } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         sketcher.omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
-        //std::fprintf(stderr, "Setting sketcher.omh: %p\n", (void *)sketcher.omh.get());
+        DBG_ONLY(std::fprintf(stderr, "Setting sketcher.omh: %p\n", (void *)sketcher.omh.get());)
     } else THROW_EXCEPTION(std::runtime_error("Should have been set space, multiset, probset, or edit distance"));
     if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
         sketcher.ctr.reset(new Counter(opts.cssize()));
@@ -125,19 +125,20 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     if(nt > 1) {
         sketching_data.resize(nt, sketcher);
     } else sketching_data.emplace_back(std::move(sketcher));
-    //std::fprintf(stderr, "save ids: %d, save counts %d\n", save_ids, save_idcounts);
+    DBG_ONLY(std::fprintf(stderr, "save ids: %d, save counts %d\n", save_ids, save_idcounts);)
     size_t lastindex = 0;
     for_each_substr([&](const auto &x) {
+        DBG_ONLY(std::fprintf(stderr, "Processing substr %s\n", x.data());)
         if((ifp = gzopen(x.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to read from ") + x));
         gzbuffer(ifp, 1u << 17);
         bns::kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
-            //std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);
+            DBG_ONLY(std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);)
             ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);
             const int off = (myseq->name.s[0] == '>');
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
-                //std::fprintf(stderr, "batch index = %zu\n", batch_index);
+                DBG_ONLY(std::fprintf(stderr, "batch index = %zu\n", batch_index);)
                 resize_fill(opts, ret, seqs_per_batch, sketching_data, lastindex, nt);
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
@@ -159,33 +160,22 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     return ret;
 }
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nt) {
-    //std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
+    DBG_ONLY(std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);)
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && opts.build_sig_matrix_) {
-        if(newsz * opts.sketchsize_ > ret.signatures_.capacity()) {
-            ret.signatures_.reserve(sketch::integral::roundup(newsz) * opts.sketchsize_);
-        }
-        //std::fprintf(stderr, "old sig size %zu, new %zu\n", ret.signatures_.size(), newsz * opts.sketchsize_);
+        DBG_ONLY(std::fprintf(stderr, "old sig size %zu, new %zu\n", ret.signatures_.size(), newsz * opts.sketchsize_);)
         ret.signatures_.resize(newsz * opts.sketchsize_);
     }
-    if(ret.cardinalities_.size() < newsz)
-        ret.cardinalities_.reserve(sketch::integral::roundup(newsz));
     ret.cardinalities_.resize(newsz);
-    //std::fprintf(stderr, "mmer matrix size %zu. buuild %d, save kmers %d\n", ret.kmers_.size(), opts.build_mmer_matrix_, opts.save_kmers_);
+    DBG_ONLY(std::fprintf(stderr, "mmer matrix size %zu. buuild %d, save kmers %d\n", ret.kmers_.size(), opts.build_mmer_matrix_, opts.save_kmers_);)
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && (opts.build_mmer_matrix_ || opts.save_kmers_)) {
-        if(newsz * opts.sketchsize_ > ret.kmers_.capacity()) {
-            ret.kmers_.reserve(opts.sketchsize_ * sketch::integral::roundup(newsz));
-        }
         ret.kmers_.resize(opts.sketchsize_ * newsz);
     }
     if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
-        if(newsz * opts.sketchsize_ > ret.kmercounts_.capacity()) {
-            ret.kmercounts_.reserve(opts.sketchsize_ * sketch::integral::roundup(newsz));
-        }
         ret.kmercounts_.resize(opts.sketchsize_ * newsz);
     }
-    //std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");
+    DBG_ONLY(std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");)
     std::unique_ptr<std::vector<uint64_t>[]> seqmins;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);

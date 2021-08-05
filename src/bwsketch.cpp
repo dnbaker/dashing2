@@ -22,18 +22,32 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     std::string cache_path = path.substr(0, path.find_last_of('.'));
     cache_path += to_suffix(opts);
     if(opts.trim_folder_paths_) {
+        DBG_ONLY(std::fprintf(stderr, "Cached path before trimming: %s\n", cache_path.data());)
         cache_path = trim_folder(path);
+        DBG_ONLY(std::fprintf(stderr, "Cached path after trimming: %s\n", cache_path.data());)
         if(opts.outprefix_.size()) {
             cache_path = opts.outprefix_ + '/' + cache_path;
         }
     }
+    if(opts.seedseed_ != 0)
+        cache_path += ".seed" + std::to_string(opts.seedseed_);
+    if(opts.kmer_result_ <= FULL_SETSKETCH)
+        cache_path = cache_path + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
+    cache_path = cache_path + std::string(".k") + std::to_string(opts.k_);
+    if(opts.count_threshold_ > 0) {
+        cache_path = cache_path + ".ct_threshold";
+        if(std::fmod(opts.count_threshold_, 1.)) cache_path = cache_path + std::to_string(opts.count_threshold_);
+        else cache_path = cache_path + std::to_string(int(opts.count_threshold_));
+    }
+    cache_path += ".";
+    cache_path += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(opts.kmer_result_);
     if(opts.cache_sketches_ && !opts.by_chrom_ && bns::isfile(cache_path)) {
         auto nb = bns::filesize(cache_path.data());
         std::vector<RegT> save(nb / sizeof(RegT));
         std::FILE *ifp = std::fopen(cache_path.data(), "rb");
         if(!ifp) throw 1;
         if(std::fread(save.data(), nb, 1, ifp) != 1) {
-            std::fprintf(stderr, "Failed to read from disk; instead, sketching from scratch (%s)\n", path.data());
+            DBG_ONLY(std::fprintf(stderr, "Failed to read from disk; instead, sketching from scratch (%s)\n", path.data());)
         } else {
             ret.global_.reset(new std::vector<RegT>(std::move(save)));
         }
@@ -44,11 +58,11 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
         throw std::invalid_argument("Counting format must be exact for BigWigs. (No Count-Sketch approximation). This may change in the future.");
     }
     flat_hash_map<std::string, std::vector<RegT>> retmap;
-    std::fprintf(stderr, "Space: %s\n", opts.sspace_ == SPACE_SET ? "Set": opts.sspace_ == SPACE_MULTISET ? "Multist": opts.sspace_ == SPACE_PSET ? "Probdist": "Editdist");
+    DBG_ONLY(std::fprintf(stderr, "Space: %s\n", to_string(opts.sspace_).data());)
     if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_MULTISET && opts.sspace_ != SPACE_PSET)
         throw std::invalid_argument("Can't do edit distance for BigWig files");
     if(bwInit(BW_READ_BUFFER)) {
-        std::fprintf(stderr, "Error in initializing bigwig\n");
+        DBG_ONLY(std::fprintf(stderr, "Error in initializing bigwig\n");)
         return ret;
     }
     bigWigFile_t *fp = bwOpen(path.data(), nullptr, "r");
@@ -93,7 +107,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
             else if(opss.size()) {opss[tid].reset();}
             else if(bmhs.size()) {bmhs[tid].reset();}
             else if(pmhs.size()) {pmhs[tid].reset();}
-            else throw std::invalid_argument("Not supported: sketching besides PMH, BMH, SetSketch for BED files");
+            else throw std::invalid_argument("Not supported: sketching besides PMH, BMH, SetSketch for BigWig files");
             for(;ptr->data;ptr = bwIteratorNext(ptr)) {
                 const uint32_t numi = ptr->intervals->l;
                 float *vptr = ptr->intervals->value;

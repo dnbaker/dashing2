@@ -98,5 +98,6 @@ std::string trim_folder(const std::string &s);
 struct Dashing2Options;
 
 std::string to_suffix(const Dashing2Options &opts);
+void checked_fwrite(std::FILE *fp, const void *src, const size_t nb);
 
 }

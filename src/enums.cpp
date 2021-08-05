@@ -65,4 +65,10 @@ std::string to_string(OutputKind ok) {
     return "Deduplication (not supported yet)";
 }
 
+void checked_fwrite(std::FILE *const fp, const void *const ptr, const size_t nb) {
+    unsigned long long lrc = std::fwrite(static_cast<const void *>(ptr), 1, nb, fp);
+    if(unlikely(lrc != static_cast<size_t>(nb)))
+         throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered write of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead writing " + std::to_string(lrc) + " bytes");
+}
+
 }

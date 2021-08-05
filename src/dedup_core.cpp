@@ -5,11 +5,6 @@
 #include "omp.h"
 #endif
 
-#define checked_fwrite(fp, ptr, nb) \
-    do {\
-        if(unsigned long long lrc = std::fwrite(static_cast<const void *>(ptr), 1, nb, fp); lrc != static_cast<size_t>(nb)) \
-            throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered write of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead writing " + std::to_string(lrc) + " bytes");\
-    } while(0)
 
 namespace dashing2 {
 
