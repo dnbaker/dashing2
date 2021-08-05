@@ -230,15 +230,27 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             //std::fprintf(stderr, "Processed items for %zu\n", i);
         } else {
             //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
-            sketchers.for_each([&](auto x) {
-                x = maskfn(x);
-                if(opts.fs_ && opts.fs_->in_set(x)) return;
-                if(sketchers.opss) sketchers.opss->update(x);
-                else if(sketchers.ctr)
-                    sketchers.ctr->add(x);
-                else if(sketchers.fss)
-                    sketchers.fss->update(x);
-            }, ret.sequences_[i].data(), ret.sequences_[i].size());
+            auto seqp = ret.sequences_[i].data();
+            auto seql = ret.sequences_[i].size();
+            if(opts.fs_) {
+                sketchers.for_each([&](auto x) {
+                    x = maskfn(x);
+                    if(opts.fs_->in_set(x)) return;
+                    if(sketchers.opss) sketchers.opss->update(x);
+                    else if(sketchers.ctr)
+                        sketchers.ctr->add(x);
+                    else if(sketchers.fss)
+                        sketchers.fss->update(x);
+                }, seqp, seql);
+            } else {
+                const bool isop = sketchers.opss.get(), isctr = sketchers.ctr.get(), isfs = sketchers.fss.get();
+                sketchers.for_each([&](auto x) {
+                    x = maskfn(x);
+                    if(isop) sketchers.opss->update(x);
+                    else if(isctr) sketchers.ctr->add(x);
+                    else if(isfs) sketchers.fss->update(x);
+                }, seqp, seql);
+            }
             RegT *ptr = nullptr;
             const uint64_t *kmer_ptr = nullptr;
             std::vector<double> kmercounts;
@@ -259,11 +271,15 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     if(ret.cardinalities_[i] < 10 * opts.sketchsize_) {
                         flat_hash_set<uint64_t> ids;
                         ids.reserve(opts.sketchsize_);
-                        sketchers.for_each([&](auto x) {
-                            x = maskfn(x);
-                            if(opts.fs_ && opts.fs_->in_set(x)) return;
-                            ids.insert(x);
-                        }, ret.sequences_[i].data(), ret.sequences_[i].size());
+                        if(opts.fs_) {
+                            sketchers.for_each([&](auto x) {
+                                x = maskfn(x);
+                                if(opts.fs_->in_set(x)) return;
+                                ids.insert(x);
+                            }, ret.sequences_[i].data(), ret.sequences_[i].size());
+                        } else {
+                            sketchers.for_each([&](auto x) {ids.insert(maskfn(x));}, ret.sequences_[i].data(), ret.sequences_[i].size());
+                        }
                         ret.cardinalities_[i] = ids.size();
                     }
                     kmer_ptr = sketchers.opss ? sketchers.opss->ids().data(): sketchers.fss->ids().data();

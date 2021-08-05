@@ -215,7 +215,13 @@ static INLINE bool endswith(std::string lhs, std::string rhs) {
 extern uint64_t XORMASK;
 extern u128_t XORMASK2;
 
-INLINE uint64_t maskfn(uint64_t x) {return x ^ XORMASK;}
+INLINE uint64_t maskfn(uint64_t x) {
+    x ^= XORMASK;
+#if WANGHASH_EXTRA
+    x = sketch::hash::WangHash::hash(x);
+#endif
+    return x;
+}
 INLINE u128_t maskfn(u128_t x) {return x ^ XORMASK2;}
 
 using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;

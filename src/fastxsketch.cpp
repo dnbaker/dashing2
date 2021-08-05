@@ -332,20 +332,29 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 continue;
             } else {
 #ifndef NDEBUG
-                std::fprintf(stderr, "We skipped caching because: %d is cache sketches\n", opts.cache_sketches_);
+                std::fprintf(stderr, "We skipped caching because with %d as cache sketches\n", opts.cache_sketches_);
                 std::fprintf(stderr, "destisfile: %d. is countdict %d. is kmerfile %d\n", destisfile, opts.kmer_result_ == FULL_MMER_COUNTDICT, dkif);
                 std::fprintf(stderr, "kc save %d, kmer result %s, dkcif %d\n", opts.save_kmercounts_, to_string(opts.kmer_result_).data(), dkcif);
 #endif
             }
             __RESET(tid);
-            auto perf_for_substrs = [&](const auto &func) {
+            auto perf_for_substrs = [&](const auto &func) __attribute__((always_inline)) {
                 for_each_substr([&](const std::string &subpath) {
-                    auto lfunc = [&](auto x) {
+                    auto lfunc = [&](auto x) __attribute__((always_inline)) {
                         x = maskfn(x);
                         if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass())
                             func(x);
                     };
-#define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
+                    auto lfunc2 = [&func](auto x) __attribute__((always_inline)) {func(maskfn(x));};
+                    auto seqp = kseqs.kseqs_ + tid;
+#define FUNC_FE(f) \
+    do {\
+        if(!opts.fs_ && opts.kmer_downsample_frac_ == 1.) {\
+            f(lfunc2, subpath.data(), seqp);\
+        } else {\
+            f(lfunc, subpath.data(), seqp);\
+        } \
+    } while(0)
                     if(opts.use128()) {
                         if(unsigned(opts.k_) <= opts.nremperres128()) {
                             auto encoder(opts.enc_.to_u128());
