@@ -10,7 +10,7 @@ namespace dashing2 {
 
 using option_struct = struct option;
 
-enum OptArg{
+enum OptArg {
     OPTARG1 = 1000,
     OPTARG_BED,
     OPTARG_BIGWIG,
@@ -43,6 +43,8 @@ enum OptArg{
     OPTARG_HELP,
     OPTARG_CMP_BATCH_SIZE,
     OPTARG_GREEDY,
+    OPTARG_NLSH,
+    OPTARG_ENTROPYMIN,
     OPTARG_DUMMY
 };
 
@@ -124,7 +126,9 @@ enum OptArg{
     {"parse-by-seq", no_argument, 0, OPTARG_PARSEBYSEQ},\
     {"help", no_argument, 0, OPTARG_HELP},\
     {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE},\
-    {"greedy", required_argument, 0, OPTARG_GREEDY}
+    {"greedy", required_argument, 0, OPTARG_GREEDY},\
+    {"nlsh", required_argument, 0, OPTARG_NLSH},\
+    {"entmin", no_argument, 0, OPTARG_ENTROPYMIN}
 
 
 
@@ -190,7 +194,9 @@ enum OptArg{
         case OPTARG_RANDOM_SEED: {seedseed = std::strtoull(optarg, 0, 10);} break;\
         case OPTARG_FILTERSET: fsarg = optarg; break;\
         case OPTARG_PARSEBYSEQ: parse_by_seq = true; break;\
-        case OPTARG_CMP_BATCH_SIZE: batch_size = std::strtoull(optarg, 0, 10); break;
+        case OPTARG_CMP_BATCH_SIZE: batch_size = std::strtoull(optarg, 0, 10); break;\
+        case OPTARG_NLSH: nLSH = std::atoi(optarg); break;\
+        case OPTARG_ENTROPYMIN: entmin = true; break;\
 
 
 
@@ -212,6 +218,7 @@ static constexpr const char *siglen =
         "\n\nFastx Options:\n"\
         "-k/--kmer-length: set k\n"\
         "-w/--window-size: set window size for winnowing; by default, all m-mers are used.\n"\
+        "--entmin: If -w/--window-size is enabled, this option weights the hash value by the entropy of the k-mer itself.\nThis is only valid for k-mers short enough to be encoded exactly in 64-bit or 128-bit integers, depending on if --long-kmers is enabled.\n"\
         "--spacing: Set a spacing scheme for spaced minimizers\n"\
         "-2/--128bit/long-kmers: Use 128-bit k-mer hashes instead of 64-bit\n"\
         "-m/--threshold: Set a count threshold for inclusion. Default: 0.\n"\
@@ -312,7 +319,13 @@ static constexpr const char *siglen =
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
         "--batch-size [16] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
-        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"
+        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"\
+        "LSH options\n"\
+        "There are a variety of heuristics in the LSH tables; however, the most important besides sketch size is the number of hash tables used.\n"\
+        "--nlsh <int=2>\t This sets the number of LSH tables. The first 3 tables use powers of 2, and subsequent tables use 2 times the index.\n"\
+        "If 2 is used (default), these will be of sizes (1, 2), but 4 yields (1, 2, 4, 6) and 5 yields (1, 2, 4, 6, 8).\n"\
+        "Increase this number to pay more memory/time for higher accuracy.\n"\
+        "Decrease this number for higher speed and lower accuracy.\n"\
 
 
 

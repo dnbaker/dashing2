@@ -1,7 +1,6 @@
 #include "cmp_main.h"
 #include "src/ssi.h"
 #include "minispan.h"
-#include "fastiota.h"
 #ifdef _OPENMP
 #include "omp.h"
 #endif
@@ -101,10 +100,6 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
     }
     auto mv = std::min_element(vals.data(), vp);
     if(hits.empty() || (mv != vp && mult * *mv < simt)) {
-#ifndef NDEBUG
-        if(mv != vp && mult * *mv < simt)
-            std::fprintf(stderr, "Max similarity is %g vs %g vs %g\n", mult * *mv, simt, *std::max_element(vals.data(), vp));
-#endif
         ids.push_back(oid);
         DBG_ONLY(size_t nids = ids.size();)
         constituents.emplace_back();
@@ -113,11 +108,6 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
             idx.update(mp);
         DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / result.names_.size());)
     } else {
-        if(mv == vp) {
-            std::fprintf(stderr, "hits not empty (%zu) , but mv is out of range\n", hits.size());
-            // This shouldn't happen, but could if there are NANs in the data.
-            return;
-        }
         auto pos = mv - vals.data();
         assert(size_t(pos) < hits.size());
         auto cluster_id = hits[pos];
@@ -141,10 +131,7 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
 
 
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, Dashing2DistOptions &opts, const SketchingResult &result) {
-    std::vector<LSHIDType> order(result.names_.size());
-    fastiota::iota(order.data(), order.size());
-    assert(std::all_of(order.begin(), order.end(), [&](auto &x) {return x == uint64_t(&x - order.data());}));
-    std::sort(order.begin(), order.end(), [&v=result.cardinalities_](auto x, auto y) {return v[x] < v[y];});
+    const size_t nelem = result.names_.size();
 
     int nt = 1;
 #ifdef _OPENMP
@@ -158,23 +145,24 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         std::vector<LSHIDType> ids;
         std::vector<std::vector<LSHIDType>> constituents;
         auto &idx = retidx;
-        for(size_t i = 0; i < order.size(); ++i) {
-            update_res(order[i], ids, constituents, idx, opts, result);
+        for(size_t i = 0; i < nelem; ++i) {
+            update_res(i, ids, constituents, idx, opts, result);
         }
         return std::make_pair(ids, constituents);
     } else {
         std::vector<GreedyClustering> subs;
+        retidx.unlock();
         subs.reserve(nt);
         while(subs.size() < unsigned(nt))
-            subs.emplace_back(result, opts, retidx, false, MINCAND);
+            subs.emplace_back(result, opts, retidx, true, MINCAND);
         OMP_PFOR_DYN
-        for(size_t i = 0; i < order.size(); ++i) {
+        for(size_t i = 0; i < nelem; ++i) {
             const int tid = OMP_ELSE(omp_get_thread_num(), 0);
             //std::fprintf(stderr, "%zu from %d\n", i, tid);
             assert(tid < int(subs.size()));
             auto &lres = subs[tid];
             //std::fprintf(stderr, "lres ptr: %p\n", &lres);
-            update_res(order[i], lres.ids_, lres.constituents_, lres.idx_, opts, result);
+            update_res(i, lres.ids_, lres.constituents_, lres.idx_, opts, result);
             //std::fprintf(stderr, "Finished %zu from %d\n", i, tid);
         }
         par_reduce(subs.data(), subs.size());

@@ -302,7 +302,6 @@ case v: {\
             else if(measure == CONTAINMENT) res /= lhc;\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
-        std::fprintf(stderr, "Dest paths are %s, %s. Loading from them\n", lpath.data(), rpath.data());
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
         std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
         std::string lcmd = path2cmd(lpath), rcmd = path2cmd(rpath);
@@ -437,7 +436,10 @@ void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
     // thresholded nn graphs
 
     // Step 1: Build LSH Index
-    std::vector<uint64_t> nperhashes{1, 2, 3, 4};
+    std::vector<uint64_t> nperhashes;
+    while(nperhashes.size() < opts.nLSH) {
+        nperhashes.emplace_back(nperhashes.size() < 3 ? (1ull << nperhashes.size()): static_cast<unsigned long long>(nperhashes.size() * 2));
+    }
     std::vector<uint64_t> nperrows(nperhashes.size());
     for(size_t i = 0; i < nperhashes.size(); ++i) {
         const auto nh = nperhashes[i];

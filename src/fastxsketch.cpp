@@ -233,9 +233,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         for(size_t i = 0; i < ret.names_.size(); ++i) {
             std::fprintf(stderr, "name %zu is %s\n", i, ret.names_[i].data());
         }
-#endif
         std::fprintf(stderr, "kmer result type: %s\n", to_string(opts.kmer_result_).data());
         std::fprintf(stderr, "sketching space type: %s\n", to_string(opts.sspace_).data());
+#endif
         std::string suffix = to_suffix(opts);
         auto makedest = [&](const std::string &path) -> std::string {
             std::string ret(path);
@@ -249,6 +249,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 ret += ".seed" + std::to_string(opts.seedseed_);
             if(opts.canonicalize())
                 ret += ".rc_canon";
+            if(!opts.sp_.unspaced()) {
+                ret += opts.sp_.to_string();
+            }
             if(opts.kmer_result_ <= FULL_SETSKETCH)
                 ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
             ret = ret + std::string(".k") + std::to_string(opts.k_);
@@ -332,30 +335,48 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 continue;
             } else {
 #ifndef NDEBUG
-                std::fprintf(stderr, "We skipped caching because: %d is cache sketches\n", opts.cache_sketches_);
+                std::fprintf(stderr, "We skipped caching because with %d as cache sketches\n", opts.cache_sketches_);
                 std::fprintf(stderr, "destisfile: %d. is countdict %d. is kmerfile %d\n", destisfile, opts.kmer_result_ == FULL_MMER_COUNTDICT, dkif);
                 std::fprintf(stderr, "kc save %d, kmer result %s, dkcif %d\n", opts.save_kmercounts_, to_string(opts.kmer_result_).data(), dkcif);
 #endif
             }
             __RESET(tid);
-            auto perf_for_substrs = [&](const auto &func) {
+            auto perf_for_substrs = [&](const auto &func) __attribute__((always_inline)) {
                 for_each_substr([&](const std::string &subpath) {
-                    auto lfunc = [&](auto x) {
+                    auto lfunc = [&](auto x) __attribute__((always_inline)) {
                         x = maskfn(x);
-                        if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass())
-                            func(x);
+                        if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass()) func(x);
                     };
-#define FUNC_FE(f) f(lfunc, subpath.data(), kseqs.kseqs_ + tid)
+                    auto lfunc2 = [&func](auto x) __attribute__((always_inline)) {func(maskfn(x));};
+                    auto seqp = kseqs.kseqs_ + tid;
+#define FUNC_FE(f) \
+    do {\
+        if(!opts.fs_ && opts.kmer_downsample_frac_ == 1.) {\
+            f(lfunc2, subpath.data(), seqp);\
+        } else {\
+            f(lfunc, subpath.data(), seqp);\
+        } \
+    } while(0)
                     if(opts.use128()) {
                         if(unsigned(opts.k_) <= opts.nremperres128()) {
-                            auto encoder(opts.enc_.to_u128());
-                            FUNC_FE(encoder.for_each);
+                            if(entmin) {
+                                auto encoder(opts.enc_.to_entmin128());
+                                FUNC_FE(encoder.for_each);
+                            } else {
+                                auto encoder(opts.enc_.to_u128());
+                                FUNC_FE(encoder.for_each);
+                            }
                         } else {
                             FUNC_FE(opts.rh128_.for_each_hash);
                         }
                     } else if(unsigned(opts.k_) <= opts.nremperres64()) {
-                        auto encoder(opts.enc_);
-                        FUNC_FE(encoder.for_each);
+                        if(entmin) {
+                            auto encoder(opts.enc_.to_entmin64());
+                            FUNC_FE(encoder.for_each);
+                        } else {
+                            auto encoder(opts.enc_);
+                            FUNC_FE(encoder.for_each);
+                        }
                     } else {
                         FUNC_FE(opts.rh_.for_each_hash);
                     }

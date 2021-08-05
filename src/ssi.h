@@ -10,7 +10,9 @@
 #include "flat_hash_map/flat_hash_map.hpp"
 #include "sketch/div.h"
 #include "sketch/integral.h"
+#include "sketch/hash.h"
 #include <mutex>
+#include <optional>
 
 
 namespace sketch {
@@ -66,6 +68,9 @@ public:
         }
         total_ids_ = 0;
     }
+    void unlock() {
+        mutexes_.clear();
+    }
     template<typename IT, typename Alloc>
     SetSketchIndex(size_t m, const std::vector<IT, Alloc> &nperhashes): m_(m) {
         total_ids_ = 0;
@@ -98,6 +103,9 @@ public:
         regs_per_reg_ = o.regs_per_reg_;
         packed_maps_ = o.packed_maps_;
         mutexes_.resize(o.mutexes_.size());
+        for(size_t i = 0; i < o.mutexes_.size(); ++i) {
+            mutexes_[i] = std::vector<std::mutex>(o.mutexes_[i].size());
+        }
         is_bottomk_only_ = o.is_bottomk_only_;
         return *this;
     }
@@ -152,12 +160,14 @@ public:
         for(size_t i = 0; i < n_subtable_lists; ++i) {
             auto &subtab = packed_maps_[i];
             auto &submut = mutexes_[i];
+            std::vector<std::mutex> *mptr = nullptr;
+            if(mutexes_.size() > i) mptr = &mutexes_[i];
             const size_t nsubs = subtab.size();
             for(size_t j = 0; j < nsubs; ++j) {
                 assert(j < subtab.size());
                 auto &table = subtab[j];
                 KeyT myhash = hash_index(item, i, j);
-                std::lock_guard<std::mutex> lock(submut[j]);
+                std::optional<std::lock_guard<std::mutex>> lock(mptr ? std::optional<std::lock_guard<std::mutex>>((*mptr)[j]): std::optional<std::lock_guard<std::mutex>>());
                 auto it = table.find(myhash);
                 if(it == table.end()) {
                     table.emplace(myhash, std::vector<IdT>{static_cast<IdT>(my_id)});
@@ -221,7 +231,10 @@ public:
     template<typename Sketch>
     void insert_bottomk(const Sketch &item, size_t my_id) {
         auto &map = packed_maps_.front().front();
-        std::lock_guard<std::mutex> lock(mutexes_.front().front());
+        std::optional<std::lock_guard<std::mutex>> lock(
+            !mutexes_.empty() && !mutexes_.front().empty()
+            ? std::optional<std::lock_guard<std::mutex>>(mutexes_.front().front())
+            : std::optional<std::lock_guard<std::mutex>>());
         for(const auto v: item) {
             auto it = map.find(v);
             if(it == map.end()) {
@@ -242,34 +255,90 @@ public:
         for(size_t i = 0; i < n_subtable_lists; ++i) {
             //std::fprintf(stderr, "Accessing subtable %zu/%zu. mutexes size: %zu\n", i, n_subtable_lists, mutexes_.size());
             auto &subtab = packed_maps_[i];
-            auto &muts = mutexes_.at(i);
+            std::vector<std::mutex> *mptr = nullptr;
+            if(mutexes_.size() > i) mptr = &mutexes_[i];
             const size_t nsubs = subtab.size();
             for(size_t j = 0; j < nsubs; ++j) {
                 KeyT myhash = hash_index(item, i, j);
                 assert(j < subtab.size());
-                std::lock_guard<std::mutex> lock(muts.at(j));
+                std::optional<std::lock_guard<std::mutex>> lock(mptr ? std::optional<std::lock_guard<std::mutex>>((*mptr)[j]): std::optional<std::lock_guard<std::mutex>>());
                 subtab[j][myhash].push_back(my_id);
             }
         }
         return my_id;
     }
+    INLINE KeyT hashmem128(const uint64_t *x) const {
+        uint64_t v[2];
+        std::memcpy(&v, x, sizeof(v));
+        v[0] = sketch::hash::WangHash::hash(v[0]);
+        v[1] = sketch::hash::WangHash::hash(v[1] ^ v[0]);
+        return v[0] ^ v[1];
+    }
+    INLINE KeyT hashmem64(const uint64_t *x) const {
+        uint64_t v;
+        std::memcpy(&v, x, sizeof(v));
+        v = sketch::hash::WangHash::hash(v);
+        return v;
+    }
+    INLINE KeyT hashmem32(const uint32_t *x) const {
+        // MurMur3 finalizer
+        uint32_t v;
+        std::memcpy(&v, x, sizeof(v));
+        v ^= v >> 16;
+        v *= 0x85ebca6b;
+        v ^= v >> 13;
+        v *= 0xc2b2ae35;
+        v ^= v >> 16;
+        return v;
+    }
+    INLINE KeyT hashmem16(const uint16_t *x) const {
+        uint32_t v = 0;
+        std::memcpy(&v, x, sizeof(*x));
+        v = ((v + 0x428eca6b) * 0x85ebca6b);
+        v ^= v >> 16;
+        return v;
+    }
+    INLINE KeyT hashmem8(const uint8_t *x) const {
+        KeyT v = ((*x + 0x428eca6b) * 0x85ebca6b);
+        v ^= v >> 16;
+        return v;
+    }
+    template<typename T>
+    INLINE KeyT hashmem(const T &x, size_t n) const {
+        KeyT ret;
+        switch(sizeof(T) * n) {
+            case 1: ret =  hashmem8((const uint8_t *)&x); break;
+            case 2: ret =  hashmem16((const uint16_t *)&x); break;
+            case 4: ret =  hashmem32((const uint32_t *)&x); break;
+            case 8: ret =  hashmem64((const uint64_t *)&x); break;
+            case 16: ret =  hashmem128((const uint64_t *)&x); break;
+            default: ret = XXH3_64bits(&x, n * sizeof(T));
+        }
+        return ret;
+    }
     template<typename Sketch>
-    KeyT hash_index(const Sketch &item, size_t i, size_t j) const {
+    INLINE KeyT hash_index(const Sketch &item, size_t i, size_t j) const {
         if(is_bottomk_only_) {
             return item[j];
         }
         const size_t nreg = regs_per_reg_[i];
         static constexpr size_t ITEMSIZE = sizeof(std::decay_t<decltype(item[0])>);
-        if((j + 1) * nreg <= m_)
-            return XXH3_64bits(&item[nreg * j], nreg * ITEMSIZE);
+        if((j + 1) * nreg <= m_) {
+            return hashmem(item[nreg * j], nreg);
+        }
         uint64_t seed = ((i << 32) ^ (i >> 32)) | j;
         XXH64_state_t state;
         XXH64_reset(&state, seed);
         const schism::Schismatic<uint32_t> div(m_);
-        for(size_t ri = 0; ri < nreg; ++ri) {
-            auto pos = div.mod(wyhash64_stateless(&seed));
-            XXH64_update(&state, &item[pos], ITEMSIZE);
+#define SINGLE_UPDATE \
+    XXH64_update(&state, &item[div.mod(wyhash64_stateless(&seed))], ITEMSIZE);
+        for(size_t ri8 = nreg / 8;ri8--;) {
+#define TWICE(X) X X
+            TWICE(TWICE(TWICE(SINGLE_UPDATE)))
         }
+        for(size_t ri = 0; ri < nreg; ++ri) SINGLE_UPDATE
+#undef TWICE
+#undef SINGLE_UPDATE
         return XXH64_digest(&state);
     }
     template<typename Sketch>
@@ -296,8 +365,7 @@ public:
                             passing_ids.push_back(id);
                             if(early_stop && rset.size() == maxcand)
                                 goto bk_end;
-                            ++rit2->second;
-                        }
+                        } else ++rit2->second;
                     }
                 }
             }

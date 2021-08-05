@@ -126,6 +126,7 @@ int cmp_main(int argc, char **argv) {
     bool normalize_bed = false;
     int topk_threshold = -1;
     int truncate_mode = 0;
+    int nLSH = 2;
     double nbytes_for_fastdists = sizeof(RegT);
     double downsample_frac = 1.;
     bool parse_by_seq = false;
@@ -173,7 +174,6 @@ int cmp_main(int argc, char **argv) {
         .cache_sketches(cache)
         .cssize(cssize)
         .sketchsize(sketchsize)
-        .save_kmers(save_kmers)
         .outprefix(outprefix)
         .save_kmercounts(save_kmercounts)
         .save_kmers(save_kmers)
@@ -189,7 +189,7 @@ int cmp_main(int argc, char **argv) {
         opts.sketchsize_ += opts.sketchsize_ & 1; // Ensure that sketch size is a multiple of 2 if using nibbles
     opts.bed_parse_normalize_intervals_ = normalize_bed;
     opts.downsample(downsample_frac);
-    Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact);
+    Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
     distopts.measure_ = measure;
     distopts.cmp_batch_size_ = std::max(batch_size, size_t(distopts.nthreads()));
     SketchingResult result;
