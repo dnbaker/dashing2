@@ -152,15 +152,26 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && opts.build_sig_matrix_) {
+        if(newsz * opts.sketchsize_ > ret.signatures_.capacity()) {
+            ret.signatures_.reserve(sketch::integral::roundup(newsz) * opts.sketchsize_);
+        }
         //std::fprintf(stderr, "old sig size %zu, new %zu\n", ret.signatures_.size(), newsz * opts.sketchsize_);
         ret.signatures_.resize(newsz * opts.sketchsize_);
     }
+    if(ret.cardinalities_.size() < newsz)
+        ret.cardinalities_.reserve(sketch::integral::roundup(newsz));
     ret.cardinalities_.resize(newsz);
     //std::fprintf(stderr, "mmer matrix size %zu. buuild %d, save kmers %d\n", ret.kmers_.size(), opts.build_mmer_matrix_, opts.save_kmers_);
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && (opts.build_mmer_matrix_ || opts.save_kmers_)) {
+        if(newsz * opts.sketchsize_ > ret.kmers_.capacity()) {
+            ret.kmers_.reserve(opts.sketchsize_ * sketch::integral::roundup(newsz));
+        }
         ret.kmers_.resize(opts.sketchsize_ * newsz);
     }
     if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
+        if(newsz * opts.sketchsize_ > ret.kmercounts_.capacity()) {
+            ret.kmercounts_.reserve(opts.sketchsize_ * sketch::integral::roundup(newsz));
+        }
         ret.kmercounts_.resize(opts.sketchsize_ * newsz);
     }
     //std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");
@@ -168,7 +179,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
     }
-    OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic,16)")
+    OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
         DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)

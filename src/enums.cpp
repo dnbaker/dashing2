@@ -52,17 +52,6 @@ std::string to_string(CountingType ct) {
     return "UNKNOWN COUNTING";
 }
 
-bool iscomp(const std::string &s) {
-    bool ret = false;
-    if(s.size() >= 3) {
-        if(std::equal(&s[s.size() - 3], &s[s.size()], ".gz")) ret = true;
-        else if(std::equal(&s[s.size() - 3], &s[s.size()], ".xz")) ret = true;
-        else if(std::equal(&s[s.size() - 4], &s[s.size()], ".bz2")) ret = true;
-    }
-    //std::fprintf(stderr, "%s is %d/%s\n", s.data(), int(ret), ret ? "compressed": "uncompressed");
-    return ret;
-}
-
 
 std::string to_string(OutputFormat of) {
     if(of == HUMAN_READABLE) return "HumanReadable";

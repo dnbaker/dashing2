@@ -233,9 +233,9 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         for(size_t i = 0; i < ret.names_.size(); ++i) {
             std::fprintf(stderr, "name %zu is %s\n", i, ret.names_[i].data());
         }
-#endif
         std::fprintf(stderr, "kmer result type: %s\n", to_string(opts.kmer_result_).data());
         std::fprintf(stderr, "sketching space type: %s\n", to_string(opts.sspace_).data());
+#endif
         std::string suffix = to_suffix(opts);
         auto makedest = [&](const std::string &path) -> std::string {
             std::string ret(path);
