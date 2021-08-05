@@ -276,7 +276,7 @@ int wsketch_main(int argc, char **argv) {
         outpref = argv[optind];
     }
     if(diff == 3) {
-        std::fprintf(stderr, "Getting CSR hashes\n");
+        //std::fprintf(stderr, "Getting CSR hashes\n");
         auto mhrs = wmh_from_file_csr(argv[optind], argv[optind + 1], argv[optind + 2], sketchsize, sketchtype, f32, u32, ip32);
         std::FILE *fp = std::fopen((outpref + ".sampled.indices.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64").data(), "wb");
         for(size_t i = 0; i < mhrs.size(); ++i) {
