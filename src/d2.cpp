@@ -114,12 +114,12 @@ bool entmin = false;
 
 int main_usage() {
     std::fprintf(stderr, "dashing2 has several subcommands\n");
-    std::fprintf(stderr, "Usage can be seen in those commands.\n");
-    std::fprintf(stderr, "sketch: converts FastX into k-mer sets/sketches, and sketches BigWig and BED files; also contains functionality from cmp, for one-step sketch and comparisons\n"
-                         "This is probably the most common subcommand to use.\n"
+    std::fprintf(stderr, "Usage can be seen in those commands.\n\n");
+    std::fprintf(stderr, "\tsketch: converts FastX into k-mer sets/sketches, and sketches BigWig and BED files; also contains functionality from cmp, for one-step sketch and comparisons\n"
+                         "This is probably the most common subcommand to use.\n\n"
     );
-    std::fprintf(stderr, "cmp: compares previously sketched/decomposed k-mer sets and emits results. alias: dist\n");
-    std::fprintf(stderr, "wsketch: Takes a tuple of [1-3] input binary files [(u32 or u64), (float or double), (u32 or u64)] and performs weighted minhash sketching.\n"
+    std::fprintf(stderr, "\tcmp: compares previously sketched/decomposed k-mer sets and emits results. alias: dist\n\n");
+    std::fprintf(stderr, "\twsketch: Takes a tuple of [1-3] input binary files [(u32 or u64), (float or double), (u32 or u64)] and performs weighted minhash sketching.\n"
                          "Three files are treated as Compressed Sparse Row (CSR)-format, where the third file contains indptr values, specifying the lengths of consecutive runs of pairs in the first two files corresponding to each row.\n"
                          "wsketch is for sketching binary files which have already been summed, whereas sketch is for parsing and sketching (from Fast{qa}, BED, BigWig)\n");
     return 1;

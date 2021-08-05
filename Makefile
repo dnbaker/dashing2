@@ -25,6 +25,7 @@ OBJLTO=$(patsubst %.o,%.lto,$(OFS))
 OBJ0=$(patsubst %.o,%.0,$(OFS))
 OBJV=$(patsubst %.o,%.vo,$(OFS))
 OBJG=$(patsubst %.o,%.gobj,$(OFS))
+OBJW=$(patsubst %.o,%.wo,$(OFS))
 
 all: dashing2 dashing2-64
 unit: readfx readbw readbed
@@ -49,12 +50,12 @@ LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 
 dashing2: $(OBJ) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
+dashing2-64: $(OBJ64) libBigWig.a
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -DLSHIDTYPE="uint64_t"
 
 
 dashing2-0: $(OBJ0) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
-dashing2-64: $(OBJ64) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -DLSHIDTYPE="uint64_t"
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-v: $(OBJV) libBigWig.a $(wildcard src/*.h)
@@ -73,6 +74,8 @@ dashing2-f64: $(OBJF64) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 dashing2-ld64: $(OBJLD64) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+dashing2-w: $(OBJW) libBigWig.a $(wildcard src/*.h)
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJW) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto -DWANGHASH_EXTRA=1
 read%: test/read%.o $(LIBOBJ)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 read%-ld: test/read%.ldo $(LDLIBOBJ)
@@ -84,6 +87,8 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	# $(wildcard src/*.h)
 %.o: %.cpp
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3
+%.wo: %.cpp
+	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DWANGHASH_EXTRA=1
 %.o: %.c
 	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -std=c11
 %.64o: %.cpp
