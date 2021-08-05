@@ -15,11 +15,13 @@ struct OptSketcher {
     bns::RollingHasher<u128_t> rh128_;
     bns::Encoder<bns::score::Lex, uint64_t> enc_;
     bns::Encoder<bns::score::Lex, u128_t> enc128_;
+    bns::Encoder<bns::score::Entropy, uint64_t> ence_;
+    bns::Encoder<bns::score::Entropy, u128_t> ence128_;
     int k_, w_;
     bool use128_;
     bns::InputType it_;
     OptSketcher&operator=(const OptSketcher &o) {
-        rh_ = o.rh_; rh128_ = o.rh128_; enc_ = o.enc_; enc128_ = o.enc128_; k_ = o.k_; w_ = o.w_; use128_ = o.use128_; it_ = o.it_;
+        rh_ = o.rh_; rh128_ = o.rh128_; enc_ = o.enc_; enc128_ = o.enc128_; ence_ = o.ence_; ence128_ = o.ence128_; k_ = o.k_; w_ = o.w_; use128_ = o.use128_; it_ = o.it_;
         input_mode(o.input_mode());
         if(o.ctr) ctr.reset(new Counter(*o.ctr));
         if(o.bmh) bmh.reset(new BagMinHash(*o.bmh));
@@ -29,7 +31,7 @@ struct OptSketcher {
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
         return *this;
     }
-    OptSketcher(const OptSketcher &o): rh_(o.rh_), rh128_(o.rh128_), enc_(o.enc_), enc128_(o.enc128_), k_(o.k_), w_(o.w_), use128_(o.use128_) {
+    OptSketcher(const OptSketcher &o): rh_(o.rh_), rh128_(o.rh128_), enc_(o.enc_), enc128_(o.enc128_), ence_(o.ence_), ence128_(o.ence128_), k_(o.k_), w_(o.w_), use128_(o.use128_) {
         input_mode(o.input_mode());
         if(o.ctr) ctr.reset(new Counter(*o.ctr));
         if(o.bmh) bmh.reset(new BagMinHash(*o.bmh));
@@ -38,7 +40,7 @@ struct OptSketcher {
         else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
     }
-    OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), k_(opts.k_), w_(opts.w_), use128_(opts.use128()) {
+    OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), ence_(enc_.to_entmin64()), ence128_(enc_.to_entmin128()), k_(opts.k_), w_(opts.w_), use128_(opts.use128()) {
         input_mode(opts.input_mode());
         assert(opts.hashtype() == it_);
         if(opts.sspace_ == SPACE_EDIT_DISTANCE)
@@ -49,7 +51,7 @@ struct OptSketcher {
         if(use128_) {
             if(unsigned(k_) <= enc_.nremperres128()) {
                 if(entmin)
-                    enc128_.to_entmin128().for_each(func, s, n);
+                    ence128_.for_each(func, s, n);
                 else
                     enc128_.for_each(func, s, n);
             } else {
@@ -58,7 +60,7 @@ struct OptSketcher {
         } else {
             if(unsigned(k_) <= enc_.nremperres64()) {
                 if(entmin)
-                    enc_.to_entmin64().for_each(func, s, n);
+                    ence_.for_each(func, s, n);
                 else
                     enc_.for_each(func, s, n);
             } else
@@ -194,8 +196,10 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)
         auto &sketchers(sketchvec[tid]);
         sketchers.reset();
+        const auto seqp = ret.sequences_[i].data();
+        const auto seql = ret.sequences_[i].size();
         if(sketchers.omh) {
-            std::vector<uint64_t> res = sketchers.omh->hash(ret.sequences_[i].data(), ret.sequences_[i].size());
+            std::vector<uint64_t> res = sketchers.omh->hash(seqp, seql);
             auto destp = &ret.signatures_[i * opts.sketchsize_];
             if constexpr(sizeof(RegT) == sizeof(uint64_t)) { // double
                 // Copy as-is
@@ -210,7 +214,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             } else {
                 std::copy(res.begin(), res.end(), (uint32_t *)destp);
             }
-            ret.cardinalities_[i] = ret.sequences_[i].size();
+            ret.cardinalities_[i] = seql;
         } else if(seqmins) {
             auto &myseq(seqmins[i - lastindex]);
             sketchers.for_each([&](auto x) {
@@ -226,11 +230,11 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                         std::memcpy(&myseq[oldsz], &x, 16);
                     }
                 }
-            }, ret.sequences_[i].data(), ret.sequences_[i].size());
+            }, seqp, seql);
             // This handles the case where the sequence is shorter than the window size
             // and the entire sequence yields no minimizer.
             // We instead take the minimum-hashed value from the b-tree
-            if(opts.w_ > opts.k_ && myseq.empty() && ret.sequences_[i].size()) {
+            if(opts.w_ > opts.k_ && myseq.empty() && seql) {
                 //std::fprintf(stderr, "Adding in single item for small seq]\n");
                 if(sketchers.rh128_.n_in_queue()) {
                     u128_t v = sketchers.rh128_.max_in_queue().el_;
@@ -240,30 +244,30 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     u128_t v = sketchers.enc128_.max_in_queue().el_;
                     myseq.push_back(0); myseq.push_back(0);
                     std::memcpy(&myseq[myseq.size() - 2], &v, sizeof(v));
+                } else if(sketchers.ence128_.n_in_queue()) {
+                    u128_t v = sketchers.ence128_.max_in_queue().el_;
+                    myseq.push_back(0); myseq.push_back(0);
+                    std::memcpy(&myseq[myseq.size() - 2], &v, sizeof(v));
                 } else if(sketchers.rh_.n_in_queue()) {
                     myseq.push_back(sketchers.rh_.max_in_queue().el_);
                 } else if(sketchers.enc_.n_in_queue()) {
                     myseq.push_back(sketchers.enc_.max_in_queue().el_);
+                } else if(sketchers.ence_.n_in_queue()) {
+                    myseq.push_back(sketchers.ence_.max_in_queue().el_);
                 }
             }
             ret.cardinalities_[i] = myseq.size();
-            //std::fprintf(stderr, "Processed items for %zu\n", i);
         } else {
-            //std::fprintf(stderr, "Calcing hash for seq = %zu/%s\n", i,  ret.sequences_[i].data());
-            auto seqp = ret.sequences_[i].data();
-            auto seql = ret.sequences_[i].size();
+            const bool isop = sketchers.opss.get(), isctr = sketchers.ctr.get(), isfs = sketchers.fss.get();
             if(opts.fs_) {
                 sketchers.for_each([&](auto x) {
                     x = maskfn(x);
                     if(opts.fs_->in_set(x)) return;
-                    if(sketchers.opss) sketchers.opss->update(x);
-                    else if(sketchers.ctr)
-                        sketchers.ctr->add(x);
-                    else if(sketchers.fss)
-                        sketchers.fss->update(x);
+                    if(isop)    sketchers.opss->update(x);
+                    else if(isctr) sketchers.ctr->add(x);
+                    else if(isfs) sketchers.fss->update(x);
                 }, seqp, seql);
             } else {
-                const bool isop = sketchers.opss.get(), isctr = sketchers.ctr.get(), isfs = sketchers.fss.get();
                 sketchers.for_each([&](auto x) {
                     x = maskfn(x);
                     if(isop) sketchers.opss->update(x);
@@ -296,9 +300,9 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                                 x = maskfn(x);
                                 if(opts.fs_->in_set(x)) return;
                                 ids.insert(x);
-                            }, ret.sequences_[i].data(), ret.sequences_[i].size());
+                            }, seqp, seql);
                         } else {
-                            sketchers.for_each([&](auto x) {ids.insert(maskfn(x));}, ret.sequences_[i].data(), ret.sequences_[i].size());
+                            sketchers.for_each([&](auto x) {ids.insert(maskfn(x));}, seqp, seql);
                         }
                         ret.cardinalities_[i] = ids.size();
                     }
