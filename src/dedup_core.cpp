@@ -132,7 +132,14 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
 
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t nelem = result.names_.size();
-
+    std::unique_ptr<LSHIDType[]> order(new LSHIDType[nelem]);
+#if _OPENMP > 201307L
+    #pragma omp parallel for simd schedule(static, 1024)
+#endif
+    for(size_t i = 0; i < nelem; ++i) {
+        order[i] = i;
+    }
+    std::sort(&order[0], &order[nelem], [&c=result.cardinalities_](auto x, auto y) {return c[x] > c[y];});
     int nt = 1;
 #ifdef _OPENMP
     _Pragma("omp parallel")
@@ -146,7 +153,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         std::vector<std::vector<LSHIDType>> constituents;
         auto &idx = retidx;
         for(size_t i = 0; i < nelem; ++i) {
-            update_res(i, ids, constituents, idx, opts, result);
+            update_res(order[i], ids, constituents, idx, opts, result);
         }
         return std::make_pair(ids, constituents);
     } else {
@@ -162,7 +169,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             assert(tid < int(subs.size()));
             auto &lres = subs[tid];
             //std::fprintf(stderr, "lres ptr: %p\n", &lres);
-            update_res(i, lres.ids_, lres.constituents_, lres.idx_, opts, result);
+            update_res(order[i], lres.ids_, lres.constituents_, lres.idx_, opts, result);
             //std::fprintf(stderr, "Finished %zu from %d\n", i, tid);
         }
         par_reduce(subs.data(), subs.size());
