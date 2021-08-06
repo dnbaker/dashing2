@@ -238,35 +238,61 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
     // General strategy:
     // Use a given similarity threshold to then group items into the cluster
     // to which they are most similar if they are > than
-    if(nt <= 1) {
-        std::vector<LSHIDType> ids;
-        std::vector<std::vector<LSHIDType>> constituents;
-        auto &idx = retidx;
+    bool exhaustive = false;
+    if(char *s = std::getenv("EXHAUSITVE_DEDUP"))
+        if(std::atoi(s) >= 0)
+            exhaustive = true;
+    if(exhaustive) {
+        const LSHDistType mult = distance(opts.measure_)  ? 1.: -1.;
+        auto &ids = ret.first;
+        auto &constituents = ret.second;
         for(size_t i = 0; i < nelem; ++i) {
-            update_res(order[i], ids, constituents, idx, opts, result);
+            std::pair<LSHDistType, LSHIDType> bestc = {std::numeric_limits<LSHDistType>::max(), -1};
+#ifdef _OPENMP
+#pragma omp declare reduction(min: std::pair<LSHDistType, LSHIDType>: omp_out = std::min(omp_in, omp_out))
+            #pragma omp parallel for schedule(dynamic, 32) reduction(min:bestc)
+#endif
+            for(size_t j = 0; j < ids.size(); ++j) {
+                std::pair<LSHDistType, LSHIDType> ov = {compare(opts, result, i, ids[j]) * mult, j};
+                bestc = std::min(bestc, std::pair<LSHDistType, LSHIDType>{compare(opts, result, i, ids[j]) * mult, j});
+            }
+            if(bestc.first * mult < opts.min_similarity_ || bestc.second == LSHIDType(-1)) {
+                ids.push_back(i);
+                constituents.emplace_back();
+            } else {
+                constituents.at(bestc.second).push_back(i);
+            }
+            /* exhaustive loading*/
         }
-        ret = std::make_pair(ids, constituents);
     } else {
-        std::vector<GreedyClustering> subs;
-        retidx.unlock();
-        subs.reserve(nt);
-        while(subs.size() < unsigned(nt))
-            subs.emplace_back(result, opts, retidx, true, MINCAND);
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < nelem; ++i) {
-            const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-            //std::fprintf(stderr, "%zu from %d\n", i, tid);
-            assert(tid < int(subs.size()));
-            auto &lres = subs[tid];
-            //std::fprintf(stderr, "lres ptr: %p\n", &lres);
-            update_res(order[i], lres.ids_, lres.constituents_, lres.idx_, opts, result);
-            //std::fprintf(stderr, "Finished %zu from %d\n", i, tid);
+        if(nt <= 1) {
+            std::vector<LSHIDType> ids;
+            std::vector<std::vector<LSHIDType>> constituents;
+            auto &idx = retidx;
+            for(size_t i = 0; i < nelem; ++i) {
+                update_res(order[i], ids, constituents, idx, opts, result);
+            }
+            ret = std::make_pair(ids, constituents);
+        } else {
+            std::vector<GreedyClustering> subs;
+            retidx.unlock();
+            subs.reserve(nt);
+            while(subs.size() < unsigned(nt))
+                subs.emplace_back(result, opts, retidx, true, MINCAND);
+#ifdef _OPENMP
+            #pragma omp parallel for schedule(dynamic, 32)
+#endif
+            for(size_t i = 0; i < nelem; ++i) {
+                const int tid = OMP_ELSE(omp_get_thread_num(), 0);
+                auto &lres = subs[tid];
+                update_res(order[i], lres.ids_, lres.constituents_, lres.idx_, opts, result);
+            }
+            par_reduce(subs.data(), subs.size());
+            retidx = std::move(subs.front().idx_);
+            ret = std::make_pair(std::move(subs.front().ids_), std::move(subs.front().constituents_));
         }
-        par_reduce(subs.data(), subs.size());
-        retidx = std::move(subs.front().idx_);
-        ret = std::make_pair(std::move(subs.front().ids_), std::move(subs.front().constituents_));
+        cleanup(ret, retidx, opts, result, true);
     }
-    cleanup(ret, retidx, opts, result, true);
     return ret;
 }
 #ifndef NDEBUG

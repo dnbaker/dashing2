@@ -116,9 +116,13 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
                     for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++, vptr[j]));\
                 } } while(0)
                 if(fss.size()) {
-                    DO_FOR_SKETCH(fss[tid]);
+                    auto &item = fss[tid];
+                    for(uint32_t j = 0; j < numi; ++j)
+                        for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++));
                 } else if(opss.size()) {
-                    DO_FOR_SKETCH(opss[tid]);
+                    auto &item = opss[tid];
+                    for(uint32_t j = 0; j < numi; ++j)
+                        for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++));
                 } else if(bmhs.size()) {
                     DO_FOR_SKETCH(bmhs[tid]);
                 } else if(pmhs.size()) {
