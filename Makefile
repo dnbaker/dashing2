@@ -7,7 +7,7 @@ INCLUDE+=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include
 OPT+= -O3 -march=native -fopenmp
 OPTMV:=$(OPT)
 OPT+= -std=c++17
-WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic -Wno-shift-count-overflow
+WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic # -Wno-shift-count-overflow
 EXTRA+=-DNOCURL
 CXXFLAGS+= -std=c++17
 CFLAGS+= -std=c11
