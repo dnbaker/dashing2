@@ -314,7 +314,7 @@ int wsketch_main(int argc, char **argv) {
             }
         }
         std::fclose(fp);
-        of =  outpref + ".sampled.hashes.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".f" + std::to_string(sizeof(RegT) * 8);
+        of = outpref + ".sampled.hashes.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64";
         fp = std::fopen(of.data(), "wb");
         if(fp == nullptr) throw std::runtime_error("Failed to open " + of);
         for(size_t i = 0; i < mhrs.size(); ++i) {
@@ -327,9 +327,7 @@ int wsketch_main(int argc, char **argv) {
         std::fclose(fp);
         fp = std::fopen((outpref + ".sampled.info.txt").data(), "wb");
         if(fp == nullptr) throw std::runtime_error("Failed to open " + of);
-        for(size_t i = 0; i < mhrs.size(); ++i) {
-            std::fprintf(fp, fmt<RegT>, mhrs[i].total_weight()); // 16 digits seems to be enough to ensure recovery of doubles.
-        }
+        for(size_t i = 0; i < mhrs.size(); std::fprintf(fp, fmt<RegT>, mhrs[i++].total_weight()));
         std::fclose(fp);
         return 0;
     }

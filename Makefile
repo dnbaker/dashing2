@@ -48,7 +48,9 @@ FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
 LONGLIBOBJ=$(patsubst %.cpp,%.64o,$(OBJFS))
 LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 
-dashing2: $(OBJ) libBigWig.a $(wildcard src/*.h)
+dashing2: dashing2-tmp
+	cp $< $@
+dashing2-tmp: $(OBJ) libBigWig.a $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
 dashing2-64: $(OBJ64) libBigWig.a
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -DLSHIDTYPE="uint64_t"
