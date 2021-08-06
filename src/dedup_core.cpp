@@ -253,7 +253,6 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             #pragma omp parallel for schedule(dynamic, 32) reduction(min:bestc)
 #endif
             for(size_t j = 0; j < ids.size(); ++j) {
-                std::pair<LSHDistType, LSHIDType> ov = {compare(opts, result, i, ids[j]) * mult, j};
                 bestc = std::min(bestc, std::pair<LSHDistType, LSHIDType>{compare(opts, result, i, ids[j]) * mult, j});
             }
             if(bestc.first * mult < opts.min_similarity_ || bestc.second == LSHIDType(-1)) {
@@ -266,13 +265,10 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         }
     } else {
         if(nt <= 1) {
-            std::vector<LSHIDType> ids;
-            std::vector<std::vector<LSHIDType>> constituents;
+            auto &ids = ret.first;
+            auto &constituents = ret.second;
             auto &idx = retidx;
-            for(size_t i = 0; i < nelem; ++i) {
-                update_res(order[i], ids, constituents, idx, opts, result);
-            }
-            ret = std::make_pair(ids, constituents);
+            for(size_t i = 0; i < nelem; update_res(order[i++], ids, constituents, idx, opts, result));
         } else {
             std::vector<GreedyClustering> subs;
             retidx.unlock();
