@@ -22,16 +22,16 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
             cache_path = opts.outprefix_ + '/' + cache_path;
     }
     if(opts.cache_sketches_ && bns::isfile(cache_path)) {
-        auto nb = bns::filesize(cache_path.data());
-        retvec.resize(nb / sizeof(RegT));
-        std::FILE *ifp = std::fopen(cache_path.data(), "rb");
-        if(!ifp) throw 1;
-        auto rc = std::fread(retvec.data(), nb, 1, ifp);
+        std::FILE *ifp = xopen(cache_path);
+        std::fread(&ret.second, sizeof(ret.second), 1, ifp);
+        while(!std::feof(ifp)) {
+            RegT v;
+            std::fread(&v, sizeof(v), 1, ifp);
+            retvec.push_back(v);
+        }
         ret.second = retvec.size() / std::accumulate(retvec.begin(), retvec.end(), 0.L);
         std::fclose(ifp);
-        if(rc == 1u) return ret;
-        else
-            std::fprintf(stderr, "Failed to read from disk; instead, sketching from scratch (%s)\n", path.data());
+        return ret;
     }
     for(std::string s;std::getline(ifs, s);) {
         if(s.empty() || s.front() == '#') continue;

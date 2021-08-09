@@ -17,6 +17,7 @@ std::vector<std::pair<int, bwOverlapIterator_t *>> get_iterators(bigWigFile_t *f
 using std::to_string;
 
 
+
 BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     BigWigSketchResult ret;
     std::string cache_path = path.substr(0, path.find_last_of('.'));
@@ -43,17 +44,15 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     cache_path += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(opts.kmer_result_);
     DBG_ONLY(std::fprintf(stderr, "Cache path: %s. isfile: %d\n", cache_path.data(), bns::isfile(cache_path));)
     if(opts.cache_sketches_ && !opts.by_chrom_ && bns::isfile(cache_path)) {
-        auto nb = bns::filesize(cache_path.data());
-        std::vector<RegT> save(nb / sizeof(RegT));
-        std::FILE *ifp = std::fopen(cache_path.data(), "rb");
-        if(!ifp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path ") + cache_path));
-        if(std::fread(save.data(), nb, 1, ifp) != 1) {
-            DBG_ONLY(std::fprintf(stderr, "Failed to read from disk; instead, sketching from scratch (%s)\n", path.data());)
-        } else {
-            ret.global_.reset(new std::vector<RegT>(std::move(save)));
-            ret.card_ = 1.;
+        std::FILE *ifp = xopen(cache_path);
+        std::fread(&ret.card_, sizeof(ret.card_), 1, ifp);
+        auto res = new std::vector<RegT>;
+        while(!std::feof(ifp)) {
+            RegT v;
+            std::fread(&v, sizeof(v), 1, ifp);
+            res->push_back(v);
         }
-        std::fclose(ifp);
+        ret.global_.reset(res);
         return ret;
     }
     if(opts.count() != EXACT_COUNTING) {
@@ -163,6 +162,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     if(opts.kmer_result_ <= FULL_SETSKETCH) {
         std::FILE *ofp = std::fopen(cache_path.data(), "wb");
         if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Could not open file at ") + cache_path + " for writing"));
+        std::fwrite(&ret.card_, sizeof(ret.card_), 1, ofp);
         if(std::fwrite(ret.global_->data(), sizeof(RegT), ret.global_->size(), ofp) != ret.global_->size()) {
             THROW_EXCEPTION(std::runtime_error("Failed to write sketch for bigwig file to disk."));
         }
