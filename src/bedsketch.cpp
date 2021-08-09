@@ -16,7 +16,7 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
     std::string cache_path = path + to_suffix(opts);
     DBG_ONLY(std::fprintf(stderr, "Using %s\n", op ? "oneperm": "fullsetsketch");)
 
-    if(opts.trim_folder_paths_) {
+    if(opts.trim_folder_paths()) {
         cache_path = trim_folder(path);
         if(opts.outprefix_.size())
             cache_path = opts.outprefix_ + '/' + cache_path;

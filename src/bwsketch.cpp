@@ -21,7 +21,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     BigWigSketchResult ret;
     std::string cache_path = path.substr(0, path.find_last_of('.'));
     cache_path += to_suffix(opts);
-    if(opts.trim_folder_paths_) {
+    if(opts.trim_folder_paths()) {
         DBG_ONLY(std::fprintf(stderr, "Cached path before trimming: %s\n", cache_path.data());)
         cache_path = trim_folder(path);
         DBG_ONLY(std::fprintf(stderr, "Cached path after trimming: %s\n", cache_path.data());)
@@ -41,32 +41,34 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     }
     cache_path += ".";
     cache_path += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(opts.kmer_result_);
+    DBG_ONLY(std::fprintf(stderr, "Cache path: %s. isfile: %d\n", cache_path.data(), bns::isfile(cache_path));)
     if(opts.cache_sketches_ && !opts.by_chrom_ && bns::isfile(cache_path)) {
         auto nb = bns::filesize(cache_path.data());
         std::vector<RegT> save(nb / sizeof(RegT));
         std::FILE *ifp = std::fopen(cache_path.data(), "rb");
-        if(!ifp) throw 1;
+        if(!ifp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path ") + cache_path));
         if(std::fread(save.data(), nb, 1, ifp) != 1) {
             DBG_ONLY(std::fprintf(stderr, "Failed to read from disk; instead, sketching from scratch (%s)\n", path.data());)
         } else {
             ret.global_.reset(new std::vector<RegT>(std::move(save)));
+            ret.card_ = 1.;
         }
         std::fclose(ifp);
         return ret;
     }
     if(opts.count() != EXACT_COUNTING) {
-        throw std::invalid_argument("Counting format must be exact for BigWigs. (No Count-Sketch approximation). This may change in the future.");
+        THROW_EXCEPTION(std::invalid_argument("Counting format must be exact for BigWigs. (No Count-Sketch approximation). This may change in the future."));
     }
     flat_hash_map<std::string, std::vector<RegT>> retmap;
     DBG_ONLY(std::fprintf(stderr, "Space: %s\n", to_string(opts.sspace_).data());)
     if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_MULTISET && opts.sspace_ != SPACE_PSET)
-        throw std::invalid_argument("Can't do edit distance for BigWig files");
+        THROW_EXCEPTION(std::invalid_argument("Can't do edit distance for BigWig files"));
     if(bwInit(BW_READ_BUFFER)) {
         DBG_ONLY(std::fprintf(stderr, "Error in initializing bigwig\n");)
         return ret;
     }
     bigWigFile_t *fp = bwOpen(path.data(), nullptr, "r");
-    if(fp == nullptr) throw std::runtime_error("Could not open bigwigfile");
+    if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Could not open bigwigfile"));
 
     auto ids(get_iterators(fp));
     for(const auto &p: ids) retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
@@ -107,7 +109,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
             else if(opss.size()) {opss[tid].reset();}
             else if(bmhs.size()) {bmhs[tid].reset();}
             else if(pmhs.size()) {pmhs[tid].reset();}
-            else throw std::invalid_argument("Not supported: sketching besides PMH, BMH, SetSketch for BigWig files");
+            else THROW_EXCEPTION(std::invalid_argument("Not supported: sketching besides PMH, BMH, SetSketch for BigWig files"));
             for(;ptr->data;ptr = bwIteratorNext(ptr)) {
                 const uint32_t numi = ptr->intervals->l;
                 float *vptr = ptr->intervals->value;
@@ -158,6 +160,16 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     ret.global_.reset(new std::vector<RegT>(std::move(reduce(retmap))));
     if(opts.by_chrom_)
         ret.chrmap_.reset(new flat_hash_map<std::string, std::vector<RegT>>(std::move(retmap)));
+    if(opts.kmer_result_ <= FULL_SETSKETCH) {
+        std::FILE *ofp = std::fopen(cache_path.data(), "wb");
+        if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Could not open file at ") + cache_path + " for writing"));
+        if(std::fwrite(ret.global_->data(), sizeof(RegT), ret.global_->size(), ofp) != ret.global_->size()) {
+            THROW_EXCEPTION(std::runtime_error("Failed to write sketch for bigwig file to disk."));
+        }
+        std::fclose(ofp);
+    } else {
+        std::fprintf(stderr, "Warning: only SetSketch, OnePermSetSketch, ProbMinHash, and BagMinHash are cached to disk for BigWigs. Nothing being cached to disk.\n");
+    }
     return ret;
 }
 
