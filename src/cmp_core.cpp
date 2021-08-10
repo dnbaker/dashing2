@@ -10,7 +10,7 @@
 
 
 namespace dashing2 {
-std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result);
+std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result);
 void dedup_emit(const std::vector<LSHIDType> &, const std::vector<std::vector<LSHIDType>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result);
 //using sketch::lsh::SetSketchIndex;
 static INLINE uint64_t reg2sig(RegT x) {
@@ -165,7 +165,7 @@ static inline long double g_b(long double b, long double arg) {
     return (1.L - std::pow(b, -arg)) / (1.L - 1.L / b);
 }
 
-LSHDistType compare(Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
+LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
     long double ret = std::numeric_limits<LSHDistType>::max();
     const long double lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const long double invdenom = 1.L / opts.sketchsize_;
@@ -355,7 +355,7 @@ inline void densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const s
     }
 }
 
-void cmp_core(Dashing2DistOptions &opts, SketchingResult &result) {
+void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
     // We handle some details before dispatching the final comparison code
     // First, we compute cardinalities for sets/multisets
     // and then we densify one-permutation minhashing

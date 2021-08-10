@@ -71,4 +71,21 @@ void checked_fwrite(std::FILE *const fp, const void *const ptr, const size_t nb)
          throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered write of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead writing " + std::to_string(lrc) + " bytes");
 }
 
+std::FILE *xopen(const std::string &path) {
+    std::FILE *fp;
+    if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
+        auto cmd = std::string("xz -dc ") + path;
+        fp = ::popen(cmd.data(), "r");
+    } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
+        auto cmd = std::string("gzip -dc ") + path;
+        fp = ::popen(cmd.data(), "r");
+    } else if(path.size() > 4 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".bz2")) {
+        auto cmd = std::string("bzip2 -dc ") + path;
+        fp = ::popen(cmd.data(), "r");
+    } else {
+        fp = ::popen((std::string("cat ") + path).data(), "r");
+    }
+    return fp;
+}
+
 }

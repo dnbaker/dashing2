@@ -28,7 +28,7 @@ struct pqueue: public std::priority_queue<PairT> {
 };
 
 
-std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed=false);
+std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed=false);
 
 } // namespace dashing2
 

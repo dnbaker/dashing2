@@ -24,17 +24,23 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         result.signatures_.resize(npaths * opts.sketchsize_);
         result.names_.resize(npaths);
         result.cardinalities_.resize(npaths);
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < npaths; ++i) {
-            auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
-            auto &p(paths[myind]);
-            result.names_[i] = p;
-            std::vector<RegT> sigs;
-            if(opts.dtype_ == DataType::BED) {
+        if(opts.dtype_ == DataType::BED) {
+            OMP_PFOR_DYN
+            for(size_t i = 0; i < npaths; ++i) {
+                auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
+                auto &p(paths[myind]);
+                result.names_[i] = p;
                 auto [sig, card] = bed2sketch(p, opts);
                 result.cardinalities_[myind] = card;
-                sigs = std::move(sig);
-            } else if(opts.dtype_ == DataType::BIGWIG) {
+                std::copy(sig.begin(), sig.end(), &result.signatures_[myind * opts.sketchsize_]);
+            }
+        } else {
+            // BigWig sketching is parallelized within files
+            for(size_t i = 0; i < npaths; ++i) {
+                auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
+                auto &p(paths[myind]);
+                result.names_[i] = p;
+                std::vector<RegT> sigs;
                 if(opts.by_chrom_) {
                     std::fprintf(stderr, "Warning: by_chrom is ignored for bigwig sketching. Currently, all sets are grouped together. To group by chromosome, split the BW file by chromosome.");
                     opts.by_chrom_ = false;
@@ -42,8 +48,8 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 auto res = bw2sketch(p, opts);
                 sigs = std::move(*res.global_.get());
                 result.cardinalities_[myind] = res.card_;
+                std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
             }
-            std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
         }
     }
     if(paths.size() == 1 && outfile.empty()) {
@@ -56,7 +62,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         outfile = outfile.substr(0, outfile.find_first_of(' '));
         // In case the first path has multiple entries, trim to just the first
         outfile = outfile + suf;
-        if(opts.trim_folder_paths_) {
+        if(opts.trim_folder_paths()) {
             outfile = trim_folder(outfile);
             if(opts.outprefix_.size())
                 outfile = opts.outprefix_ + '/' + outfile;

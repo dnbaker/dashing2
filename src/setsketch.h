@@ -370,7 +370,7 @@ public:
         mycard_ = -1.;
         ++total_updates_;
         uint64_t hid = id;
-        uint64_t rv = wy::wyhash64_stateless(&hid);
+        uint64_t rv = sketch::hash::CEHasher()(id ^ 0xb2069fc679a8da0buLL);
 
         FT ev;
         FT mv = max();
@@ -590,6 +590,12 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
     using super = CSetSketch<FT>;
     const uint32_t mc_;
     ska::flat_hash_map<uint64_t, uint32_t> potentials_;
+#ifndef NDEBUG
+    size_t numremoved = 0;
+    ~CountFilteredCSetSketch() {
+        std::fprintf(stderr, "%zu removed total in lifetime\n", numremoved);
+    }
+#endif
     template<typename...Args>
     CountFilteredCSetSketch(uint32_t mincount=1, Args &&...args): CSetSketch<FT>(std::forward<Args>(args)...), mc_(mincount) {
     }
@@ -615,12 +621,19 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         long double tv = (lrv >> 32) * 1.2621774483536188887e-29L;
         return mi * std::log(tv);
     }
+    INLINE void erase_if(typename ska::flat_hash_map<uint64_t, uint32_t>::iterator it) {
+#ifndef NDEBUG
+        ++numremoved;
+#endif
+        potentials_.erase(it);
+    }
     void trim_potentials(FT mv) {
         using fastlog::flog;
         for(auto it = potentials_.begin(); it != potentials_.end(); ++it) {
             const FT mi = -1.L / m_;
             FT nv;
-            uint64_t rv = it->first;
+            uint64_t hid = it->first;
+            uint64_t rv = wy::wyhash64_stateless(&hid);
             if constexpr(sizeof(FT) > 8) {
                 nv = id2ldv(&rv, mi);
                 // Uses 96 bits of precision
@@ -630,8 +643,29 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
                 nv = mi * flog(tv) * FT(.7);
                 if(nv < mv) nv = mi * std::log(tv);
             }
-            if(nv >= mv)
-                potentials_.erase(nv);
+            if(nv >= mv) {
+                erase_if(it);
+                continue;
+            }
+#if 0
+            if(sizeof(FT) <= 8) {
+                FT kahan_carry = 0;
+                ls_.seed(rv);
+                if(nv < mvt_[ls_.step()])
+                    continue;
+                bool erase = true;
+                for(size_t bi = 0;++bi < m_;) {
+                    const FT bv = -getbeta(bi);
+                    rv = wy::wyhash64_stateless(&hid);
+                    if(kahan::update(nv, kahan_carry, bv * std::log(rv * INVMUL64)) > mv) {break;}
+                    if(nv < mvt_[ls_.step()]) {
+                        erase = false;
+                        break;
+                    }
+                }
+                if(erase) erase_if(it);
+            }
+#endif
         }
     }
     void update(const uint64_t id) {
@@ -641,10 +675,13 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         mycard_ = -1.;
         ++total_updates_;
         uint64_t hid = id;
-        uint64_t rv = wy::wyhash64_stateless(&hid);
+        sketch::hash::CEHasher ch;
+        uint64_t rv = sketch::hash::CEHasher()(id ^ 0xb2069fc679a8da0buLL);
 
         FT ev;
         FT mv = max();
+        if((CEHasher()(id) & 0x8fffffu) == 0u)
+            trim_potentials(mv);
         CONST_IF(sizeof(FT) > 8) {
             if((ev = id2ldv(&rv, -1.L / m_)) > mv) return;
         } else {
@@ -666,9 +703,6 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         // What's left now is that we have just reached the minimum count
         // We will periodically remove unnecessary k-mers as the sketch becomes filled.
         // This is done randomly as a function of the random id;
-        if((hid & 0x1fffffull) == 0ull) {
-            trim_potentials(mv);
-        }
         ls_.reset();
         ls_.seed(rv);
         uint64_t bi = 1;

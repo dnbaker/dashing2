@@ -233,7 +233,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         auto makedest = [&](const std::string &path) -> std::string {
             std::string ret(path);
             ret = ret.substr(0, ret.find_first_of(' '));
-            if(opts.trim_folder_paths_ || opts.outprefix_.size()) {
+            if(opts.trim_folder_paths()) {
                 ret = trim_folder(path);
                 if(opts.outprefix_.size())
                     ret = opts.outprefix_ + '/' + ret;

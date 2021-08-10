@@ -4,7 +4,7 @@
 #include "index_build.h"
 
 namespace dashing2 {
-void emit_neighbors(std::vector<pqueue> &lists, Dashing2DistOptions &opts, const SketchingResult &result);
+void emit_neighbors(std::vector<pqueue> &lists, const Dashing2DistOptions &opts, const SketchingResult &result);
 }
 
 #endif

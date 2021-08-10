@@ -18,7 +18,7 @@ struct QTup: public std::tuple<std::unique_ptr<float[]>, size_t, size_t, size_t>
     const auto nwritten() const {return std::get<3>(*this);}
 };
 
-void emit_rectangular(Dashing2DistOptions &opts, const SketchingResult &result) {
+void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t ns = result.names_.size();
     std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: std::fopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));

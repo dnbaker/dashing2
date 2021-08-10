@@ -163,16 +163,21 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     DBG_ONLY(std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);)
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
+    auto ru = sketch::integral::roundup(oldsz), oru = sketch::integral::roundup(newsz);
+    const bool orumismatch = oru != ru;
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && opts.build_sig_matrix_) {
+        if(orumismatch) ret.signatures_.reserve(oru * opts.sketchsize_);
         DBG_ONLY(std::fprintf(stderr, "old sig size %zu, new %zu\n", ret.signatures_.size(), newsz * opts.sketchsize_);)
         ret.signatures_.resize(newsz * opts.sketchsize_);
     }
     ret.cardinalities_.resize(newsz);
     DBG_ONLY(std::fprintf(stderr, "mmer matrix size %zu. buuild %d, save kmers %d\n", ret.kmers_.size(), opts.build_mmer_matrix_, opts.save_kmers_);)
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && (opts.build_mmer_matrix_ || opts.save_kmers_)) {
+        if(orumismatch) ret.kmers_.reserve(oru * opts.sketchsize_);
         ret.kmers_.resize(opts.sketchsize_ * newsz);
     }
     if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
+        if(orumismatch) ret.kmercounts_.reserve(oru * opts.sketchsize_);
         ret.kmercounts_.resize(opts.sketchsize_ * newsz);
     }
     DBG_ONLY(std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");)
