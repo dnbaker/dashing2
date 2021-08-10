@@ -4,6 +4,8 @@ Dashing2 is the second version of the Dashing sequence sketching and comparison 
 
 There have been several major changes, but you can still can get a quick start to compare a group of sequence collections [here](#quickstart).
 
+[Installation instructions](#installation) can be found below.
+
 ### New Features
 
 tl;dr --
@@ -140,7 +142,6 @@ by setting opts.cssize\_ > 0.
 
 ProbMinHash is usually significantly (2-20+x) faster than BagMinHash, although multiset jaccard may be more appropriate for some problems.
 For instance, expression and chromatic accessibility might be better considered discrete probability distributions and therefore fit ProbMinHash, whereas genomic sequences better match the multiset concept and benefit from BagMinHash, which is a MinHash algorithm for weighted sets.
-
 
 
 #### QuickStart
