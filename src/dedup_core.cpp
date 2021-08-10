@@ -99,11 +99,10 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
     auto mv = std::min_element(vals.data(), vp);
     if(hits.empty() || (mv != vp && mult * *mv < simt)) {
         ids.push_back(oid);
-        DBG_ONLY(size_t nids = ids.size();)
         constituents.emplace_back();
         const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-        DBG_ONLY(size_t myid = )
-            idx.update(mp);
+        //DBG_ONLY(size_t myid = )
+        idx.update(mp);
         //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / result.names_.size());)
     } else {
         auto pos = mv - vals.data();
