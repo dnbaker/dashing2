@@ -572,9 +572,11 @@ public:
     std::vector<IT> to_sigs() const {
         std::vector<IT> ret(m_);
         if(std::is_integral<IT>::value) {
-            using TmpT = std::conditional_t<(sizeof(IT) <= 8), uint64_t, __uint128_t>;
+            using TmpT = std::conditional_t<(std::max(sizeof(IT), sizeof(FT)) <= 8), uint64_t, __uint128_t>;
             std::transform(data_.get(), data_.get() + m_, ret.begin(), [](auto x) {
-                TmpT t = 0;std::memcpy(&t, &x, sizeof(x));
+                static_assert(sizeof(x) <= sizeof(TmpT), "Sanity check");
+                TmpT t = 0;
+                std::memcpy(&t, &x, sizeof(x));
                 uint64_t ret = wy::wyhash64_stateless((uint64_t *)&t);
                 if(sizeof(TmpT) >= 16) ret ^= wy::wyhash64_stateless((uint64_t *)&t + 1);
                 return ret;
