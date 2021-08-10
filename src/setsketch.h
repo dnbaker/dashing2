@@ -370,8 +370,7 @@ public:
         mycard_ = -1.;
         ++total_updates_;
         uint64_t hid = id;
-        sketch::hash::CEHasher ch;
-        uint64_t rv = ch(id) ^ 0xb2069fc679a8da0buLL;
+        uint64_t rv = sketch::hash::CEHasher()(id ^ 0xb2069fc679a8da0buLL);
 
         FT ev;
         FT mv = max();
@@ -677,7 +676,7 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         ++total_updates_;
         uint64_t hid = id;
         sketch::hash::CEHasher ch;
-        uint64_t rv = ch(id) ^ 0xb2069fc679a8da0buLL;
+        uint64_t rv = sketch::hash::CEHasher()(id ^ 0xb2069fc679a8da0buLL);
 
         FT ev;
         FT mv = max();
