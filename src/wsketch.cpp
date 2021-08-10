@@ -15,7 +15,7 @@ BMH construct(size_t sketchsize) {
     if constexpr(std::is_same_v<BMH, OPSetSketch>)
         return OPSetSketch(sketchsize);
     if constexpr(std::is_same_v<BMH, FullSetSketch>) return BMH(1, sketchsize, true); // FullSetSketch
-    throw std::runtime_error(std::string("Failed to construct: this is the wrong type: ") + __PRETTY_FUNCTION__);
+    THROW_EXCEPTION(std::runtime_error(std::string("Failed to construct: this is the wrong type: ") + __PRETTY_FUNCTION__));
 }
 template<typename BMH, typename FT, typename IT, typename IndPtrT=uint64_t>
 std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indices, const IndPtrT *indptr, size_t nr, size_t m) {
@@ -221,7 +221,7 @@ SimpleMHRet wmh_from_file(std::string idpath, std::string cpath, size_t sksz, in
     } else {
         PERF2(double);
     }
-    throw std::runtime_error("This should never happen");
+    THROW_EXCEPTION(std::runtime_error("This should never happen"));
 #undef PERF
 #undef PERF2
 }
@@ -296,7 +296,7 @@ int wsketch_main(int argc, char **argv) {
         auto mhrs = wmh_from_file_csr(argv[optind], argv[optind + 1], argv[optind + 2], sketchsize, sketchtype, f32, u32, ip32);
         std::string of = outpref + ".sampled.indices.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64";
         std::FILE *fp = std::fopen(of.data(), "wb");
-        if(fp == nullptr) throw std::runtime_error("Failed to open " + of);
+        if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         for(size_t i = 0; i < mhrs.size(); ++i) {
             if(std::fwrite(std::get<2>(mhrs[i]).data(), sizeof(uint64_t), std::get<2>(mhrs[i]).size(), fp) != std::get<2>(mhrs[i]).size()) {
                 THROW_EXCEPTION(std::runtime_error("Failed to write MH identifiers to disk."));
@@ -305,7 +305,7 @@ int wsketch_main(int argc, char **argv) {
         std::fclose(fp);
         of =  outpref + ".sampled.regs.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".f" + std::to_string(sizeof(RegT) * 8);
         fp = std::fopen(of.data(), "wb");
-        if(fp == nullptr) throw std::runtime_error("Failed to open " + of);
+        if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         for(size_t i = 0; i < mhrs.size(); ++i) {
             auto sz = std::get<0>(mhrs[i]).size();
             if(size_t fc = std::fwrite(std::get<0>(mhrs[i]).data(), sizeof(RegT), sz, fp); fc != sz) {
@@ -316,7 +316,7 @@ int wsketch_main(int argc, char **argv) {
         std::fclose(fp);
         of = outpref + ".sampled.hashes.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64";
         fp = std::fopen(of.data(), "wb");
-        if(fp == nullptr) throw std::runtime_error("Failed to open " + of);
+        if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         for(size_t i = 0; i < mhrs.size(); ++i) {
             auto sz = std::get<1>(mhrs[i]).size();
             if(size_t fc = std::fwrite(std::get<1>(mhrs[i]).data(), sizeof(uint64_t), sz, fp); fc != sz) {
@@ -326,7 +326,7 @@ int wsketch_main(int argc, char **argv) {
         }
         std::fclose(fp);
         fp = std::fopen((outpref + ".sampled.info.txt").data(), "wb");
-        if(fp == nullptr) throw std::runtime_error("Failed to open " + of);
+        if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         for(size_t i = 0; i < mhrs.size(); std::fprintf(fp, fmt<RegT>, mhrs[i++].total_weight()));
         std::fclose(fp);
         return 0;
@@ -335,9 +335,10 @@ int wsketch_main(int argc, char **argv) {
     for(int i = 0; i < argc; ++i) std::fprintf(stderr, "Arg %d/%d is %s (optind = %d)\n", i, argc, argv[i], optind);
     if(diff == 1) {
         mh = SimpleMHRet(wmh_from_file(argv[optind], std::string(), sketchsize, sketchtype, f32, u32));
-    } else if(diff == 2) {
+    } else {
+        assert(diff == 2);
         mh = SimpleMHRet(wmh_from_file(argv[optind], argv[optind + 1], sketchsize, sketchtype, f32, u32));
-    } else throw 1;
+    }
     auto [sigs, indices, ids, total_weight] = mh.tup();
 
     write_container(indices, outpref + ".sampled.indices.u64");
