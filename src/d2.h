@@ -79,7 +79,6 @@ static inline bool check_compressed(std::string &path, int &ft) {
     }
     return false;
 }
-void seed_mask(uint64_t); // This function sets the seeds
 
 struct Dashing2Options {
 
@@ -217,26 +216,6 @@ static INLINE bool endswith(std::string lhs, std::string rhs) {
     return std::equal(rhs.begin(), rhs.end(), &lhs[lhs.size() - rhs.size()]);
 }
 
-
-extern uint64_t XORMASK;
-extern u128_t XORMASK2;
-
-INLINE uint64_t maskfn(uint64_t x) {
-    x ^= XORMASK;
-#if WANGHASH_EXTRA
-    x = sketch::hash::WangHash::hash(x);
-#endif
-    return x;
-}
-INLINE uint64_t invmaskfn(uint64_t x) {
-#if WANGHASH_EXTRA
-    x = sketch::hash::WangHash::inverse(x);
-#endif
-    x ^= XORMASK;
-    return x;
-}
-INLINE u128_t maskfn(u128_t x) {return x ^ XORMASK2;}
-INLINE u128_t invmaskfn(u128_t x) {return x ^ XORMASK2;}
 
 using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
 using FullSetSketch = sketch::setsketch::CountFilteredCSetSketch<RegT>;

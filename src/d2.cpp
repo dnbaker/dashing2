@@ -97,17 +97,6 @@ void Dashing2Options::validate() const {
     }
 }
 
-uint64_t XORMASK = 0x724526e320f9967dull;
-u128_t XORMASK2 = (u128_t(12499408336417088522ull) << 64) | XORMASK;
-void seed_mask(uint64_t x) {
-    if(x == 0) {
-        XORMASK = 0; XORMASK2 = 0;
-    } else {
-        wy::WyRand<uint64_t> rng(x);
-        XORMASK = rng();
-        XORMASK2 = (u128_t(rng()) << 64) | XORMASK;
-    }
-}
 bool entmin = false;
 
 } // dashing2

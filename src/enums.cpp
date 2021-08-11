@@ -88,4 +88,15 @@ std::FILE *xopen(const std::string &path) {
     return fp;
 }
 
+uint64_t XORMASK = 0x724526e320f9967dull;
+u128_t XORMASK2 = (u128_t(12499408336417088522ull) << 64) | XORMASK;
+void seed_mask(uint64_t x) {
+    if(x == 0) {
+        XORMASK = 0; XORMASK2 = 0;
+    } else {
+        XORMASK = sketch::hash::WangHash::hash(x);
+        XORMASK2 = (XORMASK | (u128_t(sketch::hash::WangHash::hash(XORMASK)) << 64));
+    }
+}
+
 }
