@@ -193,7 +193,7 @@ public:
     }
     void filterset(std::string path, bool is_kmer);
     void filterset(std::string fsarg);
-    CountingType ct() const {return cssize_ > 0 ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
+    CountingType ct() const {return cssize_ > 0 ? COUNTMIN_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool trim_folder_paths() const {
         return trim_folder_paths_ || outprefix_.size();
@@ -228,7 +228,15 @@ INLINE uint64_t maskfn(uint64_t x) {
 #endif
     return x;
 }
+INLINE uint64_t invmaskfn(uint64_t x) {
+#if WANGHASH_EXTRA
+    x = sketch::hash::WangHash::inverse(x);
+#endif
+    x ^= XORMASK;
+    return x;
+}
 INLINE u128_t maskfn(u128_t x) {return x ^ XORMASK2;}
+INLINE u128_t invmaskfn(u128_t x) {return x ^ XORMASK2;}
 
 using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
 using FullSetSketch = sketch::setsketch::CountFilteredCSetSketch<RegT>;
