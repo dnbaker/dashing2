@@ -18,7 +18,7 @@ using std::to_string;
 
 
 
-BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
+BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool parallel_process) {
     BigWigSketchResult ret;
     std::string cache_path = path.substr(0, path.find_last_of('.'));
     cache_path += to_suffix(opts);
@@ -69,90 +69,94 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts) {
     bigWigFile_t *fp = bwOpen(path.data(), nullptr, "r");
     if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Could not open bigwigfile"));
 
-    auto ids(get_iterators(fp));
-    for(const auto &p: ids) retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
-    const size_t ss = opts.sketchsize_;
     std::vector<FullSetSketch> fss;
     std::vector<OPSetSketch> opss;
     std::vector<BagMinHash> bmhs;
     std::vector<ProbMinHash> pmhs;
+    if(parallel_process) {
+        auto ids(get_iterators(fp));
+        for(const auto &p: ids) retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
+        const size_t ss = opts.sketchsize_;
 
-    for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
-        if(opts.sspace_ == SPACE_SET) {
-            if(opts.one_perm()) {
-                opss.emplace_back(ss);
-                if(opts.count_threshold_ > 1) opss.back().set_mincount(opts.count_threshold_);
-            } else
-                fss.emplace_back(opts.count_threshold_, ss);
-        } else if(opts.sspace_ == SPACE_MULTISET)
-            bmhs.emplace_back(ss);
-        else
-            pmhs.emplace_back(ss);
-    }
-    long double total_weight = 0.;
-    OMP_PRAGMA("omp parallel for schedule(dynamic) reduction(+:total_weight)")
-    for(size_t i = 0; i < ids.size(); ++i) {
-        DBG_ONLY(std::fprintf(stderr, "Processing contig %zu/%zu\n", i, ids.size());)
-        const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-        const int contig_id = ids[i].first;
-        std::string chrom = fp->cl->chrom[contig_id];
-        const uint64_t chrom_hash = std::hash<std::string>{}(chrom);
-        auto &rvec = retmap[chrom];
-        auto &ptr = ids[i].second;
-        if(ptr == nullptr) {
-            std::fprintf(stderr, "bwOverlapIterator_t * is null when it should be non-null (tid = %d/contig = %d)\n", tid, contig_id);
-            std::exit(1);
+        for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
+            if(opts.sspace_ == SPACE_SET) {
+                if(opts.one_perm()) {
+                    opss.emplace_back(ss);
+                    if(opts.count_threshold_ > 1) opss.back().set_mincount(opts.count_threshold_);
+                } else
+                    fss.emplace_back(opts.count_threshold_, ss);
+            } else if(opts.sspace_ == SPACE_MULTISET)
+                bmhs.emplace_back(ss);
+            else
+                pmhs.emplace_back(ss);
         }
-        {
-            if(fss.size()) {fss[tid].reset();}
-            else if(opss.size()) {opss[tid].reset();}
-            else if(bmhs.size()) {bmhs[tid].reset();}
-            else if(pmhs.size()) {pmhs[tid].reset();}
-            else THROW_EXCEPTION(std::invalid_argument("Not supported: sketching besides PMH, BMH, SetSketch for BigWig files"));
-            for(;ptr->data;ptr = bwIteratorNext(ptr)) {
-                const uint32_t numi = ptr->intervals->l;
-                float *vptr = ptr->intervals->value;
+        long double total_weight = 0.;
+        OMP_PRAGMA("omp parallel for schedule(dynamic) reduction(+:total_weight)")
+        for(size_t i = 0; i < ids.size(); ++i) {
+            DBG_ONLY(std::fprintf(stderr, "Processing contig %zu/%zu\n", i, ids.size());)
+            const int tid = OMP_ELSE(omp_get_thread_num(), 0);
+            const int contig_id = ids[i].first;
+            std::string chrom = fp->cl->chrom[contig_id];
+            const uint64_t chrom_hash = std::hash<std::string>{}(chrom);
+            auto &rvec = retmap[chrom];
+            auto &ptr = ids[i].second;
+            if(ptr == nullptr) {
+                std::fprintf(stderr, "bwOverlapIterator_t * is null when it should be non-null (tid = %d/contig = %d)\n", tid, contig_id);
+                std::exit(1);
+            }
+            {
+                if(fss.size()) {fss[tid].reset();}
+                else if(opss.size()) {opss[tid].reset();}
+                else if(bmhs.size()) {bmhs[tid].reset();}
+                else if(pmhs.size()) {pmhs[tid].reset();}
+                else THROW_EXCEPTION(std::invalid_argument("Not supported: sketching besides PMH, BMH, SetSketch for BigWig files"));
+                for(;ptr->data;ptr = bwIteratorNext(ptr)) {
+                    const uint32_t numi = ptr->intervals->l;
+                    float *vptr = ptr->intervals->value;
 #define DO_FOR_SKETCH(item) do {\
-                for(uint32_t j = 0; j < numi; ++j) { \
-                    for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++, vptr[j]));\
-                } } while(0)
-                if(fss.size()) {
-                    auto &item = fss[tid];
-                    for(uint32_t j = 0; j < numi; ++j)
-                        for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++));
-                } else if(opss.size()) {
-                    auto &item = opss[tid];
-                    for(uint32_t j = 0; j < numi; ++j)
-                        for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++));
-                } else if(bmhs.size()) {
-                    DO_FOR_SKETCH(bmhs[tid]);
-                } else if(pmhs.size()) {
-                    DO_FOR_SKETCH(pmhs[tid]);
-                }
+                    for(uint32_t j = 0; j < numi; ++j) { \
+                        for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++, vptr[j]));\
+                    } } while(0)
+                    if(fss.size()) {
+                        auto &item = fss[tid];
+                        for(uint32_t j = 0; j < numi; ++j)
+                            for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++));
+                    } else if(opss.size()) {
+                        auto &item = opss[tid];
+                        for(uint32_t j = 0; j < numi; ++j)
+                            for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++));
+                    } else if(bmhs.size()) {
+                        DO_FOR_SKETCH(bmhs[tid]);
+                    } else if(pmhs.size()) {
+                        DO_FOR_SKETCH(pmhs[tid]);
+                    }
 #undef DO_FOR_SKETCH
 #ifndef NDEBUG
-                std::fprintf(stderr, "processed %u intervals. Now loading next batch (%s)\n", numi, chrom.data());
+                    std::fprintf(stderr, "processed %u intervals. Now loading next batch (%s)\n", numi, chrom.data());
 #endif
-                ptr = bwIteratorNext(ptr);
-            } while(ptr->data);
+                    ptr = bwIteratorNext(ptr);
+                } while(ptr->data);
 
-            auto newvec = fss.size() ? fss[tid].to_sigs() :
-                          opss.size() ? opss[tid].to_sigs() :
-                          bmhs.size() ? bmhs[tid].to_sigs(): pmhs[tid].to_sigs();
-            total_weight += (fss.size() ? fss[tid].getcard(): opss.size() ? opss[tid].getcard(): bmhs.size() ? bmhs[tid].total_weight(): pmhs.size() ? pmhs[tid].total_weight(): RegT(-1));
+                auto newvec = fss.size() ? fss[tid].to_sigs() :
+                              opss.size() ? opss[tid].to_sigs() :
+                              bmhs.size() ? bmhs[tid].to_sigs(): pmhs[tid].to_sigs();
+                total_weight += (fss.size() ? fss[tid].getcard(): opss.size() ? opss[tid].getcard(): bmhs.size() ? bmhs[tid].total_weight(): pmhs.size() ? pmhs[tid].total_weight(): RegT(-1));
 
-            if(rvec.empty()) {
-                rvec = newvec;
-            } else {
-                OMP_PRAGMA("omp simd")
-                for(size_t i = 0; i < rvec.size(); ++i) {
-                    rvec[i] = std::min(rvec[i], newvec[i]);
+                if(rvec.empty()) {
+                    rvec = newvec;
+                } else {
+                    OMP_PRAGMA("omp simd")
+                    for(size_t i = 0; i < rvec.size(); ++i) {
+                        rvec[i] = std::min(rvec[i], newvec[i]);
+                    }
                 }
             }
+            bwIteratorDestroy(ptr);
         }
-        bwIteratorDestroy(ptr);
+        ret.card_ = total_weight;
+    } else {
+        
     }
-    ret.card_ = total_weight;
 
     bwClose(fp);
     bwCleanup();

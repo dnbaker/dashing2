@@ -1,6 +1,9 @@
 #pragma once
 #include <string>
 #include "sketch/macros.h"
+#if WANGHASH_EXTRA
+#include "sketch/hash.h"
+#endif
 
 namespace dashing2 {
 
@@ -114,7 +117,7 @@ INLINE uint64_t maskfn(uint64_t x) {
 }
 INLINE uint64_t invmaskfn(uint64_t x) {
 #if WANGHASH_EXTRA
-    x = sketch::hash::WangHash::inverse(x);
+    x = sketch::hash::WangHash().inverse(x);
 #endif
     x ^= XORMASK;
     return x;

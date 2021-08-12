@@ -11,22 +11,36 @@ void FastxSketchingResult::print() {
 
 using BKRegT = std::conditional_t<(sizeof(RegT) == 4), uint32_t, std::conditional_t<(sizeof(RegT) == 8), uint64_t, u128_t>>;
 
+template<typename C, typename T>
+void pop_push(C &c, T &&x, size_t k) {
+    if(c.size() < k) c.push(std::move(x));
+    else if(x < c.top()) {c.pop(); c.push(std::move(x));}
+}
+
 template<typename SrcT, typename CountT=uint32_t>
-void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double threshold=0., const CountT *ptr=(CountT *)nullptr) {
+void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double threshold=0., const CountT *ptr=(CountT *)nullptr, int weighted=-1) {
+    if(weighted < 0) weighted = ptr != 0;
     const size_t k = ret.size(), sz = src.size();
     std::priority_queue<BKRegT> pq;
+    std::priority_queue<std::pair<double, BKRegT>> wpq;
     for(size_t i = 0; i < sz; ++i) {
         const auto item = src[i];
         const CountT count = ptr ? ptr[i]: CountT(1);
         if(count > threshold) {
-            const BKRegT key = item;
-            if(pq.size() < k) pq.push(key);
-            else if(key < pq.top()) {
-                pq.pop(); pq.push(key);
+            if(weighted) {
+                const std::pair<double, BKRegT> key {double(item / count), item};
+                pop_push(wpq, key, k);
+            } else {
+                const BKRegT key = item;
+                pop_push(pq, key, k);
             }
         }
     }
-    for(size_t i = k; i > 0;ret[--i] = pq.top(), pq.pop());
+    if(weighted) {
+        for(size_t i = k; i > 0;ret[--i] = wpq.top().second, wpq.pop());
+    } else {
+        for(size_t i = k; i > 0;ret[--i] = pq.top(), pq.pop());
+    }
 }
 
 template<typename T, size_t chunk_size = 65536>
@@ -166,11 +180,22 @@ std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer
             ret += std::to_string(opts.cssize_);
     }
     ret += ".";
-    ret += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(iskmer && opts.kmer_result_ == FULL_MMER_COUNTDICT ? FULL_MMER_SET :opts.kmer_result_);
+    if(opts.kmer_result_ <= FULL_SETSKETCH)
+        ret += to_string(opts.sspace_);
+    else {
+        auto ks = opts.kmer_result_;
+        if(iskmer && ks == FULL_MMER_COUNTDICT) {
+            std::fprintf(stderr, "Using MMerSet for the cached path\n");
+            ks = FULL_MMER_SET;
+        } else {
+            std::fprintf(stderr, "Using %s\n", to_string(ks).data());
+        }
+        ret += to_string(ks);
+    }
     ret = ret + "." + bns::to_string(opts.rht_) + to_suffix(opts);
     DBG_ONLY(std::fprintf(stderr, "Source %s->%s\n", path.data(), ret.data());)
     return ret;
-};
+}
 
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
@@ -292,7 +317,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             auto &path = paths[myind];
             //std::fprintf(stderr, "parsing from path = %s\n", path.data());
             auto &destination = ret.destination_files_[myind];
-            destination = makedest(opts, path);
+            destination = makedest(opts, path, opts.kmer_result_ == FULL_MMER_COUNTDICT);
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
             std::string kmer_destination_prefix = makedest(opts, path, true);
             kmer_destination_prefix = kmer_destination_prefix.substr(0, kmer_destination_prefix.find_last_of('.'));
@@ -450,6 +475,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                                       opts.kmer_result_ == FULL_SETSKETCH ? fss[tid].ids().data():
                                           static_cast<uint64_t *>(nullptr);
                     if(!ptr) THROW_EXCEPTION(std::runtime_error("This shouldn't happen"));
+                    DBG_ONLY(std::fprintf(stderr, "Opening destkmer %s\n", destkmer.data());)
                     if((ofp = std::fopen(destkmer.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
                     //std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 

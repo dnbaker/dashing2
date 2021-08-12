@@ -36,19 +36,27 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             }
         } else {
             // BigWig sketching is parallelized within files
-            for(size_t i = 0; i < npaths; ++i) {
-                auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
-                auto &p(paths[myind]);
-                result.names_[i] = p;
-                std::vector<RegT> sigs;
-                if(opts.by_chrom_) {
-                    std::fprintf(stderr, "Warning: by_chrom is ignored for bigwig sketching. Currently, all sets are grouped together. To group by chromosome, split the BW file by chromosome.");
-                    opts.by_chrom_ = false;
+            if(npaths == 1) {
+                auto res = bw2sketch(paths.front(), opts, /*parallel_process=*/true);
+                auto sigs = std::move(*res.global_.get());
+                result.cardinalities_.front() = res.card_;
+                std::copy(sigs.begin(), sigs.end(), &result.signatures_.begin());
+            } else {
+                OMP_PFOR_DYN
+                for(size_t i = 0; i < npaths; ++i) {
+                    auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
+                    auto &p(paths[myind]);
+                    result.names_[i] = p;
+                    std::vector<RegT> sigs;
+                    if(opts.by_chrom_) {
+                        std::fprintf(stderr, "Warning: by_chrom is ignored for bigwig sketching. Currently, all sets are grouped together. To group by chromosome, split the BW file by chromosome.");
+                        opts.by_chrom_ = false;
+                    }
+                    auto res = bw2sketch(p, opts, /*parallel_process=*/false);
+                    sigs = std::move(*res.global_.get());
+                    result.cardinalities_[myind] = res.card_;
+                    std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
                 }
-                auto res = bw2sketch(p, opts);
-                sigs = std::move(*res.global_.get());
-                result.cardinalities_[myind] = res.card_;
-                std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
             }
         }
     }
@@ -73,26 +81,29 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         std::fprintf(stderr, "outfile %s\n", outfile.data());
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Can't write stacked sketches if signatures were not generated"));
         std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());
-        std::FILE *ofp = std::fopen(outfile.data(), "wb");
-        if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
-        if(even)
-            std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
-        else {
+        std::FILE *ofp;
+        if(result.signatures_.size()) {
+            ofp = std::fopen(outfile.data(), "wb");
+            if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
+            if(opts.kmer_result_ > FULL_SETSKETCH || even) {
+                std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
+            } else {
 #ifndef NDEBUG
-            auto totaln = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
-            std::fprintf(stderr, "%zu total minimizers, signature size is %zu\n", totaln, result.signatures_.size());
+                auto totaln = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
+                std::fprintf(stderr, "%zu total minimizers, signature size is %zu\n", totaln, result.signatures_.size());
 #endif
-            size_t offset = 0;
-            const uint64_t terminus = uint64_t(-1);
-            for(size_t i = 0; i < result.nperfile_.size(); ++i) {
-                if(result.nperfile_[i]) {
-                    std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
-                    offset += result.nperfile_.at(i);
+                size_t offset = 0;
+                const uint64_t terminus = uint64_t(-1);
+                for(size_t i = 0; i < result.nperfile_.size(); ++i) {
+                    if(result.nperfile_[i]) {
+                        std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
+                        offset += result.nperfile_.at(i);
+                    }
+                    std::fwrite(&terminus, sizeof(terminus), 1, ofp);
                 }
-                std::fwrite(&terminus, sizeof(terminus), 1, ofp);
             }
-        }
-        std::fclose(ofp);
+            std::fclose(ofp);
+        } DBG_ONLY(else std::fprintf(stderr, "Signatures is empty\n");)
         if(result.names_.size()) {
             if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
@@ -110,24 +121,24 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         }
         if(result.kmers_.size()) {
             const size_t nb = result.kmers_.size() * sizeof(uint64_t);
-            std::fprintf(stderr, "About to write result kmers to %s of size %zu\n", outfile.data(), nb);
+            DBG_ONLY(std::fprintf(stderr, "About to write result kmers to %s of size %zu\n", outfile.data(), nb);)
             if((ofp = std::fopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
                 if(std::fwrite(result.kmers_.data(), nb, 1, ofp) != size_t(1))
                     std::fprintf(stderr, "Failed to write k-mers to disk properly, silent failing\n");
                 std::fclose(ofp);
             } else {
-                std::fprintf(stderr, "Failed to write k-mers, failing silently.\n");
+                DBG_ONLY(std::fprintf(stderr, "Failed to write k-mers, failing silently.\n");)
             }
-        } else std::fprintf(stderr, "Not saving k-mers because result kmers is empty\n");
+        } DBG_ONLY(else std::fprintf(stderr, "Not saving k-mers because result kmers is empty\n");)
         if(result.kmercounts_.size()) {
             const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
-            std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());
+            DBG_ONLY(std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());)
             if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {
                 if(std::fwrite(result.kmercounts_.data(), nb, 1, ofp) != size_t(1))
                     std::fprintf(stderr, "Failed to write k-mer counts to disk properly, silent failing\n");
                 std::fclose(ofp);
             } else {
-                std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());
+                DBG_ONLY(std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());)
             }
         }
     } else {
