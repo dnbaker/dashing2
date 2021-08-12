@@ -133,6 +133,44 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
 }
 
 
+std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer=false) {
+    std::string ret(path);
+    ret = ret.substr(0, ret.find_first_of(' '));
+    if(opts.trim_folder_paths()) {
+        ret = trim_folder(path);
+        if(opts.outprefix_.size())
+            ret = opts.outprefix_ + '/' + ret;
+    }
+    if(opts.seedseed_ != 0)
+        ret += ".seed" + std::to_string(opts.seedseed_);
+    if(opts.canonicalize())
+        ret += ".rc_canon";
+    if(!opts.sp_.unspaced()) {
+        ret += opts.sp_.to_string();
+    }
+    if(opts.kmer_result_ <= FULL_SETSKETCH)
+        ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
+    ret = ret + std::string(".k") + std::to_string(opts.k_);
+    if(opts.w_ > opts.k_) {
+        ret = ret + std::string(".w") + std::to_string(opts.w_);
+    }
+    if(opts.count_threshold_ > 0) {
+        ret = ret + ".ct_threshold";
+        if(std::fmod(opts.count_threshold_, 1.)) ret = ret + std::to_string(opts.count_threshold_);
+        else ret = ret + std::to_string(int(opts.count_threshold_));
+    }
+    if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_EDIT_DISTANCE) {
+        ret += '.';
+        ret += to_string(opts.ct());
+        if(opts.ct() != EXACT_COUNTING)
+            ret += std::to_string(opts.cssize_);
+    }
+    ret += ".";
+    ret += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(iskmer && opts.kmer_result_ == FULL_MMER_COUNTDICT ? FULL_MMER_SET :opts.kmer_result_);
+    ret = ret + "." + bns::to_string(opts.rht_) + to_suffix(opts);
+    DBG_ONLY(std::fprintf(stderr, "Source %s->%s\n", path.data(), ret.data());)
+    return ret;
+};
 
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
@@ -229,45 +267,8 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         std::fprintf(stderr, "kmer result type: %s\n", to_string(opts.kmer_result_).data());
         std::fprintf(stderr, "sketching space type: %s\n", to_string(opts.sspace_).data());
 #endif
-        std::string suffix = to_suffix(opts);
-        auto makedest = [&](const std::string &path) -> std::string {
-            std::string ret(path);
-            ret = ret.substr(0, ret.find_first_of(' '));
-            if(opts.trim_folder_paths()) {
-                ret = trim_folder(path);
-                if(opts.outprefix_.size())
-                    ret = opts.outprefix_ + '/' + ret;
-            }
-            if(opts.seedseed_ != 0)
-                ret += ".seed" + std::to_string(opts.seedseed_);
-            if(opts.canonicalize())
-                ret += ".rc_canon";
-            if(!opts.sp_.unspaced()) {
-                ret += opts.sp_.to_string();
-            }
-            if(opts.kmer_result_ <= FULL_SETSKETCH)
-                ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
-            ret = ret + std::string(".k") + std::to_string(opts.k_);
-            if(opts.w_ > opts.k_) {
-                ret = ret + std::string(".w") + std::to_string(opts.w_);
-            }
-            if(opts.count_threshold_ > 0) {
-                ret = ret + ".ct_threshold";
-                if(std::fmod(opts.count_threshold_, 1.)) ret = ret + std::to_string(opts.count_threshold_);
-                else ret = ret + std::to_string(int(opts.count_threshold_));
-            }
-            if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_EDIT_DISTANCE) {
-                ret += '.';
-                ret += to_string(opts.ct());
-                if(opts.ct() != EXACT_COUNTING)
-                    ret += std::to_string(opts.cssize_);
-            }
-            ret += ".";
-            ret += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(opts.kmer_result_);
-            ret = ret + "." + bns::to_string(opts.rht_) + suffix;
-            DBG_ONLY(std::fprintf(stderr, "Source %s->%s\n", path.data(), ret.data());)
-            return ret;
-        };
+        // We make an exception for iskmer - we only use this if
+        // 
         if(opts.build_sig_matrix_) {
             ret.signatures_.resize(ss * paths.size());
         }
@@ -291,10 +292,12 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             auto &path = paths[myind];
             //std::fprintf(stderr, "parsing from path = %s\n", path.data());
             auto &destination = ret.destination_files_[myind];
-            destination = makedest(path);
+            destination = makedest(opts, path);
             const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
+            std::string kmer_destination_prefix = makedest(opts, path, true);
+            kmer_destination_prefix = kmer_destination_prefix.substr(0, kmer_destination_prefix.find_last_of('.'));
             std::string destkmercounts = destination_prefix + ".kmercounts.f64";
-            std::string destkmer = destination_prefix + ".kmer.u64";
+            std::string destkmer = kmer_destination_prefix + ".kmer.u64";
             int dkt, dct, dft;
             bool dkif = check_compressed(destkmer, dkt);
             const bool destisfile = check_compressed(destination, dft);
