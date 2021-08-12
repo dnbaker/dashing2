@@ -36,11 +36,11 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             }
         } else {
             // BigWig sketching is parallelized within files
-            if(npaths == 1) {
+            if(npaths == 1 || opts.by_chrom_) {
                 auto res = bw2sketch(paths.front(), opts, /*parallel_process=*/true);
                 auto sigs = std::move(*res.global_.get());
                 result.cardinalities_.front() = res.card_;
-                std::copy(sigs.begin(), sigs.end(), &result.signatures_.begin());
+                std::copy(sigs.begin(), sigs.end(), result.signatures_.data());
             } else {
                 OMP_PFOR_DYN
                 for(size_t i = 0; i < npaths; ++i) {

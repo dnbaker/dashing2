@@ -69,15 +69,15 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
     bigWigFile_t *fp = bwOpen(path.data(), nullptr, "r");
     if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Could not open bigwigfile"));
 
-    std::vector<FullSetSketch> fss;
-    std::vector<OPSetSketch> opss;
-    std::vector<BagMinHash> bmhs;
-    std::vector<ProbMinHash> pmhs;
-    if(parallel_process) {
+    if(parallel_process || opts.by_chrom_) {
         auto ids(get_iterators(fp));
         for(const auto &p: ids) retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
         const size_t ss = opts.sketchsize_;
 
+    std::vector<FullSetSketch> fss;
+    std::vector<OPSetSketch> opss;
+    std::vector<BagMinHash> bmhs;
+    std::vector<ProbMinHash> pmhs;
         for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
             if(opts.sspace_ == SPACE_SET) {
                 if(opts.one_perm()) {
@@ -115,27 +115,25 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
                     float *vptr = ptr->intervals->value;
 #define DO_FOR_SKETCH(item) do {\
                     for(uint32_t j = 0; j < numi; ++j) { \
-                        for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++, vptr[j]));\
+                        for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;(item).update(chrom_hash ^ istart++, vptr[j]));\
+                    } } while(0)
+#define DO_FOR_UNWEIGHTED_SKETCH(item) do {\
+                    for(uint32_t j = 0; j < numi; ++j) { \
+                        for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;(item).update(chrom_hash ^ istart++));\
                     } } while(0)
                     if(fss.size()) {
-                        auto &item = fss[tid];
-                        for(uint32_t j = 0; j < numi; ++j)
-                            for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++));
+                        DO_FOR_UNWEIGHTED_SKETCH(fss[tid]);
                     } else if(opss.size()) {
-                        auto &item = opss[tid];
-                        for(uint32_t j = 0; j < numi; ++j)
-                            for(auto istart = ptr->intervals->start[j], iend = ptr->intervals->end[j];istart < iend;item.update(chrom_hash ^ istart++));
+                        DO_FOR_UNWEIGHTED_SKETCH(opss[tid]);
                     } else if(bmhs.size()) {
                         DO_FOR_SKETCH(bmhs[tid]);
                     } else if(pmhs.size()) {
                         DO_FOR_SKETCH(pmhs[tid]);
                     }
-#undef DO_FOR_SKETCH
 #ifndef NDEBUG
                     std::fprintf(stderr, "processed %u intervals. Now loading next batch (%s)\n", numi, chrom.data());
 #endif
-                    ptr = bwIteratorNext(ptr);
-                } while(ptr->data);
+                }
 
                 auto newvec = fss.size() ? fss[tid].to_sigs() :
                               opss.size() ? opss[tid].to_sigs() :
@@ -154,13 +152,54 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
             bwIteratorDestroy(ptr);
         }
         ret.card_ = total_weight;
+        ret.global_.reset(new std::vector<RegT>(std::move(reduce(retmap))));
     } else {
-        
+        auto cp = fp->cl;
+        const int nk = cp->nKeys;
+        std::unique_ptr<FullSetSketch> fss;
+        std::unique_ptr<OPSetSketch> opss;
+        std::unique_ptr<ProbMinHash> pmh;
+        std::unique_ptr<BagMinHash> bmh;
+        if(opts.sspace_ == SPACE_SET) {
+            if(opts.one_perm()) {
+                opss.reset(new OPSetSketch(opts.sketchsize_));
+                if(opts.count_threshold_ > 1) opss->set_mincount(opts.count_threshold_);
+            } else
+                fss.reset(new FullSetSketch(opts.count_threshold_, opts.sketchsize_));
+        } else if(opts.sspace_ == SPACE_MULTISET)
+            bmh.reset(new BagMinHash(opts.sketchsize_));
+        else
+            pmh.reset(new ProbMinHash(opts.sketchsize_));
+        for(auto i = 0; i < nk; ++i) {
+            if(cp->len[i] < 1) continue;
+            auto cid = fp->cl->chrom[i];
+            auto ptr = bwOverlappingIntervalsIterator(fp, cid, 0, fp->cl->len[i], blocks_per_iter);
+            if(!ptr->data || (ptr->intervals && ptr->intervals->l == 0)) {
+                bwIteratorDestroy(ptr);
+                continue;
+            }
+            const uint64_t chrom_hash = std::hash<std::string>{}(cid);
+            const uint32_t numi = ptr->intervals->l;
+            float *vptr = ptr->intervals->value;
+            if(fss) {
+                DO_FOR_UNWEIGHTED_SKETCH(*fss);
+            } else if(opss) {
+                DO_FOR_UNWEIGHTED_SKETCH(*opss);
+            } else if(bmh) {
+                DO_FOR_SKETCH(*bmh);
+            } else if(pmh) {
+                DO_FOR_SKETCH(*pmh);
+            }
+        }
+        ret.card_ = (fss ? fss->getcard(): opss ? opss->getcard(): bmh ? bmh->total_weight(): pmh ? pmh->total_weight(): std::numeric_limits<RegT>::infinity());
+        if(ret.card_ == std::numeric_limits<RegT>::infinity()) {
+            std::fprintf(stderr, "Warning: infinite cardinality\n");
+        }
+        ret.global_.reset(new std::vector<RegT>(bmh ? bmh->to_sigs(): pmh ? pmh->to_sigs(): opss ? opss->to_sigs(): fss ? fss->to_sigs(): std::vector<RegT>()));
     }
 
     bwClose(fp);
     bwCleanup();
-    ret.global_.reset(new std::vector<RegT>(std::move(reduce(retmap))));
     if(opts.by_chrom_)
         ret.chrmap_.reset(new flat_hash_map<std::string, std::vector<RegT>>(std::move(retmap)));
     if(opts.kmer_result_ <= FULL_SETSKETCH) {
@@ -176,5 +215,6 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
     }
     return ret;
 }
+#undef DO_FOR_SKETCH
 
 } // dashing2
