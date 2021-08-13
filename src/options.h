@@ -230,6 +230,10 @@ static constexpr const char *siglen =
         "--protein8: Use 8 character (3-bit) amino acid alphabet.\n"\
         "--no-canon: If DNA is being encoded, this disables canonicalization. By default, DNA sequence is canonicalized with its reverse-complement.\n"\
         "            Otherwise, this is ignored\n"\
+        "--seed: Set a seed for k-mer hashing; If 0, this disables k-mer XORing and k-mers are encoded directly if a k-mer type can represent it.\n"\
+        "        Otherwise, this changes the hash function applied to k-mers when generated sorted hash sets. This makes it easy to decode quickly, but we can still get good bottom-k estimates using these hashes\n"\
+        "        the xor value for u64 kmers (unless --long-kmers is enabled) is the Wang 64-bit hash of the seed.\n"\
+        "        u128 kmers (--long-kmers) have the same lower 64 bits, but the upper 64 bits are the Wang 64-bit hash of the u64 xor value.\n"\
         "\nPathsOptions\n\n"\
         "By default, dashing2 reads positional arguments and sketches them. You may want to use flags instructing it\n"\
         "to read from paths in <file>. Additionally, you can put multiple files separated by spaces into a single line "\

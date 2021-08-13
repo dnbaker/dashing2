@@ -44,7 +44,7 @@ int sketch_main(int argc, char **argv) {
     double nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
     double downsample_frac = 1.;
-    uint64_t seedseed = 0;
+    uint64_t seedseed = 13;
     size_t batch_size = 16;
     int nLSH = 2;
     Measure measure = SIMILARITY;

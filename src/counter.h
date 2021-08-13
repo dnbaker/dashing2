@@ -49,11 +49,6 @@ struct Counter {
     }
     void reset();
     bool empty() const;
-#if 0
-    void populate(std::string lhs, std::string rhs, bool is128=false, char ktype='L', char ctype='d') {
-         // TODO: allow this to read these values from disk instead of re-calculating if present
-    }
-#endif
     void add(u128_t x, double inc) {
         switch(ct()) {
             case COUNTSKETCH_COUNTING: case COUNTMIN_COUNTING: {
@@ -116,7 +111,7 @@ struct Counter {
         } else {
             for(size_t i = 0; i < count_sketch_.size(); ++i)
                 if(count_sketch_[i] > threshold)
-                   tmp.push_back({i, count_sketch_[i]});
+                   tmp.push_back({maskfn(uint64_t(i)), count_sketch_[i]});
         }
         // When finalizing, hash the ids so that our hash sets are sorted hash sets
         // which means we can make a minhash sketch by taking the prefix!
@@ -153,7 +148,7 @@ struct Counter {
     }
 };
 
-}
+} // dashing2
 
 #endif
 

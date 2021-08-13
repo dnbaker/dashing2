@@ -5,7 +5,7 @@ namespace dashing2 {
 
 using BigWigSketchResult = IntervalSketchResult;
 
-BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts);
+BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool);
 std::vector<RegT> reduce(const flat_hash_map<std::string, std::vector<RegT>> &map);
 #ifndef BLOCKS_PER_ITER
 #define BLOCKS_PER_ITER 4000000
