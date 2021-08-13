@@ -87,7 +87,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             ofp = std::fopen(outfile.data(), "wb");
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
             if(opts.kmer_result_ > FULL_SETSKETCH || even) {
-                std::fprintf(stderr, "Writing set of %zu signatures to file at %s\n", result.signatures_.size(), outfile.data());
+                DBG_ONLY(std::fprintf(stderr, "Writing set of %zu signatures to file at %s\n", result.signatures_.size(), outfile.data());)
                 if(std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp) != result.signatures_.size())
                     THROW_EXCEPTION(std::runtime_error("Failed to write to file"));
             } else {
