@@ -36,6 +36,7 @@ using LSHDistType = DASHING2_INDEX_FLOAT_TYPE;
 struct IntervalSketchResult {
     using Map = flat_hash_map<std::string, std::vector<RegT>>;
     std::unique_ptr<Map> chrmap_;
+    flat_hash_map<std::string, double> cardmap_;
     std::unique_ptr<std::vector<RegT>> global_;
     double card_;
 };
