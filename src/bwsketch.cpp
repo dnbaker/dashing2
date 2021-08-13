@@ -52,6 +52,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
             std::fread(&v, sizeof(v), 1, ifp);
             res->push_back(v);
         }
+        ::pclose(ifp);
         ret.global_.reset(res);
         return ret;
     }
@@ -154,6 +155,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
         ret.card_ = total_weight;
         ret.global_.reset(new std::vector<RegT>(std::move(reduce(retmap))));
     } else {
+        DBG_ONLY(auto timestart = std::chrono::high_resolution_clock::now();)
         auto cp = fp->cl;
         const int nk = cp->nKeys;
         std::unique_ptr<FullSetSketch> fss;
@@ -196,6 +198,8 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
             std::fprintf(stderr, "Warning: infinite cardinality\n");
         }
         ret.global_.reset(new std::vector<RegT>(bmh ? bmh->to_sigs(): pmh ? pmh->to_sigs(): opss ? opss->to_sigs(): fss ? fss->to_sigs(): std::vector<RegT>()));
+        DBG_ONLY(auto timestop = std::chrono::high_resolution_clock::now();
+                 std::fprintf(stderr, "Took %gms to sketch\n", std::chrono::duration<double>(timestop - timestart).count());)
     }
 
     bwClose(fp);

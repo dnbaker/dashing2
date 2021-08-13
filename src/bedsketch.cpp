@@ -30,7 +30,7 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
             retvec.push_back(v);
         }
         ret.second = retvec.size() / std::accumulate(retvec.begin(), retvec.end(), 0.L);
-        std::fclose(ifp);
+        ::pclose(ifp);
         return ret;
     }
     for(std::string s;std::getline(ifs, s);) {
