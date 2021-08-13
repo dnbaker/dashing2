@@ -128,7 +128,8 @@ enum OptArg {
     {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE},\
     {"greedy", required_argument, 0, OPTARG_GREEDY},\
     {"nlsh", required_argument, 0, OPTARG_NLSH},\
-    {"entmin", no_argument, 0, OPTARG_ENTROPYMIN}
+    {"entmin", no_argument, 0, OPTARG_ENTROPYMIN},\
+    {"by-chrom", no_argument, (int *)&by_chrom, 1}\
 
 
 
@@ -234,6 +235,8 @@ static constexpr const char *siglen =
         "        Otherwise, this changes the hash function applied to k-mers when generated sorted hash sets. This makes it easy to decode quickly, but we can still get good bottom-k estimates using these hashes\n"\
         "        the xor value for u64 kmers (unless --long-kmers is enabled) is the Wang 64-bit hash of the seed.\n"\
         "        u128 kmers (--long-kmers) have the same lower 64 bits, but the upper 64 bits are the Wang 64-bit hash of the u64 xor value.\n"\
+        "BigWig parsing options\n"\
+        "--by-chrom: Parse by chromosome instead of by BigWig file\n"\
         "\nPathsOptions\n\n"\
         "By default, dashing2 reads positional arguments and sketches them. You may want to use flags instructing it\n"\
         "to read from paths in <file>. Additionally, you can put multiple files separated by spaces into a single line "\

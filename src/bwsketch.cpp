@@ -75,10 +75,10 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
         for(const auto &p: ids) retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
         const size_t ss = opts.sketchsize_;
 
-    std::vector<FullSetSketch> fss;
-    std::vector<OPSetSketch> opss;
-    std::vector<BagMinHash> bmhs;
-    std::vector<ProbMinHash> pmhs;
+        std::vector<FullSetSketch> fss;
+        std::vector<OPSetSketch> opss;
+        std::vector<BagMinHash> bmhs;
+        std::vector<ProbMinHash> pmhs;
         for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
             if(opts.sspace_ == SPACE_SET) {
                 if(opts.one_perm()) {

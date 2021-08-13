@@ -43,6 +43,7 @@ int sketch_main(int argc, char **argv) {
     int truncate_mode = 0;
     double nbytes_for_fastdists = sizeof(RegT);
     bool parse_by_seq = false;
+    int by_chrom = false;
     double downsample_frac = 1.;
     uint64_t seedseed = 13;
     size_t batch_size = 16;
@@ -102,6 +103,7 @@ int sketch_main(int argc, char **argv) {
         .cmd(cmd).count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress)
         .seedseed(seedseed);
+    opts.by_chrom_ = by_chrom;
     opts.downsample(downsample_frac);
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));

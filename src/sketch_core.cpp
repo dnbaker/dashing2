@@ -36,11 +36,16 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             }
         } else {
             // BigWig sketching is parallelized within files
-            if(npaths == 1 || opts.by_chrom_) {
-                auto res = bw2sketch(paths.front(), opts, /*parallel_process=*/true);
-                auto sigs = std::move(*res.global_.get());
-                result.cardinalities_.front() = res.card_;
-                std::copy(sigs.begin(), sigs.end(), result.signatures_.data());
+            if(opts.by_chrom_) {
+                for(size_t i = 0; i < npaths; ++i) {
+                    auto &p = paths[i];
+                    auto res = bw2sketch(p, opts, /*parallel_process=*/true);
+                    result.names_[i] = p;
+                    auto sigs = std::move(*res.global_.get());
+                    result.cardinalities_[i] = res.card_;
+                    DBG_ONLY(std::fprintf(stderr, "Cardinality %g found from path %s/%zu\n", res.card_, p.data(), i);)
+                    std::copy(sigs.begin(), sigs.end(), &result.signatures_[opts.sketchsize_* i]);
+                }
             } else {
                 OMP_PFOR_DYN
                 for(size_t i = 0; i < npaths; ++i) {
@@ -48,10 +53,6 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                     auto &p(paths[myind]);
                     result.names_[i] = p;
                     std::vector<RegT> sigs;
-                    if(opts.by_chrom_) {
-                        std::fprintf(stderr, "Warning: by_chrom is ignored for bigwig sketching. Currently, all sets are grouped together. To group by chromosome, split the BW file by chromosome.");
-                        opts.by_chrom_ = false;
-                    }
                     auto res = bw2sketch(p, opts, /*parallel_process=*/false);
                     sigs = std::move(*res.global_.get());
                     result.cardinalities_[myind] = res.card_;
@@ -76,7 +77,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
-    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.size() && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
+    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
     if(outfile.size()) {
         std::fprintf(stderr, "outfile %s\n", outfile.data());
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Can't write stacked sketches if signatures were not generated"));
@@ -86,7 +87,9 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             ofp = std::fopen(outfile.data(), "wb");
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
             if(opts.kmer_result_ > FULL_SETSKETCH || even) {
-                std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
+                std::fprintf(stderr, "Writing set of %zu signatures to file at %s\n", result.signatures_.size(), outfile.data());
+                if(std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp) != result.signatures_.size())
+                    THROW_EXCEPTION(std::runtime_error("Failed to write to file"));
             } else {
 #ifndef NDEBUG
                 auto totaln = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
@@ -107,6 +110,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         if(result.names_.size()) {
             if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
+            std::fputs("#Name\tCardinality\n", ofp);
             for(size_t i = 0; i < result.names_.size(); ++i) {
                 const auto &n(result.names_[i]);
                 if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) THROW_EXCEPTION(std::runtime_error("Failed to write names to file"));

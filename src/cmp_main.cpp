@@ -27,13 +27,13 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         if(bns::isfile(namesf)) {
             std::string l;
             for(std::ifstream ifs(namesf);std::getline(ifs, l);) {
-                std::cerr << "Line: " << l << '\n';
                 if(l.empty() || l.front() == '#') continue;
                 const typename std::string::size_type it = l.find_first_of('\t');
                 result.names_.emplace_back(l.substr(0, it));
                 if(it != std::string::npos) {
                     char *s = &l[it + 1];
                     result.cardinalities_.emplace_back(std::strtod(s, &s));
+                    if(result.cardinalities_.back() <= 0.) result.cardinalities_.back() = 1.; // Set size to 1 if not available
                     if(*s) {
                         std::fprintf(stderr, "Saving kmer count file %s\n", s + 1);
                         result.kmercountfiles_.push_back(s + 1);
@@ -127,6 +127,7 @@ int cmp_main(int argc, char **argv) {
     int topk_threshold = -1;
     int truncate_mode = 0;
     int nLSH = 2;
+    int by_chrom = false;
     double nbytes_for_fastdists = sizeof(RegT);
     double downsample_frac = 1.;
     bool parse_by_seq = false;
@@ -181,6 +182,7 @@ int cmp_main(int argc, char **argv) {
         .cmd(cmd).count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress)
         .seedseed(seedseed);
+    opts.by_chrom_ = by_chrom;
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }
