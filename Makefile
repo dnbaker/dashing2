@@ -4,7 +4,7 @@ CXX?=g++
 
 LIB=-lz
 INCLUDE+=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
-OPT+= -O3 -march=native -fopenmp
+OPT+= -O3 -march=native -fopenmp -pipe
 OPTMV:=$(OPT)
 OPT+= -std=c++17
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic # -Wno-shift-count-overflow

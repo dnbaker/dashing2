@@ -27,28 +27,40 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         if(bns::isfile(namesf)) {
             std::string l;
             for(std::ifstream ifs(namesf);std::getline(ifs, l);) {
-                std::cerr << "Line: " << l << '\n';
                 if(l.empty() || l.front() == '#') continue;
                 const typename std::string::size_type it = l.find_first_of('\t');
                 result.names_.emplace_back(l.substr(0, it));
                 if(it != std::string::npos) {
                     char *s = &l[it + 1];
                     result.cardinalities_.emplace_back(std::strtod(s, &s));
+                    if(result.cardinalities_.back() <= 0.) result.cardinalities_.back() = 1.; // Set size to 1 if not available
                     if(*s) {
                         std::fprintf(stderr, "Saving kmer count file %s\n", s + 1);
                         result.kmercountfiles_.push_back(s + 1);
                     }
                 }
             }
-        } else {
-            THROW_EXCEPTION(std::runtime_error("cmp expects a packed sketch matrix or multiple paths"););
         }
-        assert(result.names_.size());
         //size_t nregs = st.st_size / result.names_.size() / sizeof(RegT);
         std::FILE *fp = std::fopen(pf.data(), "w");
         if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + pf));
-        result.signatures_.resize(st.st_size / sizeof(RegT));
-        if(std::fread(result.signatures_.data(), st.st_size, 1, fp) != 1u) THROW_EXCEPTION(std::runtime_error(std::string("Failed to write block of size ") + std::to_string(st.st_size)));
+        uint64_t l;
+        std::fread(&l, sizeof(l), 1, fp);
+        if(result.names_.empty()) {
+            result.names_.resize(l);
+#ifdef _OPENMP
+            #pragma omp parallel for schedule(dynamic, 64)
+#endif
+            for(size_t i = 0; i < l; ++i)
+                result.names_[i] = std::to_string(i);
+        }
+        result.cardinalities_.resize(l);
+        // l * sizeof(double) for the cardinalitiy
+        if(std::fread(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), fp) != result.cardinalities_.size())
+            THROW_EXCEPTION(std::runtime_error("Failed to read cardinalities from disk"));
+        result.signatures_.resize((st.st_size - l * sizeof(double) - sizeof(uint64_t)) / sizeof(RegT));
+        if(std::fread(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), fp) != result.signatures_.size())
+            THROW_EXCEPTION(std::runtime_error(std::string("Failed to read signatures from disk")));
         std::fclose(fp);
     } else { // Else, we have to load sketches from each file
         result.nperfile_.resize(paths.size());
@@ -57,13 +69,18 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         for(size_t i = 0; i < paths.size(); ++i) {
             struct stat st;
             ::stat(paths[i].data(), &st);
-            assert(st.st_size % sizeof(RegT) == 0);
-            const auto nelem = st.st_size / sizeof(RegT);
+            size_t mysz = st.st_size - 8; // 8 bytes for the cardinality (for sketches/kmer sets), length of the sequence for minimizer sequences
+            assert(mysz % sizeof(RegT) == 0);
+            const auto nelem = mysz / sizeof(RegT);
             fsizes[i] = nelem;
             csizes[i + 1] = csizes[i] + nelem;
         }
+        const bool even = std::all_of(fsizes.begin() + 1, fsizes.end(), [f=fsizes.front()](auto x) {return x == f;});
         const size_t totalsize = csizes.back();
         result.signatures_.resize(totalsize); // Account for the size of the sketch registers
+        if(even) {
+            result.cardinalities_.resize(totalsize / opts.sketchsize_);
+        }
         if(bns::isfile(pf + ".kmerhashes.u64")) {
             std::fprintf(stderr, "Loading k-mer hashes, too\n");
             result.kmers_.resize(result.signatures_.size());
@@ -76,6 +93,9 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         for(size_t i = 0; i < paths.size(); ++i) {
             auto &path = paths[i];
             std::FILE *ifp = std::fopen(path.data(), "rb");
+            if(even && result.cardinalities_.size() > i) {
+                std::fread(&result.cardinalities_[i], sizeof(double), 1, ifp);
+            }
             if(std::fread(&result.signatures_[csizes[i]], sizeof(RegT), fsizes[i], ifp) != fsizes[i]) {
                 std::fprintf(stderr, "Failed to read at path %s\n", path.data());
                 std::fclose(ifp);
@@ -102,7 +122,6 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             }
         }
     }
-    std::fprintf(stderr, "loading results, but this isn't written!\n");
 }
 
 int cmp_main(int argc, char **argv) {
@@ -127,6 +146,7 @@ int cmp_main(int argc, char **argv) {
     int topk_threshold = -1;
     int truncate_mode = 0;
     int nLSH = 2;
+    int by_chrom = false;
     double nbytes_for_fastdists = sizeof(RegT);
     double downsample_frac = 1.;
     bool parse_by_seq = false;
@@ -181,6 +201,7 @@ int cmp_main(int argc, char **argv) {
         .cmd(cmd).count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress)
         .seedseed(seedseed);
+    opts.by_chrom_ = by_chrom;
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }

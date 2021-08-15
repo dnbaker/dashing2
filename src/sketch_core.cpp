@@ -36,11 +36,37 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             }
         } else {
             // BigWig sketching is parallelized within files
-            if(npaths == 1 || opts.by_chrom_) {
-                auto res = bw2sketch(paths.front(), opts, /*parallel_process=*/true);
-                auto sigs = std::move(*res.global_.get());
-                result.cardinalities_.front() = res.card_;
-                std::copy(sigs.begin(), sigs.end(), result.signatures_.data());
+            if(opts.by_chrom_) {
+                std::vector<flat_hash_map<std::string, std::vector<RegT>>> bc(npaths);
+                std::vector<flat_hash_map<std::string, double>> dbc(npaths);
+                result.nperfile_.resize(npaths);
+                for(size_t i = 0; i < npaths; ++i) {
+                    auto &p = paths[i];
+                    auto res = bw2sketch(p, opts, /*parallel_process=*/true);
+                    result.names_[i] = p;
+                    result.cardinalities_[i] = res.card_;
+                    result.nperfile_[i] = res.chrmap_->size();
+                    bc[i] = std::move(*res.chrmap_.get());
+                    dbc[i] = std::move(res.cardmap_);
+                    DBG_ONLY(std::fprintf(stderr, "Cardinality %g found from path %s/%zu\n", res.card_, p.data(), i);)
+                    //std::copy(sigs.begin(), sigs.end(), &result.signatures_[opts.sketchsize_* i]);
+                }
+                const auto total_n = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
+                size_t offset = 0;
+                result.signatures_.resize(total_n * opts.sketchsize_);
+                result.names_.resize(total_n);
+                result.cardinalities_.resize(total_n);
+                for(size_t i = 0; i < npaths; ++i) {
+                    size_t myi = 0;
+                    for(const auto &pair: bc[i]) {
+                        const auto om = offset + myi;
+                        std::copy(pair.second.begin(), pair.second.end(), &result.signatures_[opts.sketchsize_ * om]);
+                        result.names_[om] = paths[i] + ":" + pair.first;
+                        result.cardinalities_[om] = dbc[i][pair.first];
+                        ++myi;
+                    }
+                    offset += bc[i].size();
+                }
             } else {
                 OMP_PFOR_DYN
                 for(size_t i = 0; i < npaths; ++i) {
@@ -48,10 +74,6 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                     auto &p(paths[myind]);
                     result.names_[i] = p;
                     std::vector<RegT> sigs;
-                    if(opts.by_chrom_) {
-                        std::fprintf(stderr, "Warning: by_chrom is ignored for bigwig sketching. Currently, all sets are grouped together. To group by chromosome, split the BW file by chromosome.");
-                        opts.by_chrom_ = false;
-                    }
                     auto res = bw2sketch(p, opts, /*parallel_process=*/false);
                     sigs = std::move(*res.global_.get());
                     result.cardinalities_[myind] = res.card_;
@@ -76,7 +98,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
-    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.size() && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
+    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
     if(outfile.size()) {
         std::fprintf(stderr, "outfile %s\n", outfile.data());
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Can't write stacked sketches if signatures were not generated"));
@@ -85,13 +107,13 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         if(result.signatures_.size()) {
             ofp = std::fopen(outfile.data(), "wb");
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
+            uint64_t n = result.cardinalities_.size();
+            std::fwrite(&n, sizeof(n), 1, ofp);
+            std::fwrite(result.cardinalities_.data(), sizeof(result.cardinalities_.front()), result.cardinalities_.size(), ofp);
             if(opts.kmer_result_ > FULL_SETSKETCH || even) {
-                std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
+                checked_fwrite(ofp, result.signatures_.data(), sizeof(RegT) * result.signatures_.size());
             } else {
-#ifndef NDEBUG
-                auto totaln = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
-                std::fprintf(stderr, "%zu total minimizers, signature size is %zu\n", totaln, result.signatures_.size());
-#endif
+                DBG_ONLY(std::fprintf(stderr, "%zu total summaries, accumulated into signatures of size %zu\n", std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0)), result.signatures_.size());)
                 size_t offset = 0;
                 const uint64_t terminus = uint64_t(-1);
                 for(size_t i = 0; i < result.nperfile_.size(); ++i) {
@@ -107,6 +129,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         if(result.names_.size()) {
             if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
+            std::fputs("#Name\tCardinality\n", ofp);
             for(size_t i = 0; i < result.names_.size(); ++i) {
                 const auto &n(result.names_[i]);
                 if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) THROW_EXCEPTION(std::runtime_error("Failed to write names to file"));

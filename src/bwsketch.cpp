@@ -75,10 +75,10 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
         for(const auto &p: ids) retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
         const size_t ss = opts.sketchsize_;
 
-    std::vector<FullSetSketch> fss;
-    std::vector<OPSetSketch> opss;
-    std::vector<BagMinHash> bmhs;
-    std::vector<ProbMinHash> pmhs;
+        std::vector<FullSetSketch> fss;
+        std::vector<OPSetSketch> opss;
+        std::vector<BagMinHash> bmhs;
+        std::vector<ProbMinHash> pmhs;
         for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
             if(opts.sspace_ == SPACE_SET) {
                 if(opts.one_perm()) {
@@ -139,7 +139,9 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
                 auto newvec = fss.size() ? fss[tid].to_sigs() :
                               opss.size() ? opss[tid].to_sigs() :
                               bmhs.size() ? bmhs[tid].to_sigs(): pmhs[tid].to_sigs();
-                total_weight += (fss.size() ? fss[tid].getcard(): opss.size() ? opss[tid].getcard(): bmhs.size() ? bmhs[tid].total_weight(): pmhs.size() ? pmhs[tid].total_weight(): RegT(-1));
+                const auto winc = (fss.size() ? fss[tid].getcard(): opss.size() ? opss[tid].getcard(): bmhs.size() ? bmhs[tid].total_weight(): pmhs.size() ? pmhs[tid].total_weight(): RegT(-1));
+                total_weight += winc;
+                ret.cardmap_[chrom] = winc;
 
                 if(rvec.empty()) {
                     rvec = newvec;
@@ -210,9 +212,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
         std::FILE *ofp = std::fopen(cache_path.data(), "wb");
         if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Could not open file at ") + cache_path + " for writing"));
         std::fwrite(&ret.card_, sizeof(ret.card_), 1, ofp);
-        if(std::fwrite(ret.global_->data(), sizeof(RegT), ret.global_->size(), ofp) != ret.global_->size()) {
-            THROW_EXCEPTION(std::runtime_error("Failed to write sketch for bigwig file to disk."));
-        }
+        checked_fwrite(ofp, ret.global_->data(), sizeof(RegT) * ret.global_->size());
         std::fclose(ofp);
     } else {
         std::fprintf(stderr, "Warning: only SetSketch, OnePermSetSketch, ProbMinHash, and BagMinHash are cached to disk for BigWigs. Nothing being cached to disk.\n");

@@ -44,10 +44,11 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
 }
 
 template<typename T, size_t chunk_size = 65536>
-void load_copy(const std::string &path, T *ptr) {
+void load_copy(const std::string &path, T *ptr, double *cardinality) {
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
         gzFile fp = gzopen(path.data(), "rb");
         if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
+        gzread(fp, cardinality, sizeof(*cardinality));
         for(int nr;
             !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
             ptr += nr / sizeof(T));
@@ -56,25 +57,28 @@ void load_copy(const std::string &path, T *ptr) {
     } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
         auto cmd = std::string("xz -dc ") + path;
         std::FILE *fp = ::popen(cmd.data(), "r");
+        std::fread(cardinality, sizeof(*cardinality), 1, fp);
         for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
         ::pclose(fp);
         return;
     }
     std::FILE *fp = std::fopen(path.data(), "rb");
     if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + path));
-    struct stat st;
-    if(::fstat(::fileno(fp), &st))
-        THROW_EXCEPTION(std::runtime_error(std::string("Failed to get fd from ") + path + std::to_string(::fileno(fp))));
-    DBG_ONLY(std::fprintf(stderr, "Size of file at %s: %zu\n", path.data(), size_t(st.st_size));)
-    if(st.st_size == 0u) {
-        std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+    std::fread(cardinality, sizeof(*cardinality), 1, fp);
+    const int fd = ::fileno(fp);
+    if(!::isatty(fd)) {
+        struct stat st;
+        if(::fstat(fd, &st)) THROW_EXCEPTION(std::runtime_error(std::string("Failed to fstat") + path));
+        if(!st.st_size) std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+        size_t expected_bytes = st.st_size - 8;
+        size_t nb = std::fread(ptr, 1, expected_bytes, fp);
+        if(nb != expected_bytes) {
+            THROW_EXCEPTION(std::runtime_error("Error in reading from file"));
+        }
+    } else {
+        for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
     }
     DBG_ONLY(std::fprintf(stderr, "Loading sketch of size %zu from %s\n", size_t(st.st_size), path.data());)
-    size_t nb = std::fread(ptr, 1, st.st_size, fp);
-    if(nb != size_t(st.st_size)) {
-        std::fprintf(stderr, "Failed to copy to ptr %p. Expected to read %zu, got %zu\n", (void *)ptr, size_t(st.st_size), nb);
-        THROW_EXCEPTION(std::runtime_error("Error in reading from file"));
-    }
     std::fclose(fp);
 }
 
@@ -146,56 +150,6 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     return m / s;
 }
 
-
-std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer=false) {
-    std::string ret(path);
-    ret = ret.substr(0, ret.find_first_of(' '));
-    if(opts.trim_folder_paths()) {
-        ret = trim_folder(path);
-        if(opts.outprefix_.size())
-            ret = opts.outprefix_ + '/' + ret;
-    }
-    if(opts.seedseed_ != 0)
-        ret += ".seed" + std::to_string(opts.seedseed_);
-    if(opts.canonicalize())
-        ret += ".rc_canon";
-    if(!opts.sp_.unspaced()) {
-        ret += opts.sp_.to_string();
-    }
-    if(opts.kmer_result_ <= FULL_SETSKETCH)
-        ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
-    ret = ret + std::string(".k") + std::to_string(opts.k_);
-    if(opts.w_ > opts.k_) {
-        ret = ret + std::string(".w") + std::to_string(opts.w_);
-    }
-    if(opts.count_threshold_ > 0) {
-        ret = ret + ".ct_threshold";
-        if(std::fmod(opts.count_threshold_, 1.)) ret = ret + std::to_string(opts.count_threshold_);
-        else ret = ret + std::to_string(int(opts.count_threshold_));
-    }
-    if(opts.sspace_ != SPACE_SET && opts.sspace_ != SPACE_EDIT_DISTANCE) {
-        ret += '.';
-        ret += to_string(opts.ct());
-        if(opts.ct() != EXACT_COUNTING)
-            ret += std::to_string(opts.cssize_);
-    }
-    ret += ".";
-    if(opts.kmer_result_ <= FULL_SETSKETCH)
-        ret += to_string(opts.sspace_);
-    else {
-        auto ks = opts.kmer_result_;
-        if(iskmer && ks == FULL_MMER_COUNTDICT) {
-            std::fprintf(stderr, "Using MMerSet for the cached path\n");
-            ks = FULL_MMER_SET;
-        } else {
-            std::fprintf(stderr, "Using %s\n", to_string(ks).data());
-        }
-        ret += to_string(ks);
-    }
-    ret = ret + "." + bns::to_string(opts.rht_) + to_suffix(opts);
-    DBG_ONLY(std::fprintf(stderr, "Source %s->%s\n", path.data(), ret.data());)
-    return ret;
-}
 
 
 FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths) {
@@ -339,14 +293,14 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
             {
                 if(opts.kmer_result_ < FULL_MMER_SET) {
                     if(ret.signatures_.size()) {
-                        load_copy(destination, &ret.signatures_[mss]);
-                        ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
+                        load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]);
+                        //ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
                         DBG_ONLY(std::fprintf(stderr, "Sketch was loaded from %s and has card %g\n", destination.data(), ret.cardinalities_[myind]);)
                     }
                     if(ret.kmers_.size())
-                        load_copy(destkmer, &ret.kmers_[mss]);
+                        load_copy(destkmer, &ret.kmers_[mss], &ret.cardinalities_[myind]);
                     if(ret.kmercounts_.size())
-                        load_copy(destkmercounts, &ret.kmercounts_[mss]);
+                        load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind]);
                 } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                     DBG_ONLY(std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());)
                 }
@@ -443,6 +397,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                     }
                 }
                 std::FILE * ofp = std::fopen(destination.data(), "wb");
+                std::fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
                 if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
                 const void *buf = nullptr;
                 size_t nb;
@@ -511,7 +466,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 std::FILE * ofp;
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open file for writing minimizer sequence"));
                 void *dptr = nullptr;
-                size_t m = 1 << 20;
+                size_t m = 1 << 18;
                 size_t l = 0;
                 if(posix_memalign(&dptr, 16, (1 + opts.use128()) * m * sizeof(uint64_t))) THROW_EXCEPTION(std::bad_alloc());
 
@@ -538,6 +493,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
                 std::FILE * ofp;
                 if((ofp = std::fopen(destination.data(), "wb")) == nullptr)
                     THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
+                checked_fwrite(ofp, &ret.cardinalities_[myind], sizeof(double));
                 if(opss.empty() && fss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
                 const size_t opsssz = opss.size();
                 if(opsssz) {
@@ -577,72 +533,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
     return ret;
 }
 
-SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const std::vector<std::string> &names=std::vector<std::string>()) {
-    DBG_ONLY(std::fprintf(stderr, "About to merge from %p of size %zu, names has size %zu\n", (void *)start, n, names.size());)
-    SketchingResult ret;
-    ret.options_ = start->options_;
-    if(n == 0) return ret;
-    else if(n == 1) {
-        ret = std::move(*start);
-        std::transform(ret.names_.begin(), ret.names_.end(), ret.names_.begin(), [&names](const auto &x) {return names.front() + ":" + x;});
-        return ret;
-    }
-    //ret.nperfile_.resize(total_seq);
-    for(size_t i = 0; i < n; ++i) {
-        ret.nperfile_.insert(ret.nperfile_.end(), start[i].nperfile_.begin(), start[i].nperfile_.end());
-    }
-    size_t total_seqs = 0, total_sig_size = 0;
-    std::vector<size_t> offsets(n + 1);
-    std::vector<size_t> sig_offsets(n + 1);
-    for(size_t i = 0; i < n; ++i) {
-        const size_t nseqsi = start[i].names_.size();
-        const size_t nregs = start[i].signatures_.size();
-        assert(start[i].names_.size() == start[i].cardinalities_.size());
-        total_seqs += nseqsi;
-        total_sig_size += nregs;
-        offsets[i + 1] = total_seqs;
-        sig_offsets[i + 1] = total_sig_size;
-    }
-    ret.names_.resize(total_seqs);
-    if(std::any_of(start, start + n, [](auto &x) {return x.sequences_.size();})) {
-        ret.sequences_.resize(total_seqs);
-    }
-    const size_t sketchsz = start->signatures_.size() / start->names_.size();
-    if(total_sig_size > 0) {
-        ret.signatures_.resize(total_sig_size);
-    }
-    if(start->kmers_.size()) {
-        ret.kmers_.resize(total_seqs * sketchsz);
-    }
-    ret.cardinalities_.resize(total_seqs);
-    if(start->kmercounts_.size()) {
-        ret.kmercounts_.resize(total_sig_size);
-    }
-    const bool seqsz = total_seqs,
-               kmercountsz = !start->kmercounts_.empty();
-    for(size_t i = 0; i < n; ++i) {
-        auto &src = start[i];
-        assert(src.names_.size() == offsets[i + 1] - offsets[i]);
-        const auto ofs = offsets[i], sofs = sig_offsets[i];
-        std::string fname;
-        if(names.size() > i) fname = names[i].substr(0, names[i].find_first_of(' '));
-        // Append filename to sequence names to ensure seq names
-        std::transform(src.names_.begin(), src.names_.end(), &ret.names_[ofs], [&fname](const auto &x) {
-            return x + ':' + fname;
-        });
-        std::copy(src.cardinalities_.begin(), src.cardinalities_.end(), &ret.cardinalities_.at(ofs));
-        if(seqsz) {
-            std::copy(src.sequences_.begin(), src.sequences_.end(), &ret.sequences_.at(ofs));
-        }
-        if(!start[i].signatures_.empty())
-            std::copy(src.signatures_.begin(), src.signatures_.end(), &ret.signatures_.at(sofs));
-        if(!start[i].kmers_.empty())
-            std::copy(src.kmers_.begin(), src.kmers_.end(), &ret.kmers_[sofs]);
-        if(kmercountsz)
-            std::copy(src.kmercounts_.begin(), src.kmercounts_.end(), &ret.kmercounts_[sofs]);
-    }
-    return ret;
-}
 
 
 

@@ -128,7 +128,8 @@ enum OptArg {
     {"batch-size", required_argument, 0, OPTARG_CMP_BATCH_SIZE},\
     {"greedy", required_argument, 0, OPTARG_GREEDY},\
     {"nlsh", required_argument, 0, OPTARG_NLSH},\
-    {"entmin", no_argument, 0, OPTARG_ENTROPYMIN}
+    {"entmin", no_argument, 0, OPTARG_ENTROPYMIN},\
+    {"by-chrom", no_argument, (int *)&by_chrom, 1}\
 
 
 
