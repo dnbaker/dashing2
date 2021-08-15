@@ -131,7 +131,7 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
         DBG_ONLY(std::fprintf(stderr, "Processing substr %s\n", x.data());)
         if((ifp = gzopen(x.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to read from ") + x));
         gzbuffer(ifp, 1u << 17);
-        bns::kseq_assign(myseq, ifp);
+        kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
             DBG_ONLY(std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);)
             ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);

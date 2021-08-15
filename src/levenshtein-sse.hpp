@@ -254,7 +254,7 @@ __m256i _mm256_alignr_epi32_7(__m256i a, __m256i b) {
 static inline __m512i _mm512_alignr_epi32_7(__m512i a, __m512i b) {
   const __m512i rotl1_512_epi32 = _mm512_setr_epi32(15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
   __m512i combined =   _mm512_mask_blend_epi32(0x8000, a, b);
-  return _mm512_permutevar_epi32(combined, rotl1_512_epi32);
+  return _mm512_permutexvar_epi32(combined, rotl1_512_epi32);
 }
 #endif
 
