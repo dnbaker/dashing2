@@ -48,7 +48,6 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         std::fread(&l, sizeof(l), 1, fp);
         if(result.names_.empty()) {
             result.names_.resize(l);
-            OMP_PFOR
 #ifdef _OPENMP
             #pragma omp parallel for schedule(dynamic, 64)
 #endif
