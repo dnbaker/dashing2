@@ -107,15 +107,13 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         if(result.signatures_.size()) {
             ofp = std::fopen(outfile.data(), "wb");
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
+            uint64_t n = result.cardinalities_.size();
+            std::fwrite(&n, sizeof(n), 1, ofp);
+            std::fwrite(result.cardinalities_.data(), sizeof(result.cardinalities_.front()), result.cardinalities_.size(), ofp);
             if(opts.kmer_result_ > FULL_SETSKETCH || even) {
-                DBG_ONLY(std::fprintf(stderr, "Writing set of %zu signatures to file at %s\n", result.signatures_.size(), outfile.data());)
-                if(std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp) != result.signatures_.size())
-                    THROW_EXCEPTION(std::runtime_error("Failed to write to file"));
+                checked_fwrite(ofp, result.signatures_.data(), sizeof(RegT) * result.signatures_.size());
             } else {
-#ifndef NDEBUG
-                auto total_n = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
-                std::fprintf(stderr, "%zu total subsketches, signature size is %zu\n", total_n, result.signatures_.size());
-#endif
+                DBG_ONLY(std::fprintf(stderr, "%zu total summaries, accumulated into signatures of size %zu\n", std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0)), result.signatures_.size());)
                 size_t offset = 0;
                 const uint64_t terminus = uint64_t(-1);
                 for(size_t i = 0; i < result.nperfile_.size(); ++i) {

@@ -313,7 +313,6 @@ case v: {\
             if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
             if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
         }
-        const auto lhc = result.cardinalities_[i], rhc = result.cardinalities_[j];
         if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
             if(opts.exact_kmer_dist_) {
                 auto [edit_dist, max_edit_dist] = mmer_edit_distance(lhk, rhk, opts.use128());
@@ -322,6 +321,9 @@ case v: {\
                 ret = hamming_compare_f64(lhk, rhk);
             }
         } else {
+            double lhc, rhc;
+            std::fread(&lhc, sizeof(lhc), 1, lhk);
+            std::fread(&rhc, sizeof(rhc), 1, rhk);
             const auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc, opts.use128());
             double res = isz_size;
             CORRECT_RES(res, opts.measure_, lhc, rhc)
