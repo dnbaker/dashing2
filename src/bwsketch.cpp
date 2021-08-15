@@ -100,7 +100,6 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
             std::string chrom = fp->cl->chrom[contig_id];
             const uint64_t chrom_hash = std::hash<std::string>{}(chrom);
             auto &rvec = retmap[chrom];
-            auto &rcard = ret.cardmap_[chrom];
             auto &ptr = ids[i].second;
             if(ptr == nullptr) {
                 std::fprintf(stderr, "bwOverlapIterator_t * is null when it should be non-null (tid = %d/contig = %d)\n", tid, contig_id);
@@ -142,7 +141,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
                               bmhs.size() ? bmhs[tid].to_sigs(): pmhs[tid].to_sigs();
                 const auto winc = (fss.size() ? fss[tid].getcard(): opss.size() ? opss[tid].getcard(): bmhs.size() ? bmhs[tid].total_weight(): pmhs.size() ? pmhs[tid].total_weight(): RegT(-1));
                 total_weight += winc;
-                rcard = winc;
+                ret.cardmap_[chrom] = winc;
 
                 if(rvec.empty()) {
                     rvec = newvec;
