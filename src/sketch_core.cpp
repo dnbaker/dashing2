@@ -76,7 +76,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
-    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.size() && std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
+    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
     if(outfile.size()) {
         std::fprintf(stderr, "outfile %s\n", outfile.data());
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Can't write stacked sketches if signatures were not generated"));
@@ -85,13 +85,13 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
         if(result.signatures_.size()) {
             ofp = std::fopen(outfile.data(), "wb");
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
+            uint64_t n = result.cardinalities_.size();
+            std::fwrite(&n, sizeof(n), 1, ofp);
+            std::fwrite(result.cardinalities_.data(), sizeof(result.cardinalities_.front()), result.cardinalities_.size(), ofp);
             if(opts.kmer_result_ > FULL_SETSKETCH || even) {
-                std::fwrite(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), ofp);
+                checked_fwrite(ofp, result.signatures_.data(), sizeof(RegT) * result.signatures_.size());
             } else {
-#ifndef NDEBUG
-                auto totaln = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
-                std::fprintf(stderr, "%zu total minimizers, signature size is %zu\n", totaln, result.signatures_.size());
-#endif
+                DBG_ONLY(std::fprintf(stderr, "%zu total summaries, accumulated into signatures of size %zu\n", std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0)), result.signatures_.size());)
                 size_t offset = 0;
                 const uint64_t terminus = uint64_t(-1);
                 for(size_t i = 0; i < result.nperfile_.size(); ++i) {

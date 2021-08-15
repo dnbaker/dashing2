@@ -117,8 +117,7 @@ std::vector<T> load_file(std::FILE *fp) {
         const size_t oldsz = ret.size();
         ret.resize(oldsz + n);
         std::copy(tmp.get(), &tmp[n], &ret[oldsz]);
-        if(n != BUFSZ)
-            break;
+        if(n != BUFSZ) break;
     }
     return ret;
 }
@@ -131,40 +130,39 @@ weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn,
     //uint64_t &lhv = *reinterpret_cast<uint64_t *>(&lhv2), &rhv = *reinterpret_cast<uint64_t *>(&rhv2);
     double lhc = 1., rhc = 1.;
     if(std::feof(lhk) || std::feof(rhk)) {
-        // If one of the sets is empty, return 0 intersection and union size accordingly
         return {0., lhsum + rhsum};
     }
+    // Skip the cardinalities of both
     const size_t incbytes = use128 ? 16: 8;
     auto lh2p = &lhv2; auto lh1p = &lhv;
     auto rh1p = &rhv;  auto rh2p = &rhv2;
     void *const lhp = use128 ? static_cast<void *>(lh2p): static_cast<void *>(lh1p);
     void *const rhp = use128 ? static_cast<void *>(rh2p): static_cast<void *>(rh1p);
-    auto incl = [&]() {
-        assert(lhk);
-        std::fread(lhp, incbytes, 1, lhk);
-        if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);
-    };
-    auto incr = [&]() {
-        std::fread(rhp, incbytes, 1, rhk);
-        if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);
-    };
-    auto incb = [&]() {incl(); incr();};
+#define incl() do {\
+        std::fread(lhp, incbytes, 1, lhk); \
+        if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);\
+    } while(0)
+#define incr() do {\
+        std::fread(rhp, incbytes, 1, rhk);\
+        if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);\
+    } while(0)
+#define incb() {incl(); incr();}
     long double isz = 0.;
     incb();
     for(;;) {
-        if(use128 ? lhv2 < rhv2 :lhv < rhv) incl();
+        if(use128 ? lhv2 < rhv2 :lhv < rhv) {
+            incl();
             // lhv not found, increment lh side
-        else if(use128 ? rhv2 < lhv2: rhv < lhv) incr();
-        else {
+        }
+        else if(use128 ? rhv2 < lhv2: rhv < lhv) {
+            incr();
+        } else {
             isz += std::min(rhc, lhc);
             incb();
         }
         if(std::feof(lhk) || std::feof(rhk)) break;
     }
-    std::pair<double, double> ret;
-    ret.first = isz;
-    ret.second = lhsum + rhsum - isz;
-    return ret;
+    return {double(isz), double(lhsum + rhsum - isz)};
 }
 
 
@@ -175,10 +173,10 @@ double cosine_compare_(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE
     T lhv, rhv;
     CT lhc = 1., rhc = 1.;
     if(std::feof(lhk) || std::feof(rhk)) return 0.;
+    // Skip cardinalities of both files.
+    static constexpr size_t incbytes = sizeof(T);
+    const auto lhp = &lhv, rhp = &rhv;
 
-    auto incl = [&]() {std::fread(&lhv, sizeof(lhv), 1, lhk); if(lhn) std::fread(&lhc, sizeof(lhc), 1, lhn);};
-    auto incr = [&]() {std::fread(&rhv, sizeof(rhv), 1, rhk); if(rhn) std::fread(&rhc, sizeof(rhc), 1, rhn);};
-    auto incb = [&]() {incl(); incr();};
     auto isz = 0.L;
     incb();
     for(auto carry = 0.L;;) {
@@ -191,6 +189,9 @@ double cosine_compare_(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE
         }
         if(std::feof(lhk) || std::feof(rhk)) break;
     }
+#undef incb
+#undef incl
+#undef incr
     return isz;
 }
 
