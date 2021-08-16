@@ -12,6 +12,7 @@ EXTRA+=-DNOCURL
 CXXFLAGS+= -std=c++17
 CFLAGS+= -std=c11
 
+D2SRC=$(wildcard src/*.cpp)
 OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp)) $(patsubst %.c,%.o, $(wildcard src/*.c))
 OBJ=$(OFS)
 OBJLD=$(patsubst %.o,%.ldo,$(OFS))
@@ -132,6 +133,33 @@ read%-f: test/read%.fo $(FLIBOBJ)
 %.f64o: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
 
+
+libgomp.a:
+	ln -sf $(shell $(CXX) --print-file-name=libgomp.a)
+dashing2_s128: $(D2SRC) $(wildcard src/*.h) libgomp.a
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mno-avx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+    libgomp.a \
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+
+dashing2_savx: $(D2SRC) $(wildcard src/*.h) libgomp.a
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+    libgomp.a \
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+
+dashing2_savx2: $(D2SRC) $(wildcard src/*.h) libgomp.a
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+    libgomp.a \
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+
+dashing2_s512: $(D2SRC) $(wildcard src/*.h) libgomp.a
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+    libgomp.a \
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+
+dashing2_s512bw: $(D2SRC) $(wildcard src/*.h) libgomp.a
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+    libgomp.a \
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 
 
