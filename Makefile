@@ -137,27 +137,27 @@ read%-f: test/read%.fo $(FLIBOBJ)
 libgomp.a:
 	ln -sf $(shell $(CXX) --print-file-name=libgomp.a)
 dashing2_s128: $(D2SRC) $(wildcard src/*.h) libgomp.a libBigWig.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mno-avx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mno-avx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a libBigWig.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_savx: $(D2SRC) $(wildcard src/*.h) libgomp.a libBigWig.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a libBigWig.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_savx2: $(D2SRC) $(wildcard src/*.h) libgomp.a libBigWig.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a libBigWig.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_s512: $(D2SRC) $(wildcard src/*.h) libgomp.a libBigWig.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a libBigWig.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_s512bw: $(D2SRC) $(wildcard src/*.h) libgomp.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a libBigWig.a -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_static: dashing2_s128 dashing2_savx dashing2_savx2 dashing2_s512 dashing2_s512bw
