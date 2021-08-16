@@ -3,7 +3,7 @@
 CXX?=g++
 
 LIB=-lz
-INCLUDE+=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
+INC=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
 OPT+= -O3 -march=native -fopenmp -pipe
 OPTMV:=$(OPT)
 OPT+= -std=c++17
@@ -52,112 +52,112 @@ LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
 dashing2: dashing2-tmp
 	cp $< $@
 dashing2-tmp: $(OBJ) libBigWig.a $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
 dashing2-64: $(OBJ64) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJ64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -DLSHIDTYPE="uint64_t"
 
 
 dashing2-0: $(OBJ0) libBigWig.a $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-d: $(OBJDBG) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-v: $(OBJV) libBigWig.a $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJV) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJV) -o $@ $(LIB) $(EXTRA) libBigWig.a
 dashing2-d0: $(OBJDBG) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-add: $(OBJADD) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJADD) -o $@ $(LIB) $(EXTRA) libBigWig.a -fsanitize=thread
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJADD) -o $@ $(LIB) $(EXTRA) libBigWig.a -fsanitize=thread
 dashing2-g: $(OBJG) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJG) -o $@ $(LIB) $(EXTRA) libBigWig.a -fno-lto -pg
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJG) -o $@ $(LIB) $(EXTRA) libBigWig.a -fno-lto -pg
 dashing2-ld: $(OBJLD) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJLD) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
 dashing2-f: $(OBJF) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJF) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto
 dashing2-f64: $(OBJF64) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJF64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJF64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 dashing2-ld64: $(OBJLD64) libBigWig.a
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJLD64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJLD64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 dashing2-w: $(OBJW) libBigWig.a $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $(OBJW) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto -DWANGHASH_EXTRA=1
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJW) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto -DWANGHASH_EXTRA=1
 read%: test/read%.o $(LIBOBJ)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 read%-ld: test/read%.ldo $(LDLIBOBJ)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LDLIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DDSKETCH_FLOAT_TYPE="long double"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< $(LDLIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DDSKETCH_FLOAT_TYPE="long double"
 read%-f: test/read%.fo $(FLIBOBJ)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(FLIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< $(FLIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
 %: test/%.cpp $(LIBOBJ)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
 	# $(wildcard src/*.h)
 %.o: %.cpp
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3
 %.wo: %.cpp
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DWANGHASH_EXTRA=1
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DWANGHASH_EXTRA=1
 %.o: %.c
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -std=c11
 %.64o: %.cpp
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t"
 %.64o: %.c
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t" -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t" -std=c11
 %.0: %.cpp
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O0
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O0
 %.0: %.c
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O0 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O0 -std=c11
 %.vo: %.cpp
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O3
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O3
 %.vo: %.c
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O3 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O3 -std=c11
 %.lto: %.cpp
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
 %.lto: %.c
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -std=c11
 %.do: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0
 %.do: %.c $(wildcard src/*.h)
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0 -std=c11
 %.sano: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto -fsanitize=thread
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto -fsanitize=thread
 %.sano: %.c $(wildcard src/*.h)
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto -fsanitize=thread
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto -fsanitize=thread
 %.gobj: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -pg -fno-lto -DNDEBUG
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -pg -fno-lto -DNDEBUG
 %.ldo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto
 %.ldo: %.c $(wildcard src/*.h)
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto -std=c11
 %.fo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
 %.fo: %.c $(wildcard src/*.h)
-	$(CC) $(INCLUDE) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG -std=c11
 %.ld64o: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 %.f64o: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INCLUDE) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
 
 
 libgomp.a:
 	ln -sf $(shell $(CXX) --print-file-name=libgomp.a)
 dashing2_s128: $(D2SRC) $(wildcard src/*.h) libgomp.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mno-avx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mno-avx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_savx: $(D2SRC) $(wildcard src/*.h) libgomp.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_savx2: $(D2SRC) $(wildcard src/*.h) libgomp.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_s512: $(D2SRC) $(wildcard src/*.h) libgomp.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
 dashing2_s512bw: $(D2SRC) $(wildcard src/*.h) libgomp.a
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INCLUDE) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     libgomp.a \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
