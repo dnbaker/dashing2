@@ -5,9 +5,9 @@
 namespace dashing2 {
 
 template<typename T>
-double total_weight(const T &x) {return x.total_weight();}
+auto total_weight(const T &x) {return x.total_weight();}
 template<>
-double total_weight(const FullSetSketch &x) {return x.total_updates();}
+auto total_weight(const FullSetSketch &x) {return x.total_updates();}
 template<typename BMH>
 BMH construct(size_t sketchsize) {
     if constexpr(std::is_same_v<BMH, BagMinHash> || std::is_same_v<BMH, ProbMinHash>)
@@ -58,7 +58,7 @@ template<typename T>
 static constexpr const char *fmt = "%0.17g\n";
 template<> constexpr const char *fmt<float> = "%0.16g\n";
 template<> constexpr const char *fmt<double> = "%0.24g\n";
-template<> constexpr const char *fmt<long double> = "%0.30g\n";
+template<> constexpr const char *fmt<long double> = "%0.30Lg\n";
 
 
 template<typename BMH, typename FT, typename IT>
@@ -263,7 +263,7 @@ void write_container(const T &vec, std::string path) {
     std::fclose(ifp);
 }
 int wsketch_main(int argc, char **argv) {
-    int sketchsize = 1024;
+    uint64_t sketchsize = 1024;
     int sketchtype = 1;
     bool u32 = false;
     int f32 = 0;
@@ -272,7 +272,7 @@ int wsketch_main(int argc, char **argv) {
     int nthreads = 1;
     for(int c;(c = getopt(argc, argv, "p:o:S:PqBHPufh?")) >= 0;) { switch(c) {
         case 'p': nthreads = std::atoi(optarg); break;
-        case 'S': sketchsize = std::atoi(optarg); break;
+        case 'S': sketchsize = std::strtoull(optarg, nullptr, 10); break;
         case 'B': sketchtype = 0; break;
         case 'q': sketchtype = -1; break;
         case 'u': u32 = true; break;
@@ -294,32 +294,46 @@ int wsketch_main(int argc, char **argv) {
     if(diff == 3) {
         //std::fprintf(stderr, "Getting CSR hashes\n");
         auto mhrs = wmh_from_file_csr(argv[optind], argv[optind + 1], argv[optind + 2], sketchsize, sketchtype, f32, u32, ip32);
-        std::string of = outpref + ".sampled.indices.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64";
+        if(mhrs.empty()) {
+            THROW_EXCEPTION(std::runtime_error("No sketches found in file; this suggests there was an error."));
+        }
+        const uint64_t nsketches = mhrs.size();
+        std::string of = outpref + ".sampled.indices.stacked." + std::to_string(nsketches) + "." + std::to_string(sketchsize) + ".i64";
         std::FILE *fp = std::fopen(of.data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
-        for(size_t i = 0; i < mhrs.size(); ++i) {
+        for(size_t i = 0; i < nsketches; ++i) {
             if(std::fwrite(std::get<2>(mhrs[i]).data(), sizeof(uint64_t), std::get<2>(mhrs[i]).size(), fp) != std::get<2>(mhrs[i]).size()) {
                 THROW_EXCEPTION(std::runtime_error("Failed to write MH identifiers to disk."));
             }
         }
         std::fclose(fp);
-        of =  outpref + ".sampled.regs.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".f" + std::to_string(sizeof(RegT) * 8);
+        of =  outpref + ".sampled.regs.stacked." + std::to_string(nsketches) + "." + std::to_string(sketchsize) + ".f" + std::to_string(sizeof(RegT) * 8);
         fp = std::fopen(of.data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
-        for(size_t i = 0; i < mhrs.size(); ++i) {
-            auto sz = std::get<0>(mhrs[i]).size();
-            if(size_t fc = std::fwrite(std::get<0>(mhrs[i]).data(), sizeof(RegT), sz, fp); fc != sz) {
+        checked_fwrite(fp, &nsketches, sizeof(nsketches));
+        checked_fwrite(fp, &sketchsize, sizeof(sketchsize));
+        {
+            std::vector<double> cards(nsketches);
+            std::transform(mhrs.begin(), mhrs.end(), cards.data(), [](const auto &x) {return x.total_weight();});
+            if(size_t nwritten = std::fwrite(cards.data(), sizeof(double), cards.size(), fp); nwritten != cards.size()) {
+                THROW_EXCEPTION(std::runtime_error(std::string("Failed to write cards to disk; wrote ") + std::to_string(nwritten) + " instead of " + std::to_string(cards.size())));
+            }
+        }
+        const auto sz = std::get<0>(mhrs.front()).size();
+        for(size_t i = 0; i < nsketches; ++i) {
+            if(const size_t fc = std::fwrite(std::get<0>(mhrs[i]).data(), sizeof(RegT), sz, fp); fc != sz) {
                 std::fprintf(stderr, "Failed to write total of %zu to disk (wrote %zu)\n", sz, fc);
                 THROW_EXCEPTION(std::runtime_error("Failed to write MH registers to disk."));
             }
         }
         std::fclose(fp);
-        of = outpref + ".sampled.hashes.stacked." + std::to_string(mhrs.size()) + "." + std::to_string(sketchsize) + ".i64";
+        of = outpref + ".sampled.hashes.stacked." + std::to_string(nsketches) + "." + std::to_string(sketchsize) + ".i64";
         fp = std::fopen(of.data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
-        for(size_t i = 0; i < mhrs.size(); ++i) {
-            auto sz = std::get<1>(mhrs[i]).size();
-            if(size_t fc = std::fwrite(std::get<1>(mhrs[i]).data(), sizeof(uint64_t), sz, fp); fc != sz) {
+        for(size_t i = 0; i < nsketches; ++i) {
+            auto &regs = std::get<1>(mhrs[i]);
+            auto sz = regs.size();
+            if(size_t fc = std::fwrite(regs.data(), sizeof(uint64_t), sz, fp); fc != sz) {
                 std::fprintf(stderr, "Failed to write total of %zu to disk (wrote %zu)\n", sz, fc);
                 THROW_EXCEPTION(std::runtime_error("Failed to write MH registers to disk."));
             }
@@ -327,28 +341,37 @@ int wsketch_main(int argc, char **argv) {
         std::fclose(fp);
         fp = std::fopen((outpref + ".sampled.info.txt").data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
-        for(size_t i = 0; i < mhrs.size(); std::fprintf(fp, fmt<RegT>, mhrs[i++].total_weight()));
+        static constexpr const char *fmtstr = fmt<std::decay_t<decltype(mhrs.front().total_weight())>>;
+        for(size_t i = 0; i < nsketches; std::fprintf(fp, fmtstr, mhrs[i++].total_weight()));
         std::fclose(fp);
         return 0;
     }
     SimpleMHRet mh;
+#ifndef NDEBUG
     for(int i = 0; i < argc; ++i) std::fprintf(stderr, "Arg %d/%d is %s (optind = %d)\n", i, argc, argv[i], optind);
-    if(diff == 1) {
-        mh = SimpleMHRet(wmh_from_file(argv[optind], std::string(), sketchsize, sketchtype, f32, u32));
-    } else {
-        assert(diff == 2);
-        mh = SimpleMHRet(wmh_from_file(argv[optind], argv[optind + 1], sketchsize, sketchtype, f32, u32));
-    }
-    auto [sigs, indices, ids, total_weight] = mh.tup();
+#endif
+    std::string destpath;
+    if(diff == 2) destpath = argv[optind + 1];
+    auto [sigs, indices, ids, total_weight] = std::move(wmh_from_file(argv[optind], destpath, sketchsize, sketchtype, f32, u32).tup());
 
     write_container(indices, outpref + ".sampled.indices.u64");
-    write_container(sigs, outpref + std::string(".sampled.hashes.f") + (sizeof(RegT) == 4  ? "32" : sizeof(RegT) == 8 ? "64": sizeof(RegT) == 16 ? "128": "UNKNOWN"));
+    const std::string suffix = (sizeof(RegT) == 4  ? "32" : sizeof(RegT) == 8 ? "64": sizeof(RegT) == 16 ? "128": "UNKNOWN");
+    if(suffix == "UNKNOWN") THROW_EXCEPTION(std::runtime_error("RegT is not float32, float64, or long double...."));
+    std::string sigpath = outpref + ".sampled.hashes.f" + suffix;
+    std::FILE *sigfp = std::fopen(sigpath.data(), "wb");
+    if(sigfp == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open sigpath ") + sigpath));
+    double tw = total_weight;
+    std::fwrite(&tw, sizeof(tw), 1, sigfp);
+    std::fwrite(sigs.data(), sizeof(RegT), sigs.size(), sigfp);
+    std::fclose(sigfp);
     write_container(ids, outpref + ".sampled.ids.u64");
     std::ofstream ofs(outpref + ".sampled.tw.txt");
     std::string msg = std::string("Total weight: ") + std::to_string(total_weight) + ";" + argv[optind];
     if(optind + 1 < argc) msg += std::string(";") + argv[optind + 1];
     msg += ';' + (f32 == 1 ? 'f' : f32 == 0 ?'d': 'H') + ';' + (u32 ? 'W': 'L');
-    ofs <<  msg << '\n';
+    msg += '\n';
+    ofs <<  msg;
+    std::cerr << msg;
     return 0;
 }
 

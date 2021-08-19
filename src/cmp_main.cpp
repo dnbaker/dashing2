@@ -44,8 +44,14 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         //size_t nregs = st.st_size / result.names_.size() / sizeof(RegT);
         std::FILE *fp = std::fopen(pf.data(), "w");
         if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + pf));
+        // Read in --
+        // # of entities (64-bit integer)
         uint64_t l;
         std::fread(&l, sizeof(l), 1, fp);
+        // sketch size (64-bit integer)
+        uint64_t sketchsize;
+        std::fread(&sketchsize, sizeof(sketchsize), 1, fp);
+        opts.sketchsize_ = sketchsize;
         if(result.names_.empty()) {
             result.names_.resize(l);
 #ifdef _OPENMP
@@ -54,6 +60,9 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             for(size_t i = 0; i < l; ++i)
                 result.names_[i] = std::to_string(i);
         }
+        // TODO:
+        // Instead of loading signatures, load the compressed form directly.
+        assert(result.cardinalities_.empty() || result.cardinalities_.size() == l);
         result.cardinalities_.resize(l);
         // l * sizeof(double) for the cardinalitiy
         if(std::fread(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), fp) != result.cardinalities_.size())
