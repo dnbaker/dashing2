@@ -3,6 +3,7 @@
 #include "options.h"
 #include "refine.h"
 #include <filesystem>
+#include <type_traits>
 
 namespace dashing2 {
 
@@ -84,7 +85,10 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             fsizes[i] = nelem;
             csizes[i + 1] = csizes[i] + nelem;
         }
-        const bool even = opts.kmer_result <= FULL_SETSKETCH;
+        // It's even if the items are actually sketches
+        // And there are the same number of them per file
+        const bool even = opts.kmer_result_ <= FULL_SETSKETCH &&
+                 std::all_of(csizes.begin() + 1, csizes.end(), [r=csizes.front()](auto x) {return x == r;});
         const size_t totalsize = csizes.back();
         result.signatures_.resize(totalsize); // Account for the size of the sketch registers
         if(even) {

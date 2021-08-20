@@ -209,7 +209,7 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         std::fprintf(stderr, "sketching space type: %s\n", to_string(opts.sspace_).data());
 #endif
         // We make an exception for iskmer - we only use this if
-        // 
+        //
         if(opts.build_sig_matrix_) {
             ret.signatures_.resize(ss * paths.size());
         }
