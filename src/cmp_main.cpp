@@ -19,7 +19,7 @@ void cmp_usage() {
     std::fprintf(stderr, "dashing2 cmp usage is not written.\n");
 }
 void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std::vector<std::string> &paths) {
-    std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());
+    DBG_ONLY(std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());)
     auto &pf = paths.front();
     struct stat st;
     ::stat(pf.data(), &st);
@@ -36,7 +36,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                     result.cardinalities_.emplace_back(std::strtod(s, &s));
                     if(result.cardinalities_.back() <= 0.) result.cardinalities_.back() = 1.; // Set size to 1 if not available
                     if(*s) {
-                        std::fprintf(stderr, "Saving kmer count file %s\n", s + 1);
+                        DBG_ONLY(std::fprintf(stderr, "Saving kmer count file %s\n", s + 1);)
                         result.kmercountfiles_.push_back(s + 1);
                     }
                 }
