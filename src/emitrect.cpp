@@ -27,11 +27,13 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     std::deque<QTup> datq;
     volatile int loopint = 0;
     std::mutex datq_lock;
+#ifndef NDEBUG
     if(opts.output_format_ == MACHINE_READABLE) {
         std::fprintf(stderr, "Emitting machine-readable: %s\n", to_string(opts.output_format_).data());
     } else {
         std::fprintf(stderr, "Emitting human-readable: %s\n", to_string(opts.output_format_).data());
     }
+#endif
     // Emit Header
     if(opts.output_format_ == HUMAN_READABLE) {
         std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": "PHYLIP pairwise");
