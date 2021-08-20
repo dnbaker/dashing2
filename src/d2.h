@@ -217,6 +217,49 @@ static INLINE bool endswith(std::string lhs, std::string rhs) {
     return std::equal(rhs.begin(), rhs.end(), &lhs[lhs.size() - rhs.size()]);
 }
 
+template<typename T, size_t chunk_size = 65536>
+size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
+    T *const origptr = ptr;
+    if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
+        gzFile fp = gzopen(path.data(), "rb");
+        if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
+        gzread(fp, cardinality, sizeof(*cardinality));
+        for(int nr;
+            !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
+            ptr += nr / sizeof(T));
+        gzclose(fp);
+        return ptr - origptr;
+    } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
+        auto cmd = std::string("xz -dc ") + path;
+        std::FILE *fp = ::popen(cmd.data(), "r");
+        std::fread(cardinality, sizeof(*cardinality), 1, fp);
+        for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
+        ::pclose(fp);
+        return ptr - origptr;
+    }
+    std::FILE *fp = std::fopen(path.data(), "rb");
+    if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + path));
+    std::fread(cardinality, sizeof(*cardinality), 1, fp);
+    const int fd = ::fileno(fp);
+    size_t sz = 0;
+    if(!::isatty(fd)) {
+        struct stat st;
+        if(::fstat(fd, &st)) THROW_EXCEPTION(std::runtime_error(std::string("Failed to fstat") + path));
+        if(!st.st_size) std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+        size_t expected_bytes = st.st_size - 8;
+        size_t nb = std::fread(ptr, 1, expected_bytes, fp);
+        if(nb != expected_bytes) {
+            THROW_EXCEPTION(std::runtime_error("Error in reading from file"));
+        }
+        sz = expected_bytes / sizeof(T);
+    } else {
+        for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
+        sz = (up - (uint8_t *)ptr) / sizeof(T);
+    }
+    DBG_ONLY(std::fprintf(stderr, "Loading sketch of size %zu from %s\n", size_t(st.st_size), path.data());)
+    std::fclose(fp);
+    return sz;
+}
 
 using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
 using FullSetSketch = sketch::setsketch::CountFilteredCSetSketch<RegT>;

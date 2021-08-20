@@ -43,44 +43,6 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
     }
 }
 
-template<typename T, size_t chunk_size = 65536>
-void load_copy(const std::string &path, T *ptr, double *cardinality) {
-    if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
-        gzFile fp = gzopen(path.data(), "rb");
-        if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
-        gzread(fp, cardinality, sizeof(*cardinality));
-        for(int nr;
-            !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
-            ptr += nr / sizeof(T));
-        gzclose(fp);
-        return;
-    } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
-        auto cmd = std::string("xz -dc ") + path;
-        std::FILE *fp = ::popen(cmd.data(), "r");
-        std::fread(cardinality, sizeof(*cardinality), 1, fp);
-        for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
-        ::pclose(fp);
-        return;
-    }
-    std::FILE *fp = std::fopen(path.data(), "rb");
-    if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + path));
-    std::fread(cardinality, sizeof(*cardinality), 1, fp);
-    const int fd = ::fileno(fp);
-    if(!::isatty(fd)) {
-        struct stat st;
-        if(::fstat(fd, &st)) THROW_EXCEPTION(std::runtime_error(std::string("Failed to fstat") + path));
-        if(!st.st_size) std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
-        size_t expected_bytes = st.st_size - 8;
-        size_t nb = std::fread(ptr, 1, expected_bytes, fp);
-        if(nb != expected_bytes) {
-            THROW_EXCEPTION(std::runtime_error("Error in reading from file"));
-        }
-    } else {
-        for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
-    }
-    DBG_ONLY(std::fprintf(stderr, "Loading sketch of size %zu from %s\n", size_t(st.st_size), path.data());)
-    std::fclose(fp);
-}
 
 std::string FastxSketchingResult::str() const {
     std::string msg = "FastxSketchingResult @" + to_string(this) + ';';
