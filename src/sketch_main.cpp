@@ -23,7 +23,7 @@ void sketch_usage() {
 
 int sketch_main(int argc, char **argv) {
     int c;
-    int k = 16, w = -1, nt = -1;
+    int k = -1, w = -1, nt = -1;
     SketchSpace sketch_space = SPACE_SET;
     KmerSketchResultType res = FULL_SETSKETCH;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true;
@@ -62,6 +62,14 @@ int sketch_main(int argc, char **argv) {
             case OPTARG_HELP: case '?': case 'h': sketch_usage(); return 1;
         }
         //std::fprintf(stderr, "After getopt argument %d, of is %s\n",c , to_string(of).data());
+    }
+    if(k < 0) {
+        if(rht == bns::DNA) k = 31;
+        else if(rht == bns::DNA2) k = 63;
+        else if(rht == bns::PROTEIN20) k = 14;
+        else if(rht == bns::PROTEIN_14) k = 16;
+        else if(rht == bns::PROTEIN_3BIT) k = 22;
+        else if(rht == bns::PROTEIN_6) k = 24;
     }
     const std::string ex(std::filesystem::absolute(std::filesystem::path(argv[-1])));
     std::string cmd(ex);

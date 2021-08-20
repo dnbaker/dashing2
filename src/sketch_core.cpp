@@ -109,6 +109,8 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
             uint64_t n = result.cardinalities_.size();
             std::fwrite(&n, sizeof(n), 1, ofp);
+            n = opts.sketchsize_;
+            std::fwrite(&n, sizeof(n), 1, ofp);
             std::fwrite(result.cardinalities_.data(), sizeof(result.cardinalities_.front()), result.cardinalities_.size(), ofp);
             if(opts.kmer_result_ > FULL_SETSKETCH || even) {
                 checked_fwrite(ofp, result.signatures_.data(), sizeof(RegT) * result.signatures_.size());

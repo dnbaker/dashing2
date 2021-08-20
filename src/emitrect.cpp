@@ -118,16 +118,14 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
             for(size_t bi = 0; bi < nbatches; ++bi) {
                 const size_t firstrow = bi * batch_size;
                 const size_t erow = std::min((bi + 1) * batch_size, ns);
-                std::fprintf(stderr, "Batch %zu, ranges from %zu to %zu\n", bi, firstrow, erow);
                 const size_t diff = erow - firstrow;
                 const size_t nwritten = ns * diff;
                 std::unique_ptr<float[]> dat(new float[nwritten]);
                 OMP_PFOR_DYN
                 for(size_t fs = firstrow; fs < erow; ++fs) {
                     auto datp = &dat[(fs - firstrow) * ns];
-                    for(size_t j = 0; j < ns; ++j) {
+                    for(size_t j = 0; j < ns; ++j)
                         datp[j] = compare(opts, result, fs, j);
-                    }
                 }
                 std::lock_guard<std::mutex> guard(datq_lock);
                 datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});

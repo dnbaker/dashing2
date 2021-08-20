@@ -8,13 +8,17 @@ namespace dashing2 {
 using std::uint64_t;
 
 
-struct SimpleMHRet: public std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, double> {
-    using Tup =  std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, double>;
+struct SimpleMHRet: public std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, long double> {
+    using Tup =  std::tuple<std::vector<RegT>, std::vector<uint64_t>, std::vector<uint64_t>, long double>;
     Tup &tup() {return *static_cast<Tup *>(this);}
+    const Tup &tup() const {return *static_cast<const Tup *>(this);}
     auto &sigs() {return std::get<0>(*this);}
+    const auto &sigs() const {return std::get<0>(*this);}
     auto &hashes() {return std::get<1>(*this);}
+    const auto &hashes() const {return std::get<1>(*this);}
     auto &ids() {return std::get<2>(*this);}
     auto &total_weight() {return std::get<3>(*this);}
+    const auto &total_weight() const {return std::get<3>(*this);}
     SimpleMHRet &operator=(Tup &&o) {
         Tup::operator=(o);
         return *this;

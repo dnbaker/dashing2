@@ -3,6 +3,7 @@
 #include "options.h"
 #include "refine.h"
 #include <filesystem>
+#include <type_traits>
 
 namespace dashing2 {
 
@@ -44,8 +45,14 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         //size_t nregs = st.st_size / result.names_.size() / sizeof(RegT);
         std::FILE *fp = std::fopen(pf.data(), "w");
         if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + pf));
+        // Read in --
+        // # of entities (64-bit integer)
         uint64_t l;
         std::fread(&l, sizeof(l), 1, fp);
+        // sketch size (64-bit integer)
+        uint64_t sketchsize;
+        std::fread(&sketchsize, sizeof(sketchsize), 1, fp);
+        opts.sketchsize_ = sketchsize;
         if(result.names_.empty()) {
             result.names_.resize(l);
 #ifdef _OPENMP
@@ -54,6 +61,9 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             for(size_t i = 0; i < l; ++i)
                 result.names_[i] = std::to_string(i);
         }
+        // TODO:
+        // Instead of loading signatures, load the compressed form directly.
+        assert(result.cardinalities_.empty() || result.cardinalities_.size() == l);
         result.cardinalities_.resize(l);
         // l * sizeof(double) for the cardinalitiy
         if(std::fread(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), fp) != result.cardinalities_.size())
@@ -75,18 +85,21 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             fsizes[i] = nelem;
             csizes[i + 1] = csizes[i] + nelem;
         }
-        const bool even = std::all_of(fsizes.begin() + 1, fsizes.end(), [f=fsizes.front()](auto x) {return x == f;});
+        // It's even if the items are actually sketches
+        // And there are the same number of them per file
+        const bool even = opts.kmer_result_ <= FULL_SETSKETCH &&
+                 std::all_of(fsizes.begin() + 1, fsizes.end(), [r=fsizes.front()](auto x) {return x == r;});
         const size_t totalsize = csizes.back();
         result.signatures_.resize(totalsize); // Account for the size of the sketch registers
         if(even) {
             result.cardinalities_.resize(totalsize / opts.sketchsize_);
         }
         if(bns::isfile(pf + ".kmerhashes.u64")) {
-            std::fprintf(stderr, "Loading k-mer hashes, too\n");
+            DBG_ONLY(std::fprintf(stderr, "Loading k-mer hashes, too\n");)
             result.kmers_.resize(result.signatures_.size());
         }
         if(bns::isfile(pf + ".kmercounts.f64")) {
-            std::fprintf(stderr, "Loading k-mer counts, too\n");
+            DBG_ONLY(std::fprintf(stderr, "Loading k-mer counts, too\n");)
             result.kmercounts_.resize(result.signatures_.size());
         }
         OMP_PFOR_DYN
@@ -126,7 +139,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
 
 int cmp_main(int argc, char **argv) {
     int c;
-    int k = 16, w = 0, nt = -1;
+    int k = -1, w = 0, nt = -1;
     SketchSpace sketch_space = SPACE_SET;
     KmerSketchResultType res = FULL_SETSKETCH;
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true, presketched = false;
@@ -163,6 +176,14 @@ int cmp_main(int argc, char **argv) {
         SHARED_FIELDS
         case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
     }}
+    if(k < 0) {
+        if(rht == bns::DNA) k = 31;
+        else if(rht == bns::DNA2) k = 63;
+        else if(rht == bns::PROTEIN20) k = 14;
+        else if(rht == bns::PROTEIN_14) k = 16;
+        else if(rht == bns::PROTEIN_3BIT) k = 22;
+        else if(rht == bns::PROTEIN_6) k = 24;
+    }
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
     std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[-1])));
@@ -216,6 +237,7 @@ int cmp_main(int argc, char **argv) {
     SketchingResult result;
     if(presketched) {
         std::set<std::string> suffixset;
+        std::string tmp;
         for(const auto &p: paths) {
             suffixset.insert(p.substr(p.find_last_of('.'), std::string::npos));
         }
