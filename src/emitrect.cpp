@@ -80,7 +80,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
             datq.pop_front();
         }
     });
-    const size_t batch_size = std::max(opts.cmp_batch_size_, size_t(1));
+    const size_t batch_size = std::max(std::min(unsigned(opts.cmp_batch_size_), opts.nthreads()), 1u);
     // We have two access patterns --
     // Unbatched (batch_size <= 1), which fills in the matrix one row at a time
     // and

@@ -106,10 +106,7 @@ std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer
     else {
         auto ks = opts.kmer_result_;
         if(iskmer && ks == FULL_MMER_COUNTDICT) {
-            std::fprintf(stderr, "Using MMerSet for the cached path\n");
             ks = FULL_MMER_SET;
-        } else {
-            std::fprintf(stderr, "Using %s\n", to_string(ks).data());
         }
         ret += to_string(ks);
     }

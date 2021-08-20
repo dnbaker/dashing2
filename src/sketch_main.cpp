@@ -46,7 +46,7 @@ int sketch_main(int argc, char **argv) {
     int by_chrom = false;
     double downsample_frac = 1.;
     uint64_t seedseed = 13;
-    size_t batch_size = 16;
+    size_t batch_size = 0;
     int nLSH = 2;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
@@ -125,7 +125,7 @@ int sketch_main(int argc, char **argv) {
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
         distopts.measure_ = measure;
-        distopts.cmp_batch_size_ = std::max(batch_size, size_t(distopts.nthreads()));
+        distopts.cmp_batch_size_ = default_batchsize(batch_size, distopts);
         cmp_core(distopts, result);
     }
     return 0;
