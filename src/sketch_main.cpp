@@ -63,14 +63,7 @@ int sketch_main(int argc, char **argv) {
         }
         //std::fprintf(stderr, "After getopt argument %d, of is %s\n",c , to_string(of).data());
     }
-    if(k < 0) {
-        if(rht == bns::DNA) k = 31;
-        else if(rht == bns::DNA2) k = 63;
-        else if(rht == bns::PROTEIN20) k = 14;
-        else if(rht == bns::PROTEIN_14) k = 16;
-        else if(rht == bns::PROTEIN_3BIT) k = 22;
-        else if(rht == bns::PROTEIN_6) k = 24;
-    }
+    if(k < 0) k = nregperitem(rht, use128);
     const std::string ex(std::filesystem::absolute(std::filesystem::path(argv[-1])));
     std::string cmd(ex);
     for(char **s = argv; *s; cmd += std::string(" ") + *s++);

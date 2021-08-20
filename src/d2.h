@@ -225,6 +225,22 @@ using BagMinHash = sketch::BagMinHash2<RegT>;
 using ProbMinHash = sketch::pmh2_t<RegT>;
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
 
+static constexpr size_t nregperitem(bns::RollingHashingType it, bool is128=false) {
+    using namespace bns;
+    switch(it) {
+        case DNA: return is128 ? RHTraits<DNA>::nper128: RHTraits<DNA>::nper64;
+        case PROTEIN: return is128 ? RHTraits<PROTEIN>::nper128: RHTraits<PROTEIN>::nper64;
+        case PROTEIN20: return is128 ? RHTraits<PROTEIN20>::nper128: RHTraits<PROTEIN20>::nper64;
+        case PROTEIN_3BIT: return is128 ? RHTraits<PROTEIN_3BIT>::nper128: RHTraits<PROTEIN_3BIT>::nper64;
+        case PROTEIN_14: return is128 ? RHTraits<PROTEIN_14>::nper128: RHTraits<PROTEIN_14>::nper64;
+        case PROTEIN_6: return is128 ? RHTraits<PROTEIN_6>::nper128: RHTraits<PROTEIN_6>::nper64;
+        case DNAC: return is128 ? RHTraits<DNAC>::nper128: RHTraits<DNAC>::nper64;
+        case PROTEIN_6_FRAME: return is128 ? RHTraits<PROTEIN_6_FRAME>::nper128: RHTraits<PROTEIN_6_FRAME>::nper64;
+        default: ;
+    }
+    return 0; // Should not ever happen
+}
+
 extern bool entmin;
 
 } // namespace dashing2

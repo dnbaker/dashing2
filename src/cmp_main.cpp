@@ -176,14 +176,7 @@ int cmp_main(int argc, char **argv) {
         SHARED_FIELDS
         case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
     }}
-    if(k < 0) {
-        if(rht == bns::DNA) k = 31;
-        else if(rht == bns::DNA2) k = 63;
-        else if(rht == bns::PROTEIN20) k = 14;
-        else if(rht == bns::PROTEIN_14) k = 16;
-        else if(rht == bns::PROTEIN_3BIT) k = 22;
-        else if(rht == bns::PROTEIN_6) k = 24;
-    }
+    if(k < 0) k = nregperitem(rht, use128);
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
     std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[-1])));
