@@ -237,7 +237,6 @@ int cmp_main(int argc, char **argv) {
     SketchingResult result;
     if(presketched) {
         std::set<std::string> suffixset;
-        std::string tmp;
         for(const auto &p: paths) {
             suffixset.insert(p.substr(p.find_last_of('.'), std::string::npos));
         }
