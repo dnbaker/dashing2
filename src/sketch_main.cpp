@@ -67,7 +67,7 @@ int sketch_main(int argc, char **argv) {
     const std::string ex(std::filesystem::absolute(std::filesystem::path(argv[-1])));
     std::string cmd(ex);
     for(char **s = argv; *s; cmd += std::string(" ") + *s++);
-    std::fprintf(stderr, "[Dashing2] Invocation: %s ", cmd.data());
+    std::fprintf(stderr, "#Invocation: %s\n", cmd.data());
     if(nt < 0) {
         char *s = std::getenv("OMP_NUM_THREADS");
         if(s) nt = std::max(std::atoi(s), 1);
