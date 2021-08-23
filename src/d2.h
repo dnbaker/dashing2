@@ -127,11 +127,13 @@ public:
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false, KmerSketchResultType kres=ONE_PERM):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_, canon), rh_(k, canon, rht, w), rh128_(k, canon, rht, w), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
         kmer_result_ = kres;
+#ifndef NDEBUG
         if(dtype_ == FASTX) {
             std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, %s target, space = %s, datatype = %s and result = %s\n", k, w, rht == bns::DNA ? "DNA": "Protein", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data(), ::dashing2::to_string(kmer_result_).data());
         } else {
             std::fprintf(stderr, "Dashing2 made with space = %s, datatype = %s and result = %s\n", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data(), ::dashing2::to_string(kmer_result_).data());
         }
+#endif
         if(nt <= 0) {
             DBG_ONLY(std::fprintf(stderr, "[%s:%s:%d] num threads < 0, checking OMP_NUM_THREADS\n", __FILE__, __func__, __LINE__);)
             if(char *s = std::getenv("OMP_NUM_THREADS"))
