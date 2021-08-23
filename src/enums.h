@@ -79,6 +79,7 @@ enum KmerSketchResultType {
 
 enum OutputKind {
     SYMMETRIC_ALL_PAIRS,
+    PHYLIP,
     ASYMMETRIC_ALL_PAIRS,
     KNN_GRAPH, // Fixed top-k neighbors
     NN_GRAPH_THRESHOLD, // Variable number of similarities, as given by threshold

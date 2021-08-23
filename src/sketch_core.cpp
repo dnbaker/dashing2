@@ -59,25 +59,21 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 for(size_t i = 0; i < npaths; ++i) {
                     size_t myi = 0;
                     for(const auto &pair: bc[i]) {
-                        const auto om = offset + myi;
+                        const auto om = offset + myi++;
                         std::copy(pair.second.begin(), pair.second.end(), &result.signatures_[opts.sketchsize_ * om]);
                         result.names_[om] = paths[i] + ":" + pair.first;
                         result.cardinalities_[om] = dbc[i][pair.first];
-                        ++myi;
                     }
                     offset += bc[i].size();
                 }
             } else {
-                OMP_PFOR_DYN
                 for(size_t i = 0; i < npaths; ++i) {
                     auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
                     auto &p(paths[myind]);
                     result.names_[i] = p;
-                    std::vector<RegT> sigs;
-                    auto res = bw2sketch(p, opts, /*parallel_process=*/false);
-                    sigs = std::move(*res.global_.get());
+                    auto res = bw2sketch(p, opts, /*parallel_process=*/true);
+                    std::copy(res.global_->begin(), res.global_->end(), &result.signatures_[myind * opts.sketchsize_]);
                     result.cardinalities_[myind] = res.card_;
-                    std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
                 }
             }
         }
@@ -166,8 +162,6 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 DBG_ONLY(std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());)
             }
         }
-    } else {
-        std::fprintf(stderr, "Nothing written to disk, as no output file provided.\n");
     }
     return result;
 }
