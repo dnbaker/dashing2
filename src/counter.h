@@ -115,7 +115,7 @@ struct Counter {
             #pragma omp simd
 #endif
             for(size_t i = 0; i < cssz; ++i) {
-                if(auto v = std::abs(count_sketch_[i]); v > threshold) {
+                if(auto v = std::abs(csp[i]); v > threshold) {
                    tmp.push_back({maskfn(uint64_t(i)), v});
                 }
             }

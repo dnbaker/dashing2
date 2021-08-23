@@ -97,7 +97,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
             maxreg = std::max(maxreg, v);
         }
         std::fprintf(stderr, "Tailoring setsketch parameters with min/max register values, fd = %g: %Lg->%Lg\n", fd, static_cast<long double>(minreg), static_cast<long double>(maxreg));
-        long double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
+        long double q = fd == 1. ? 254.3: fd == 2. ? 65534: fd == 4. ? 4294967294: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
         long double logbinv;
         assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
@@ -127,7 +127,6 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
                 } else {
                     const int64_t isub = std::max(int64_t(0), std::min(int64_t(q + 1), static_cast<int64_t>(sub)));
                     //if(sub < 0.) std::fprintf(stderr, "Mapping %g to %zd with sub = %Lg\n", double(sigs[i]), isub, sub);
-                    //std::fprintf(stderr, "Mapping %g to %d\n", double(sigs[i]), isub);
                     if(fd == 4)      ((uint32_t *)compressed_reps)[i] = isub;
                     else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
                     else             ((uint8_t *)compressed_reps)[i] = isub;
@@ -203,7 +202,8 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = ske
 #define CASE_ENTRY(v, TYPE)\
 case v: {\
     TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_);\
-    res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
+    res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);\
+    } break;
                 CASEPOW2
 #undef CASE_ENTRY
 #undef CASEPOW2
@@ -239,6 +239,7 @@ case v: {\
                 alpha = g_b(b, alpha);
                 beta = g_b(b, beta);
             }
+            VERBOSE_ONLY(std::fprintf(stderr, "Alpha: %Lg. Beta: %Lg\n", alpha, beta);)
             if(alpha + beta >= 1.) {
                 mu = lhcard + rhcard;
             } else {
