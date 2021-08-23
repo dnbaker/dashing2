@@ -238,7 +238,6 @@ This is for the case where there are a set of integral identifiers for sketching
 See `dashing2 wsketch --help` for usage and examples.
 
 
-
 ### Installation
 
 Easiest installation is `git clone --recursive https://github.com/dnbaker/dashing2 && make -j4`.
@@ -246,9 +245,23 @@ Easiest installation is `git clone --recursive https://github.com/dnbaker/dashin
 Dashing2 is written in C++17, and therefore needs a relatively recent compiler.
 
 
-## Versions
+## Versions + Configuration
 
-To process more than `std::numeric_limits<uint32_t>::max()` = 0xFFFFFFFF IDs in a table, you must use `dashing2-64`, which uses 64-bit identifiers.
+1. More than 2^32 items -
+`dashing2` uses 32-bit hash identifiers in LSH tables for speed and memory efficiency.
+To use more than 4.3 billion, use `dashing2-64`, which switched to 64-bit identifiers and hashes.
 
 The default version of Dashing2 is dashing2, which uses 32-bit LSH keys and ID types in its NN tables;
 this is faster and more memory-efficient, but less specific;
+
+2. Hardware cache size
+When comparing sketches, computations are grouped for better cache efficiency.
+A group size is selected to fit as many sketches as possible in cache;
+The default cache size estimate is 4MB. To change this, set the `D2_CACHE_SIZE` environment variable.
+
+```sh
+# set cache size to 64 MB
+export D2_CACHE_SIZE=67108864
+```
+
+As an aside, these sketches are stored contiguously to reduce fragmentation compared to Dashing1.

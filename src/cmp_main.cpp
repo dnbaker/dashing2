@@ -19,7 +19,7 @@ void cmp_usage() {
     std::fprintf(stderr, "dashing2 cmp usage is not written.\n");
 }
 void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std::vector<std::string> &paths) {
-    std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());
+    DBG_ONLY(std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());)
     auto &pf = paths.front();
     struct stat st;
     ::stat(pf.data(), &st);
@@ -36,7 +36,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                     result.cardinalities_.emplace_back(std::strtod(s, &s));
                     if(result.cardinalities_.back() <= 0.) result.cardinalities_.back() = 1.; // Set size to 1 if not available
                     if(*s) {
-                        std::fprintf(stderr, "Saving kmer count file %s\n", s + 1);
+                        DBG_ONLY(std::fprintf(stderr, "Saving kmer count file %s\n", s + 1);)
                         result.kmercountfiles_.push_back(s + 1);
                     }
                 }
@@ -167,7 +167,7 @@ int cmp_main(int argc, char **argv) {
     std::string fsarg;
     Measure measure = SIMILARITY;
     uint64_t seedseed = 13;
-    size_t batch_size = 16;
+    size_t batch_size = 0;
     std::string spacing;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -225,8 +225,9 @@ int cmp_main(int argc, char **argv) {
     opts.bed_parse_normalize_intervals_ = normalize_bed;
     opts.downsample(downsample_frac);
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
+    default_batchsize(batch_size, distopts);
     distopts.measure_ = measure;
-    distopts.cmp_batch_size_ = std::max(batch_size, size_t(distopts.nthreads()));
+    distopts.cmp_batch_size_ = default_batchsize(batch_size, distopts);
     SketchingResult result;
     if(presketched) {
         std::set<std::string> suffixset;
@@ -281,5 +282,25 @@ int cmp_main(int argc, char **argv) {
     return 0;
 }
 
+
+size_t default_batchsize(size_t &batch_size, const Dashing2DistOptions &opts) {
+    if(batch_size == 0) {
+        if(opts.kmer_result_ <= FULL_SETSKETCH) {
+            size_t expl2csz =
+#ifdef D2_CACHE_SIZE
+                D2_CACHE_SIZE;
+#else
+                0x400000; // 2^22 bytes, ~= 4 million
+#endif
+            batch_size = std::max(size_t(expl2csz / opts.sketchsize_ / opts.fd_level_), size_t(1));
+        } else {
+            batch_size = 1;
+        }
+    }
+    if(batch_size > std::max(opts.nthreads_, 1u)) {
+        batch_size = opts.nthreads_;
+    }
+    return batch_size;
+}
 
 }
