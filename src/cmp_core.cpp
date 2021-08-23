@@ -87,16 +87,14 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
             }
         }
     } else if(truncation_method <= 0) {
-        RegT minreg = sigs[0], maxreg = minreg;
+        RegT minreg = std::numeric_limits<RegT>::max(), maxreg = -std::numeric_limits<RegT>::max();
         OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
         for(size_t i = 0; i < nsigs; ++i) {
             const auto v = sigs[i];
-            if(v < 0 || v == std::numeric_limits<RegT>::max())
-                continue;
+            if(v <= 0 || v == std::numeric_limits<RegT>::max()) continue;
             minreg = std::min(minreg, v);
             maxreg = std::max(maxreg, v);
         }
-        std::fprintf(stderr, "Tailoring setsketch parameters with min/max register values, fd = %g: %Lg->%Lg\n", fd, static_cast<long double>(minreg), static_cast<long double>(maxreg));
         long double q = fd == 1. ? 254.3: fd == 2. ? 65534: fd == 4. ? 4294967294: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
         long double logbinv;
         assert(q > 0.);
@@ -352,14 +350,14 @@ inline size_t densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const
         uint64_t j = i;
         uint64_t rng = i;
         while(minhashes[j] == empty) {
-            static constexpr uint32_t PRIMEMOD = 4000003913;
+            static constexpr uint32_t PRIMEMOD = 4294967291u;
             auto a = (wy::wyhash64_stateless(&rng) % PRIMEMOD), b = (wy::wyhash64_stateless(&rng) % PRIMEMOD), c = (wy::wyhash64_stateless(&rng) % PRIMEMOD);
             j = div.mod((((a * b) % PRIMEMOD + c) % PRIMEMOD));
-            //rng = j;
         }
         minhashes[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
     }
+    assert(std::count(minhashes, minhashes + sketchsize, empty) == 0);
     return ne;
 }
 
@@ -404,7 +402,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
             if(ifp) ::pclose(ifp);
         }
     }
-    if(opts.kmer_result_ == ONE_PERM /*&& opts.truncation_method_ > 0*/) {
+    if(opts.kmer_result_ == ONE_PERM) {
         const schism::Schismatic<uint64_t> sd(opts.sketchsize_);
         const size_t n = result.cardinalities_.size();
         uint64_t *const kp= result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;

@@ -83,7 +83,6 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
         for(;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
         sz = (up - (uint8_t *)ptr) / sizeof(T);
     }
-    DBG_ONLY(std::fprintf(stderr, "Loading sketch of size %zu from %s\n", size_t(st.st_size), path.data());)
     std::fclose(fp);
     return sz;
 }
