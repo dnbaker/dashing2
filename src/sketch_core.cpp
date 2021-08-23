@@ -67,17 +67,19 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                     offset += bc[i].size();
                 }
             } else {
+                OMP_PFOR
                 for(size_t i = 0; i < npaths; ++i) {
                     auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
                     auto &p(paths[myind]);
                     result.names_[i] = p;
-                    auto res = bw2sketch(p, opts, /*parallel_process=*/true);
+                    auto res = bw2sketch(p, opts, /*parallel_process=*/false);
                     std::copy(res.global_->begin(), res.global_->end(), &result.signatures_[myind * opts.sketchsize_]);
                     result.cardinalities_[myind] = res.card_;
                 }
             }
         }
     }
+#if 0
     if(paths.size() == 1 && outfile.empty()) {
         const std::string suf =
                 opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
@@ -94,6 +96,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
+#endif
     bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
     if(outfile.size()) {
         std::fprintf(stderr, "outfile %s\n", outfile.data());
