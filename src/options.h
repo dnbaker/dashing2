@@ -107,6 +107,7 @@ enum OptArg {
     {"edit-distance", no_argument, 0, 'E'},\
     {"oneperm-setsketch", no_argument, 0, 'Z'},\
     {"oneperm", no_argument, 0, 'Z'},\
+    {"one-perm", no_argument, 0, 'Z'},\
     {"oph", no_argument, 0, 'Z'},\
     {"doph", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\

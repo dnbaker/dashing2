@@ -234,9 +234,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
         if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
             THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));
         }
-        if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
-             opts.save_kmercounts_ = true; // Always save counts for PMinHash and BagMinHash
-        }
         ret.destination_files_.resize(paths.size());
         if(opts.save_kmers_) {
             ret.kmerfiles_.resize(paths.size());

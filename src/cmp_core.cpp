@@ -91,7 +91,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
         for(size_t i = 0; i < nsigs; ++i) {
             const auto v = sigs[i];
-            if(v == 0 || v == std::numeric_limits<RegT>::max())
+            if(v < 0 || v == std::numeric_limits<RegT>::max())
                 continue;
             minreg = std::min(minreg, v);
             maxreg = std::max(maxreg, v);
@@ -112,8 +112,10 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         if(fd == 0.5) {
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs / 2; ++i) {
-                const uint8_t lower_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i] / a) * logbinv))));
-                const uint8_t upper_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i + 1] / a) * logbinv)))) << 4;
+                const auto lowerv = std::max((1.L - std::log(sigs[2 * i] / a) * logbinv), 0.L);
+                const auto higherv = std::max((1.L - std::log(sigs[2 * i + 1] / a) * logbinv), 0.L);
+                const uint8_t lower_half = std::max(0, std::min(int(q) + 1, static_cast<int>(lowerv)));
+                const uint8_t upper_half = std::max(0, std::min(int(q) + 1, static_cast<int>(higherv))) << 4;
                 ((uint8_t *)compressed_reps)[i] = lower_half | upper_half;
             }
         } else {
@@ -124,6 +126,8 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
                     ((uint64_t *)compressed_reps)[i] = std::min(uint64_t(q + 1), uint64_t(sub));
                 } else {
                     const int64_t isub = std::max(int64_t(0), std::min(int64_t(q + 1), static_cast<int64_t>(sub)));
+                    //if(sub < 0.) std::fprintf(stderr, "Mapping %g to %zd with sub = %Lg\n", double(sigs[i]), isub, sub);
+                    //std::fprintf(stderr, "Mapping %g to %d\n", double(sigs[i]), isub);
                     if(fd == 4)      ((uint32_t *)compressed_reps)[i] = isub;
                     else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
                     else             ((uint8_t *)compressed_reps)[i] = isub;
@@ -338,10 +342,10 @@ case v: {\
 }
 
 template<typename MHT, typename KMT>
-inline void densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
+inline size_t densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
 {
     const long long unsigned int ne = std::count(minhashes, minhashes + sketchsize, empty);
-    if(ne == sketchsize  || ne == 0) return;
+    if(ne == sketchsize  || ne == 0) return ne;
     for(size_t i = 0; i < sketchsize; ++i) {
         if(minhashes[i] != empty) continue;
         uint64_t j = i;
@@ -350,11 +354,12 @@ inline void densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const s
             static constexpr uint32_t PRIMEMOD = 4000003913;
             auto a = (wy::wyhash64_stateless(&rng) % PRIMEMOD), b = (wy::wyhash64_stateless(&rng) % PRIMEMOD), c = (wy::wyhash64_stateless(&rng) % PRIMEMOD);
             j = div.mod((((a * b) % PRIMEMOD + c) % PRIMEMOD));
-            rng = j;
+            //rng = j;
         }
         minhashes[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
     }
+    return ne;
 }
 
 void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
@@ -402,13 +407,15 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         const schism::Schismatic<uint64_t> sd(opts.sketchsize_);
         const size_t n = result.cardinalities_.size();
         uint64_t *const kp= result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
+        size_t totaldens = 0;
 #ifdef _OPENMP
-        #pragma omp parallel for schedule(dynamic, 32)
+        #pragma omp parallel for schedule(dynamic, 32) reduction(+:totaldens)
 #endif
         for(size_t i = 0; i < n;++i) {
             auto lp = &result.signatures_[opts.sketchsize_ * i];
-            densify(lp, kp ? &kp[opts.sketchsize_ * i]: kp, opts.sketchsize_, sd);
+            totaldens += densify(lp, kp ? &kp[opts.sketchsize_ * i]: kp, opts.sketchsize_, sd);
         }
+        std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);
     }
     //std::fprintf(stderr, "Handled generating needed cardinalities\n");
     // Calculate cardinalities if they haven't been
