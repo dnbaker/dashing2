@@ -34,7 +34,6 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
         cache_path += ".seed" + std::to_string(opts.seedseed_);
     if(opts.kmer_result_ <= FULL_SETSKETCH)
         cache_path = cache_path + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
-    cache_path = cache_path + std::string(".k") + std::to_string(opts.k_);
     if(opts.count_threshold_ > 0) {
         cache_path = cache_path + ".ct_threshold";
         if(std::fmod(opts.count_threshold_, 1.)) cache_path = cache_path + std::to_string(opts.count_threshold_);
