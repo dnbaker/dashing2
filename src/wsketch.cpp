@@ -2,6 +2,7 @@
 #include "enums.h"
 #include "d2.h"
 #include "sketch/bmh.h"
+#include "mio.hpp"
 namespace dashing2 {
 
 template<typename T>
@@ -27,7 +28,7 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
     #pragma omp parallel for schedule(dynamic, 16)
 #endif
     for(size_t i = 0; i < nr; ++i) {
-        std::fprintf(stderr, "%zu/%zu\n", i, nr);
+        DBG_ONLY(std::fprintf(stderr, "%zu/%zu\n", i, nr);)
         ++total_processed;
         BMH h(construct<BMH>(m));
         const size_t b = indptr[i], e = indptr[i + 1];
@@ -42,13 +43,12 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
         std::get<0>(ret[i]) = h.template to_sigs<RegT>();
         std::get<1>(ret[i]) = h.template to_sigs<uint64_t>();
         std::get<2>(ret[i]) = ids;
-        if(total_processed.load() % 65536 == 0) {
+        if((total_processed.load() & 1023u) == 0u) {
             std::chrono::duration<double, std::milli> diff(std::chrono::high_resolution_clock::now() - t1);
-            auto left = nr - total_processed.load();
+            auto left = nr - total_processed.load(), done = nr - left;
             auto sperit = diff.count() / (total_processed.load() + 1);
             auto timeleft = left * sperit;
-            std::fprintf(stderr, "%g of total done, expected %gms time left\n", double(left) / nr, timeleft);
-            std::fprintf(stderr, "Processed %zu/%zu in %gms; Expected < %zu seconds left...\n", total_processed.load(), nr, diff.count(), size_t(std::ceil(timeleft / 1e3)));
+            std::fprintf(stderr, "%g%% of total done, expected %gms time left. Processed %zu/%zu in %gms; Expected < %zu seconds left...\r\n", 100. * done / nr, timeleft, total_processed.load(), nr, diff.count(), size_t(std::ceil(timeleft / 1e3)));
         }
     }
     return ret;
@@ -152,20 +152,17 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
     // For IDs, default is 64 bits
     //
     std::vector<SimpleMHRet> ret;
-    std::vector<std::thread> threads;
-#define PERF1(T) minhash_rowwise_csr<T>(lp, rvec.data(), cvec.data(), nr, sksz)
+#define PERF1(T) minhash_rowwise_csr<T>(lp, rp, ip, nr, sksz)
 #define PERF(TL, TR, IR) do {\
-            std::vector<TL> lvec;\
-            std::vector<TR> rvec;\
-            std::vector<IR> cvec;\
-            threads.emplace_back([&]() {if(!cpath.empty() || cpath != "-") lvec = fromfile<TL>(cpath);});\
-            threads.emplace_back([&]() {rvec = fromfile<TR>(idpath);});\
-            threads.emplace_back([&]() {cvec = fromfile<IR>(indptrpath);});\
-            for(auto &t: threads) t.join();\
-            threads.clear();\
-            const auto nr = cvec.size() - 1;\
-            assert(lvec.size() == rvec.size());\
-            const TL *lp = lvec.size() ? lvec.data(): (const TL *)nullptr;\
+            std::unique_ptr<mio::mmap_sink> lf;\
+            if(cpath.size() && cpath != "-") lf.reset(new mio::mmap_sink(cpath));\
+            mio::mmap_sink rf(idpath);\
+            const std::vector<IR> cvec(fromfile<IR>(indptrpath));\
+            const TL *lp = lf ? (const TL *)lf->data(): (const TL *)nullptr;\
+            const TR *rp = (const TR *)rf.data();\
+            const IR *ip = cvec.data();\
+            const size_t nr = cvec.size() - 1;\
+            assert(!lp || lf->size() / sizeof(TL) == rf.size() / sizeof(TR));\
             ret = usepmh == 1 ? PERF1(ProbMinHash)\
                               : usepmh == 0 ? PERF1(BagMinHash)\
                                             : PERF1(FullSetSketch);\
