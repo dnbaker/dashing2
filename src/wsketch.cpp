@@ -187,6 +187,8 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
         PERF2(float);
     } else if(usef32 == -1) {
         PERF2(uint16_t);
+    } else if(usef32 == -2) {
+        PERF2(uint32_t);
     } else {
         PERF2(double);
     }
@@ -233,14 +235,25 @@ int wsketchusage() {
                          "If two paths are provided, the second is treated as a weight vector, and the multiset is sketched via ProbMinHash or BagMinHash.\n"
                          "If three paths are provided, the second is treated as a weight vector, and the last is used as indptr; this yields a stacked set of sketches corresponding to the input matrix.\n"
                          "-S: set sketch size\n"
-                         "-f: Read 32-bit floating point weights from [input.weights.bin] (Default: double)\n"
+                         "Identifier size: 64-bit by default.\n"
+                         "-u: Read 32-bit identifiers from input.bin rather than 64-bit\n"
+                         "If your data has non-integral types, you can still convert them to b-bit signatures using hash functions/RNGs\n"
+                         "Weight data types:\n"
+                         "If a weights file is provided, double is the expected format.\n"\
+                         "-f: Read 32-bit floating point weights from [input.weights.bin] \n"
                          "-H: Read 16-bit data weights from [input.weight.bin] (Default: float64)\n"
-                         "-u: Read 32-bit identifiers from input.bin rather than 64-bit (Default: 64-bit integers)\n"
+                         "-U: Read 32-bit data weights from [input.weight.bin] (Default: float64)\n"
+                         "Indptr data types:\n"
+                         "If any indptr file is provided, it is expected to use 64-bit integers.\n"
                          "-P: Read 32-bit indptr integers [indptr.bin] (Default: uint64_t)\n"
-                         "-B: Sketch with BagMinHash (Default: Uses ProbMinHash)\n"
-                         "-q: Sketch with SetSketch (Default: Uses ProbMinHash unless no weights are provided.)\n"
+                         "Sketching options: \n"
+                         "By default, sketches with ProbMinHash, which treats datasets as discrete probability distributions\n"
+                         "This can be changed with the following flags:\n\n"
+                         "-B: Sketch with BagMinHash. This treats datasets as multisets.\n"
+                         "-q: Sketch with SetSketch\n"
                          "-o: outprefix. If unset, uses [input.bin]\n"
-                         "-p: Set number of threads (processes)\n"
+                         "Runtime options:\n"
+                         "-p: Set number of threads (processes) [1]\n"
             );
         std::fprintf(stderr, "If two are provided, then 1-D weighted minhashing is performed on the compressed vector. If three are passed, then this result is treated as a CSR-format matrix and then emits a matrix of sketches.\n");
         std::fprintf(stderr, "To unweighted sparse matrices (omitting the data field), use CSR-style sketching but replace the weights file with '-'");
@@ -270,7 +283,7 @@ int wsketch_main(int argc, char **argv) {
     bool ip32 = false;
     std::string outpref;
     int nthreads = 1;
-    for(int c;(c = getopt(argc, argv, "p:o:S:PqBHPufh?")) >= 0;) { switch(c) {
+    for(int c;(c = getopt(argc, argv, "p:o:S:UPqBHPufh?")) >= 0;) { switch(c) {
         case 'p': nthreads = std::atoi(optarg); break;
         case 'S': sketchsize = std::strtoull(optarg, nullptr, 10); break;
         case 'B': sketchtype = 0; break;
@@ -278,6 +291,7 @@ int wsketch_main(int argc, char **argv) {
         case 'u': u32 = true; break;
         case 'f': f32 = true; break;
         case 'H': f32 = -1; break;
+        case 'U': f32 = -2; break;
         case 'o': outpref = optarg; break;
         case 'P': ip32 = true; break;
         case '?': case 'h': return wsketchusage();
