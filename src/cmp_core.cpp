@@ -35,10 +35,10 @@ static INLINE uint64_t reg2sig(RegT x) {
 #endif
 
 std::string path2cmd(const std::string &path) {
-    if(std::equal(path.rbegin(), path.rbegin() + 3, "zg.")) return std::string("gzip -dc ") + path;
-    if(std::equal(path.rbegin(), path.rbegin() + 3, "zx.")) return std::string("xz -dc ") + path;
-    if(std::equal(path.rbegin(), path.rbegin() + 4, "2zb.")) return std::string("bzip2 -dc ") + path;
-    return std::string("cat ") + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 3, "zg.")) return "gzip -dc "s + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 3, "zx.")) return "xz -dc "s + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 4, "2zb.")) return "bzip2 -dc "s + path;
+    return "cat "s + path;
 }
 
 struct CompressedRet: public std::tuple<void *, long double, long double> {
@@ -308,13 +308,13 @@ case v: {\
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
         std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
         std::string lcmd = path2cmd(lpath), rcmd = path2cmd(rpath);
-        if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
-        if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'"));
+        if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + lcmd + "'"));
+        if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run rcmd '"s + rcmd + "'"));
         if(result.kmercountfiles_.size()) {
             lcmd = path2cmd(result.kmercountfiles_[i]);
             rcmd = path2cmd(result.kmercountfiles_[j]);
-            if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
-            if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
+            if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + lcmd + "'"));
+            if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + rcmd + "'"));
         }
         if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
             if(opts.exact_kmer_dist_) {
@@ -390,11 +390,11 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                 if(endswith(result.kmercountfiles_[i], ".xz")) ft = 2;
                 else if(endswith(result.kmercountfiles_[i], ".gz")) ft = 1;
                 else ft = 0;
-                std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
+                std::string cmd = ft == 0 ? "cat "s: ft == 1 ? "gzip -dc "s: ft == 2 ? "xz -dc "s : "unknowncommand"s;
                 if(cmd == "unknowncommand") THROW_EXCEPTION(std::runtime_error("Failure"));
                 cmd += result.kmercountfiles_[i];
                 if(!(ifp = ::popen(cmd.data(), "r")))
-                    THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
+                    THROW_EXCEPTION(std::runtime_error("Command '"s + cmd + "' failed."));
                 double x, c, s;
                 for(x = c = s = 0.;std::fread(&x, sizeof(x), 1, ifp) == 1u;sketch::kahan::update(s, c, x));
                 result.cardinalities_[i] = s;

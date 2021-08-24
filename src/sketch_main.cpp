@@ -76,12 +76,16 @@ int sketch_main(int argc, char **argv) {
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
     if(ffile.size()) {
+        if(!bns::isfile(ffile)) THROW_EXCEPTION(std::runtime_error("No path found at "s + ffile));
         std::ifstream ifs(ffile);
         static constexpr size_t bufsize = 1<<18;
         std::unique_ptr<char []> buf(new char[bufsize]);
         ifs.rdbuf()->pubsetbuf(buf.get(), bufsize);
         for(std::string l;std::getline(ifs, l);) {
             paths.push_back(l);
+        }
+        if(paths.empty()) {
+            THROW_EXCEPTION(std::runtime_error("No paths read from "s + ffile));
         }
     }
     size_t nref = paths.size();

@@ -16,6 +16,7 @@
 
 
 namespace dashing2 {
+using namespace std::literals::string_literals;
 using namespace sketch;
 
 // To allow for 64-bit set identifiers, compile with -DLSHIDTYPE=uint64_t
