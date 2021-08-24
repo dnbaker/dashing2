@@ -30,7 +30,7 @@ struct Counter {
     flat_hash_map<u128_t, int32_t, FHasher> c128_;
     flat_hash_map<uint64_t, double> c64d_;
     flat_hash_map<u128_t, double, FHasher> c128d_;
-    std::vector<double> count_sketch_;
+    std::vector<float> count_sketch_;
     schism::Schismatic<uint64_t> s64_;
     CountingType ct() const {return count_sketch_.size() ? COUNTSKETCH_COUNTING: EXACT_COUNTING;}
     Counter(size_t cssize=0): count_sketch_(cssize), s64_(cssize + !cssize) {}
@@ -109,9 +109,16 @@ struct Counter {
             };
             update_if(c64_) || update_if(c128_) || update_if(c64d_) || update_if(c128d_) || std::fprintf(stderr, "Note: finalizing empty structure\n");
         } else {
-            for(size_t i = 0; i < count_sketch_.size(); ++i)
-                if(count_sketch_[i] > threshold)
-                   tmp.push_back({maskfn(uint64_t(i)), count_sketch_[i]});
+            const auto csp = count_sketch_.data();
+            const auto cssz = count_sketch_.size();
+#ifdef _OPENMP
+            #pragma omp simd
+#endif
+            for(size_t i = 0; i < cssz; ++i) {
+                if(auto v = std::abs(csp[i]); v > threshold) {
+                   tmp.push_back({maskfn(uint64_t(i)), v});
+                }
+            }
         }
         // When finalizing, hash the ids so that our hash sets are sorted hash sets
         // which means we can make a minhash sketch by taking the prefix!

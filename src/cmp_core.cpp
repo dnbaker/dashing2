@@ -35,10 +35,10 @@ static INLINE uint64_t reg2sig(RegT x) {
 #endif
 
 std::string path2cmd(const std::string &path) {
-    if(std::equal(path.rbegin(), path.rbegin() + 3, "zg.")) return std::string("gzip -dc ") + path;
-    if(std::equal(path.rbegin(), path.rbegin() + 3, "zx.")) return std::string("xz -dc ") + path;
-    if(std::equal(path.rbegin(), path.rbegin() + 4, "2zb.")) return std::string("bzip2 -dc ") + path;
-    return std::string("cat ") + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 3, "zg.")) return "gzip -dc "s + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 3, "zx.")) return "xz -dc "s + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 4, "2zb.")) return "bzip2 -dc "s + path;
+    return "cat "s + path;
 }
 
 struct CompressedRet: public std::tuple<void *, long double, long double> {
@@ -87,17 +87,15 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
             }
         }
     } else if(truncation_method <= 0) {
-        RegT minreg = sigs[0], maxreg = minreg;
+        RegT minreg = std::numeric_limits<RegT>::max(), maxreg = -std::numeric_limits<RegT>::max();
         OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
         for(size_t i = 0; i < nsigs; ++i) {
             const auto v = sigs[i];
-            if(v == 0 || v == std::numeric_limits<RegT>::max())
-                continue;
+            if(v <= 0 || v == std::numeric_limits<RegT>::max()) continue;
             minreg = std::min(minreg, v);
             maxreg = std::max(maxreg, v);
         }
-        std::fprintf(stderr, "Tailoring setsketch parameters with min/max register values, fd = %g: %Lg->%Lg\n", fd, static_cast<long double>(minreg), static_cast<long double>(maxreg));
-        long double q = fd == 1. ? 254.3: fd == 2. ? 65534.3: fd == 4. ? 4294967294.3: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
+        long double q = fd == 1. ? 254.3: fd == 2. ? 65534: fd == 4. ? 4294967294: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
         long double logbinv;
         assert(q > 0.);
         auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
@@ -112,8 +110,10 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
         if(fd == 0.5) {
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs / 2; ++i) {
-                const uint8_t lower_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i] / a) * logbinv))));
-                const uint8_t upper_half = std::max(0, std::min(int(q) + 1, static_cast<int>((1. - std::log(sigs[2 * i + 1] / a) * logbinv)))) << 4;
+                const auto lowerv = std::max((1.L - std::log(sigs[2 * i] / a) * logbinv), 0.L);
+                const auto higherv = std::max((1.L - std::log(sigs[2 * i + 1] / a) * logbinv), 0.L);
+                const uint8_t lower_half = std::max(0, std::min(int(q) + 1, static_cast<int>(lowerv)));
+                const uint8_t upper_half = std::max(0, std::min(int(q) + 1, static_cast<int>(higherv))) << 4;
                 ((uint8_t *)compressed_reps)[i] = lower_half | upper_half;
             }
         } else {
@@ -124,6 +124,7 @@ make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs,
                     ((uint64_t *)compressed_reps)[i] = std::min(uint64_t(q + 1), uint64_t(sub));
                 } else {
                     const int64_t isub = std::max(int64_t(0), std::min(int64_t(q + 1), static_cast<int64_t>(sub)));
+                    //if(sub < 0.) std::fprintf(stderr, "Mapping %g to %zd with sub = %Lg\n", double(sigs[i]), isub, sub);
                     if(fd == 4)      ((uint32_t *)compressed_reps)[i] = isub;
                     else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
                     else             ((uint8_t *)compressed_reps)[i] = isub;
@@ -199,7 +200,8 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = ske
 #define CASE_ENTRY(v, TYPE)\
 case v: {\
     TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_);\
-    res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);} break;
+    res = sketch::eq::count_gtlt(ptr + i * opts.sketchsize_, ptr + j * opts.sketchsize_, opts.sketchsize_);\
+    } break;
                 CASEPOW2
 #undef CASE_ENTRY
 #undef CASEPOW2
@@ -235,6 +237,7 @@ case v: {\
                 alpha = g_b(b, alpha);
                 beta = g_b(b, beta);
             }
+            VERBOSE_ONLY(std::fprintf(stderr, "Alpha: %Lg. Beta: %Lg\n", alpha, beta);)
             if(alpha + beta >= 1.) {
                 mu = lhcard + rhcard;
             } else {
@@ -305,13 +308,13 @@ case v: {\
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
         std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
         std::string lcmd = path2cmd(lpath), rcmd = path2cmd(rpath);
-        if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
-        if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run rcmd '") + rcmd + "'"));
+        if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + lcmd + "'"));
+        if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run rcmd '"s + rcmd + "'"));
         if(result.kmercountfiles_.size()) {
             lcmd = path2cmd(result.kmercountfiles_[i]);
             rcmd = path2cmd(result.kmercountfiles_[j]);
-            if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + lcmd + "'"));
-            if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to run lcmd '") + rcmd + "'"));
+            if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + lcmd + "'"));
+            if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + rcmd + "'"));
         }
         if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
             if(opts.exact_kmer_dist_) {
@@ -338,23 +341,24 @@ case v: {\
 }
 
 template<typename MHT, typename KMT>
-inline void densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
+inline size_t densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
 {
     const long long unsigned int ne = std::count(minhashes, minhashes + sketchsize, empty);
-    if(ne == sketchsize  || ne == 0) return;
+    if(ne == sketchsize  || ne == 0) return ne;
     for(size_t i = 0; i < sketchsize; ++i) {
         if(minhashes[i] != empty) continue;
         uint64_t j = i;
         uint64_t rng = i;
         while(minhashes[j] == empty) {
-            static constexpr uint32_t PRIMEMOD = 4000003913;
+            static constexpr uint32_t PRIMEMOD = 4294967291u;
             auto a = (wy::wyhash64_stateless(&rng) % PRIMEMOD), b = (wy::wyhash64_stateless(&rng) % PRIMEMOD), c = (wy::wyhash64_stateless(&rng) % PRIMEMOD);
             j = div.mod((((a * b) % PRIMEMOD + c) % PRIMEMOD));
-            rng = j;
         }
         minhashes[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
     }
+    assert(std::count(minhashes, minhashes + sketchsize, empty) == 0);
+    return ne;
 }
 
 void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
@@ -386,11 +390,11 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                 if(endswith(result.kmercountfiles_[i], ".xz")) ft = 2;
                 else if(endswith(result.kmercountfiles_[i], ".gz")) ft = 1;
                 else ft = 0;
-                std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
+                std::string cmd = ft == 0 ? "cat "s: ft == 1 ? "gzip -dc "s: ft == 2 ? "xz -dc "s : "unknowncommand"s;
                 if(cmd == "unknowncommand") THROW_EXCEPTION(std::runtime_error("Failure"));
                 cmd += result.kmercountfiles_[i];
                 if(!(ifp = ::popen(cmd.data(), "r")))
-                    THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
+                    THROW_EXCEPTION(std::runtime_error("Command '"s + cmd + "' failed."));
                 double x, c, s;
                 for(x = c = s = 0.;std::fread(&x, sizeof(x), 1, ifp) == 1u;sketch::kahan::update(s, c, x));
                 result.cardinalities_[i] = s;
@@ -398,17 +402,19 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
             if(ifp) ::pclose(ifp);
         }
     }
-    if(opts.kmer_result_ == ONE_PERM /*&& opts.truncation_method_ > 0*/) {
+    if(opts.kmer_result_ == ONE_PERM) {
         const schism::Schismatic<uint64_t> sd(opts.sketchsize_);
         const size_t n = result.cardinalities_.size();
         uint64_t *const kp= result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
+        size_t totaldens = 0;
 #ifdef _OPENMP
-        #pragma omp parallel for schedule(dynamic, 32)
+        #pragma omp parallel for schedule(dynamic, 32) reduction(+:totaldens)
 #endif
         for(size_t i = 0; i < n;++i) {
             auto lp = &result.signatures_[opts.sketchsize_ * i];
-            densify(lp, kp ? &kp[opts.sketchsize_ * i]: kp, opts.sketchsize_, sd);
+            totaldens += densify(lp, kp ? &kp[opts.sketchsize_ * i]: kp, opts.sketchsize_, sd);
         }
+        if(totaldens > 0) std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);
     }
     //std::fprintf(stderr, "Handled generating needed cardinalities\n");
     // Calculate cardinalities if they haven't been

@@ -59,29 +59,27 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 for(size_t i = 0; i < npaths; ++i) {
                     size_t myi = 0;
                     for(const auto &pair: bc[i]) {
-                        const auto om = offset + myi;
+                        const auto om = offset + myi++;
                         std::copy(pair.second.begin(), pair.second.end(), &result.signatures_[opts.sketchsize_ * om]);
                         result.names_[om] = paths[i] + ":" + pair.first;
                         result.cardinalities_[om] = dbc[i][pair.first];
-                        ++myi;
                     }
                     offset += bc[i].size();
                 }
             } else {
-                OMP_PFOR_DYN
+                OMP_PFOR
                 for(size_t i = 0; i < npaths; ++i) {
                     auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
                     auto &p(paths[myind]);
                     result.names_[i] = p;
-                    std::vector<RegT> sigs;
                     auto res = bw2sketch(p, opts, /*parallel_process=*/false);
-                    sigs = std::move(*res.global_.get());
+                    std::copy(res.global_->begin(), res.global_->end(), &result.signatures_[myind * opts.sketchsize_]);
                     result.cardinalities_[myind] = res.card_;
-                    std::copy(sigs.begin(), sigs.end(), &result.signatures_[myind * opts.sketchsize_]);
                 }
             }
         }
     }
+#if 0
     if(paths.size() == 1 && outfile.empty()) {
         const std::string suf =
                 opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
@@ -98,7 +96,8 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
-    bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
+#endif
+    const bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
     if(outfile.size()) {
         std::fprintf(stderr, "outfile %s\n", outfile.data());
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Can't write stacked sketches if signatures were not generated"));
@@ -166,8 +165,6 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 DBG_ONLY(std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());)
             }
         }
-    } else {
-        std::fprintf(stderr, "Nothing written to disk, as no output file provided.\n");
     }
     return result;
 }

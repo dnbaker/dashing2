@@ -46,7 +46,7 @@ int sketch_main(int argc, char **argv) {
     int by_chrom = false;
     double downsample_frac = 1.;
     uint64_t seedseed = 13;
-    size_t batch_size = 16;
+    size_t batch_size = 0;
     int nLSH = 2;
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
@@ -63,18 +63,11 @@ int sketch_main(int argc, char **argv) {
         }
         //std::fprintf(stderr, "After getopt argument %d, of is %s\n",c , to_string(of).data());
     }
-    if(k < 0) {
-        if(rht == bns::DNA) k = 31;
-        else if(rht == bns::DNA2) k = 63;
-        else if(rht == bns::PROTEIN20) k = 14;
-        else if(rht == bns::PROTEIN_14) k = 16;
-        else if(rht == bns::PROTEIN_3BIT) k = 22;
-        else if(rht == bns::PROTEIN_6) k = 24;
-    }
+    if(k < 0) k = nregperitem(rht, use128);
     const std::string ex(std::filesystem::absolute(std::filesystem::path(argv[-1])));
     std::string cmd(ex);
     for(char **s = argv; *s; cmd += std::string(" ") + *s++);
-    std::fprintf(stderr, "[Dashing2] Invocation: %s ", cmd.data());
+    std::fprintf(stderr, "#Invocation: %s\n", cmd.data());
     if(nt < 0) {
         char *s = std::getenv("OMP_NUM_THREADS");
         if(s) nt = std::max(std::atoi(s), 1);
@@ -83,12 +76,16 @@ int sketch_main(int argc, char **argv) {
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
     if(ffile.size()) {
+        if(!bns::isfile(ffile)) THROW_EXCEPTION(std::runtime_error("No path found at "s + ffile));
         std::ifstream ifs(ffile);
         static constexpr size_t bufsize = 1<<18;
         std::unique_ptr<char []> buf(new char[bufsize]);
         ifs.rdbuf()->pubsetbuf(buf.get(), bufsize);
         for(std::string l;std::getline(ifs, l);) {
             paths.push_back(l);
+        }
+        if(paths.empty()) {
+            THROW_EXCEPTION(std::runtime_error("No paths read from "s + ffile));
         }
     }
     size_t nref = paths.size();
@@ -132,7 +129,7 @@ int sketch_main(int argc, char **argv) {
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
         distopts.measure_ = measure;
-        distopts.cmp_batch_size_ = std::max(batch_size, size_t(distopts.nthreads()));
+        distopts.cmp_batch_size_ = default_batchsize(batch_size, distopts);
         cmp_core(distopts, result);
     }
     return 0;

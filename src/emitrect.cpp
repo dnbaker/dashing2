@@ -1,6 +1,7 @@
 #include "cmp_main.h"
 
 namespace dashing2 {
+using namespace std::literals::string_literals;
 
 struct QTup: public std::tuple<std::unique_ptr<float[]>, size_t, size_t, size_t> {
     using super = std::tuple<std::unique_ptr<float[]>, size_t, size_t, size_t>;
@@ -17,6 +18,29 @@ struct QTup: public std::tuple<std::unique_ptr<float[]>, size_t, size_t, size_t>
     auto &nwritten() {return std::get<3>(*this);}
     const auto nwritten() const {return std::get<3>(*this);}
 };
+
+template<size_t L>
+constexpr std::array<char, 2 * L + 1> make_tablut() {
+    std::array<char, 2 * L + 1> ret{0};
+    for(size_t i = 0; i < L; ++i) {
+        size_t id = i * 2;
+        ret[id] = '\t';
+        ret[id + 1] = '-';
+    }
+    ret[2 * L] = '\0';
+    return ret;
+}
+
+int print_tabs(size_t n, std::FILE *ofp) {
+    static constexpr std::array<char, 513> arr = make_tablut<256>();
+    static constexpr const char *ts = arr.data();
+    while(n > 256) {
+        if(std::fwrite(ts, 512, 1, ofp) != 1u) return -1;
+        n -= 256;
+    }
+    const auto nw = 2u * n;
+    return std::fwrite(ts, 1, nw, ofp) == nw ? 0: -2;
+}
 
 void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t ns = result.names_.size();
@@ -36,14 +60,18 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
 #endif
     // Emit Header
     if(opts.output_format_ == HUMAN_READABLE) {
-        std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": "PHYLIP pairwise");
-        std::fprintf(ofp, "#Dashing2Options: %s\n", opts.to_string().data());
-        std::fprintf(ofp, "#Sources");
-        for(size_t i = 0; i < result.names_.size(); ++i) {
-            std::fprintf(ofp, "\t%s", result.names_[i].data());
+        if(opts.output_kind_ != PHYLIP) {
+            std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": "PHYLIP pairwise");
+            std::fprintf(ofp, "#Dashing2Options: %s\n", opts.to_string().data());
+            std::fprintf(ofp, "#Sources");
+            for(size_t i = 0; i < result.names_.size(); ++i) {
+                std::fputc('\t', ofp);
+                std::fwrite(result.names_[i].data(), 1, result.names_[i].size(), ofp);
+            }
+            std::fputc('\n', ofp);
+        } else {
+            std::fprintf(ofp, "%zu\n", ns);
         }
-        std::fputc('\n', ofp);
-        if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS) std::fprintf(ofp, "%zu\n", ns);
     }
     /*
      *  This is a worker thread which processes and emits
@@ -67,6 +95,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
                     std::fwrite(fn.data(), 1, fn.size(), ofp);
                     const size_t jend = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - i - 1;
+                    if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS && print_tabs(i + 1, ofp) < 0) {
+                        THROW_EXCEPTION(std::runtime_error("Failed to write tabs to for rows starting with "s + std::to_string(datq.front().start())));
+                    }
                     for(size_t j = 0; j < jend; ++j)
                         std::fprintf(ofp, "\t%0.9g", *datp++);
                     std::fputc('\n', ofp);
@@ -80,7 +111,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
             datq.pop_front();
         }
     });
-    const size_t batch_size = std::max(opts.cmp_batch_size_, size_t(1));
+    const size_t batch_size = std::max(std::min(unsigned(opts.cmp_batch_size_), opts.nthreads()), 1u);
     // We have two access patterns --
     // Unbatched (batch_size <= 1), which fills in the matrix one row at a time
     // and

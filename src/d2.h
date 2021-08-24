@@ -16,6 +16,7 @@
 
 
 namespace dashing2 {
+using namespace std::literals::string_literals;
 using namespace sketch;
 
 // To allow for 64-bit set identifiers, compile with -DLSHIDTYPE=uint64_t
@@ -127,11 +128,13 @@ public:
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false, KmerSketchResultType kres=ONE_PERM):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_, canon), rh_(k, canon, rht, w), rh128_(k, canon, rht, w), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
         kmer_result_ = kres;
+#ifndef NDEBUG
         if(dtype_ == FASTX) {
             std::fprintf(stderr, "Dashing2 made with k = %d, w = %d, %s target, space = %s, datatype = %s and result = %s\n", k, w, rht == bns::DNA ? "DNA": "Protein", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data(), ::dashing2::to_string(kmer_result_).data());
         } else {
             std::fprintf(stderr, "Dashing2 made with space = %s, datatype = %s and result = %s\n", ::dashing2::to_string(sspace_).data(), ::dashing2::to_string(dtype_).data(), ::dashing2::to_string(kmer_result_).data());
         }
+#endif
         if(nt <= 0) {
             DBG_ONLY(std::fprintf(stderr, "[%s:%s:%d] num threads < 0, checking OMP_NUM_THREADS\n", __FILE__, __func__, __LINE__);)
             if(char *s = std::getenv("OMP_NUM_THREADS"))
@@ -224,6 +227,22 @@ using OPSetSketch = LazyOnePermSetSketch<KmerSigT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
 using ProbMinHash = sketch::pmh2_t<RegT>;
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
+
+static constexpr size_t nregperitem(bns::RollingHashingType it, bool is128=false) {
+    using namespace bns;
+    switch(it) {
+        case DNA: return is128 ? RHTraits<DNA>::nper128: RHTraits<DNA>::nper64;
+        case PROTEIN: return is128 ? RHTraits<PROTEIN>::nper128: RHTraits<PROTEIN>::nper64;
+        case PROTEIN20: return is128 ? RHTraits<PROTEIN20>::nper128: RHTraits<PROTEIN20>::nper64;
+        case PROTEIN_3BIT: return is128 ? RHTraits<PROTEIN_3BIT>::nper128: RHTraits<PROTEIN_3BIT>::nper64;
+        case PROTEIN_14: return is128 ? RHTraits<PROTEIN_14>::nper128: RHTraits<PROTEIN_14>::nper64;
+        case PROTEIN_6: return is128 ? RHTraits<PROTEIN_6>::nper128: RHTraits<PROTEIN_6>::nper64;
+        case DNAC: return is128 ? RHTraits<DNAC>::nper128: RHTraits<DNAC>::nper64;
+        case PROTEIN_6_FRAME: return is128 ? RHTraits<PROTEIN_6_FRAME>::nper128: RHTraits<PROTEIN_6_FRAME>::nper64;
+        default: ;
+    }
+    return 0; // Should not ever happen
+}
 
 extern bool entmin;
 

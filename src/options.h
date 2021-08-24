@@ -97,6 +97,7 @@ enum OptArg {
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
     LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
+    LO_FLAG("phylip", OPTARG_PHYLIP, ok, OutputKind::PHYLIP)\
     LO_ARG("regbytes", OPTARG_REGBYTES)\
     /*LO_ARG("set", 'H')*/\
     {"save-kmers", no_argument, 0, 's'},\
@@ -106,6 +107,7 @@ enum OptArg {
     {"edit-distance", no_argument, 0, 'E'},\
     {"oneperm-setsketch", no_argument, 0, 'Z'},\
     {"oneperm", no_argument, 0, 'Z'},\
+    {"one-perm", no_argument, 0, 'Z'},\
     {"oph", no_argument, 0, 'Z'},\
     {"doph", no_argument, 0, 'Z'},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
@@ -131,7 +133,7 @@ enum OptArg {
     {"nLSH", required_argument, 0, OPTARG_NLSH},\
     {"entmin", no_argument, 0, OPTARG_ENTROPYMIN},\
     {"by-chrom", no_argument, (int *)&by_chrom, 1},\
-    {"sketch-size-l2", required_argument, 0, 'L'}
+    {"sketch-size-l2", required_argument, 0, 'L'},
 
 
 
@@ -209,7 +211,7 @@ enum OptArg {
             }\
             std::fprintf(stderr, "Using log_2 sketchsize = %d, yielding sketchsize = %zu\n", ssl2, sketchsize);\
             break;\
-        }
+        }\
 
 
 
@@ -320,12 +322,13 @@ static constexpr const char *siglen =
         "              This makes the sequences insensitive to the lengths of minimizer stretches, which may simplify match finding\n"\
         "\n\nDistance Options (shared)\n"\
         "--Exhaustive Distance Outputs--\n"\
-        "The default output format is all-pairs PHYLIP upper-triangular.\n"\
-        "We provide two other full matrix methods - \n"\
-        "1. Square distance matrix, enabled by --asymmetric-all-pairs\n"\
+        "The default output format is all-pairs upper-triangular.\n"\
+        "We provide three other full matrix methods - \n"\
+        "1. PHYLIP Upper Triangular distance matrix, enabled by --phylip.\n"\
+        "2. Square distance matrix, enabled by --asymmetric-all-pairs\n"\
         "--asymmetric-all-pairs: emit square distance matrix\n"\
         "Emits a full square distance matrix rather than upper-triangular.\n"\
-        "2. Rectangular matrix, enabled by -Q/-qfile\n"\
+        "3. Rectangular matrix, enabled by -Q/-qfile\n"\
         "Use this if you want to compare a set of queries to a set of references rather than complete all-pairs. Note: -F must be provided, or reference files should be added as positional arguments\n"\
         "positional arguments and -F paths are treated as a reference set;\n"\
         "Paths provided in -Q/--qfile are are treated as a query set.\n"\

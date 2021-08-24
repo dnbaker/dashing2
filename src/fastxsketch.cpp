@@ -83,7 +83,6 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
         for(;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
         sz = (up - (uint8_t *)ptr) / sizeof(T);
     }
-    DBG_ONLY(std::fprintf(stderr, "Loading sketch of size %zu from %s\n", size_t(st.st_size), path.data());)
     std::fclose(fp);
     return sz;
 }
@@ -233,9 +232,6 @@ FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::
     } else {
         if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
             THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));
-        }
-        if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
-             opts.save_kmercounts_ = true; // Always save counts for PMinHash and BagMinHash
         }
         ret.destination_files_.resize(paths.size());
         if(opts.save_kmers_) {
