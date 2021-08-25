@@ -5,10 +5,6 @@
 #include "mio.hpp"
 namespace dashing2 {
 
-template<typename T>
-auto total_weight(const T &x) {return x.total_weight();}
-template<>
-auto total_weight(const FullSetSketch &x) {return x.total_updates();}
 template<typename BMH>
 BMH construct(size_t sketchsize) {
     if constexpr(std::is_same_v<BMH, BagMinHash> || std::is_same_v<BMH, ProbMinHash>)
@@ -53,12 +49,6 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
     }
     return ret;
 }
-
-template<typename T>
-static constexpr const char *fmt = "%0.17g\n";
-template<> constexpr const char *fmt<float> = "%0.16g\n";
-template<> constexpr const char *fmt<double> = "%0.24g\n";
-template<> constexpr const char *fmt<long double> = "%0.30Lg\n";
 
 
 template<typename BMH, typename FT, typename IT>
@@ -352,7 +342,7 @@ int wsketch_main(int argc, char **argv) {
         std::fclose(fp);
         fp = std::fopen((outpref + ".sampled.info.txt").data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
-        static constexpr const char *fmtstr = fmt<std::decay_t<decltype(mhrs.front().total_weight())>>;
+        static constexpr const char *fmtstr = nlfmt<std::decay_t<decltype(mhrs.front().total_weight())>>;
         for(size_t i = 0; i < nsketches; std::fprintf(fp, fmtstr, mhrs[i++].total_weight()));
         std::fclose(fp);
         return 0;

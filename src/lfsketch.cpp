@@ -2,7 +2,8 @@
 
 namespace dashing2 {
 
-LFResult LFResult::merge_results(const LFResult *start, size_t n) {
+
+LFResult LFResult::merge_results(const LFResult *start, size_t n, size_t sketchsize) {
     LFResult ret;
     std::vector<size_t> offsets(n + 1);
     ret.nsamples_per_file().resize(n);
@@ -30,7 +31,9 @@ LFResult LFResult::merge_results(const LFResult *start, size_t n) {
         auto &srcnames = start[i].sample_names();
         std::transform(srcnames.begin(), srcnames.end(), &destnames[beg],
                        [pref](const auto &s) {return s + ':' + pref;});
-        std::copy(start[i].registers().begin(), start[i].registers().end(), &ret.registers()[beg]);
+
+        std::copy(start[i].cardinalities().begin(), start[i].cardinalities().end(), &ret.cardinalities()[beg]);
+        std::copy(start[i].registers().begin(), start[i].registers().end(), &ret.registers()[beg * sketchsize]);
     }
     return ret;
 }
@@ -104,6 +107,7 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
     }
     gzclose(ifp);
     ret.registers().resize(nsamples * opts.sketchsize_);
+    ret.cardinalities().resize(nsamples);
     for(size_t i = 0;i < nsamples; ++i) {
         const RegT *ptr =
             bmhs ? (*bmhs)[i].data():
@@ -115,6 +119,7 @@ LFResult lf2sketch(std::string path, const Dashing2Options &opts) {
             continue;
         }
         std::copy(ptr, ptr + opts.sketchsize_, &ret.registers()[opts.sketchsize_ * i]);
+        ret.cardinalities()[i] = bmhs ? total_weight((*bmhs)[i]): pmhs ? total_weight((*pmhs)[i]): ss ? total_weight((*ss)[i]): total_weight((*opss)[i]);
     }
     return ret;
 }
@@ -124,7 +129,7 @@ LFResult lf2sketch(std::vector<std::string> paths, const Dashing2Options &opts) 
     OMP_PFOR_DYN
     for(size_t i = 0; i < paths.size(); ++i)
         ret[i] = lf2sketch(paths[i], opts);
-    return LFResult::merge_results(ret.data(), ret.size());
+    return LFResult::merge_results(ret.data(), ret.size(), opts.sketchsize_);
 }
 
 

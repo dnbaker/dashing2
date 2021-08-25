@@ -8,17 +8,43 @@ INLINE size_t nbytes_from_line(const std::string &line) {
     return ret;
 }
 
-SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string> &paths, std::string &outfile) {
-    SketchingResult result;
+SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, const std::vector<std::string> &paths, std::string &outfile) {
     const size_t npaths = paths.size();
+    std::string tmpfile;
+    if(outfile.empty()) {
+        uint64_t hv = opts.k_ * opts.sketchsize_ + (opts.w_ > 0 ? int(opts.w_): -13);
+        for(const auto &p: paths) hv ^= std::hash<std::string>{}(p), hv ^= hv >> 31;
+        outfile = std::to_string(hv) + ".sketchout.tmp";
+    }
     if(opts.dtype_ == DataType::FASTX) {
-        result = fastx2sketch(opts, paths);
+        if(opts.parse_by_seq_) {
+            if(paths.size() != 1) {
+                result.nperfile_.resize(paths.size());
+                THROW_EXCEPTION(std::runtime_error("parse-by-seq currently only handles one file at a time. To process multiple files, simply concatenate them into one file, and run dashing2 on that."));
+            }
+            std::fprintf(stderr, "Returning result from by_seq\n");
+            KSeqHolder kseqs(std::max(opts.nthreads(), 1u));
+            fastx2sketch_byseq(result, opts, paths.front(), kseqs.kseqs_, outfile, true);
+            std::fprintf(stderr, "Returned result from by_seq\n");
+        } else {
+            std::fprintf(stderr, "Returning result from xsketch\n");
+            fastx2sketch(result, opts, paths, outfile);
+            std::fprintf(stderr, "Returned result from xsketch\n");
+        }
+        std::fprintf(stderr, "Returned results to sketch_core.\n");
     } else if(opts.dtype_ == DataType::LEAFCUTTER) {
         auto res = lf2sketch(paths, opts);
-        result.signatures_ = std::move(res.registers());
         result.names_ = std::move(res.sample_names());
         result.nperfile_.resize(res.nsamples_per_file().size());
         std::copy(res.nsamples_per_file().begin(), res.nsamples_per_file().end(), result.nperfile_.begin());
+        std::FILE *of = std::fopen(outfile.data(), "wb");
+        uint64_t ns = result.names_.size();
+        std::fwrite(&ns, sizeof(ns), 1, of);
+        ns = opts.sketchsize_;
+        std::fwrite(&ns, sizeof(ns), 1, of);
+        result.signatures_.assign(outfile);
+        result.signatures_.resize(res.registers().size());
+        std::copy(res.registers().begin(), res.registers().end(), result.signatures_.begin());
     } else if(opts.dtype_ == DataType::BED || opts.dtype_ == DataType::BIGWIG) {
         std::vector<std::pair<size_t, uint64_t>> filesizes = get_filesizes(paths);
         result.signatures_.resize(npaths * opts.sketchsize_);
@@ -67,7 +93,7 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                     offset += bc[i].size();
                 }
             } else {
-                OMP_PFOR
+                OMP_PFOR_DYN
                 for(size_t i = 0; i < npaths; ++i) {
                     auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
                     auto &p(paths[myind]);
@@ -96,74 +122,77 @@ SketchingResult sketch_core(Dashing2Options &opts, const std::vector<std::string
                 outfile = opts.outprefix_ + '/' + outfile;
         }
     }
-#endif
     const bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
-    if(outfile.size()) {
-        std::fprintf(stderr, "outfile %s\n", outfile.data());
-        if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Can't write stacked sketches if signatures were not generated"));
-        std::fprintf(stderr, "Writing stacked sketches to %s\n", outfile.data());
-        std::FILE *ofp;
-        if(result.signatures_.size()) {
-            ofp = std::fopen(outfile.data(), "wb");
-            if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + outfile));
-            uint64_t n = result.cardinalities_.size();
-            std::fwrite(&n, sizeof(n), 1, ofp);
-            n = opts.sketchsize_;
-            std::fwrite(&n, sizeof(n), 1, ofp);
-            std::fwrite(result.cardinalities_.data(), sizeof(result.cardinalities_.front()), result.cardinalities_.size(), ofp);
-            if(opts.kmer_result_ > FULL_SETSKETCH || even) {
-                checked_fwrite(ofp, result.signatures_.data(), sizeof(RegT) * result.signatures_.size());
-            } else {
-                DBG_ONLY(std::fprintf(stderr, "%zu total summaries, accumulated into signatures of size %zu\n", std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0)), result.signatures_.size());)
-                size_t offset = 0;
-                const uint64_t terminus = uint64_t(-1);
-                for(size_t i = 0; i < result.nperfile_.size(); ++i) {
-                    if(result.nperfile_[i]) {
-                        std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
-                        offset += result.nperfile_.at(i);
-                    }
-                    std::fwrite(&terminus, sizeof(terminus), 1, ofp);
-                }
+#endif
+    std::fprintf(stderr, "Writing values to disk.\n");
+    std::FILE *ofp;
+    if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
+        if((ofp = std::fopen(outfile.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
+        size_t offset = result.cardinalities_.size();
+        std::fwrite(&offset, sizeof(offset), 1, ofp);
+        offset = 0;
+        const uint64_t terminus = uint64_t(-1);
+        for(size_t i = 0; i < result.nperfile_.size(); ++i) {
+            if(result.nperfile_[i]) {
+                std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
+                offset += result.nperfile_.at(i);
             }
-            std::fclose(ofp);
-        } DBG_ONLY(else std::fprintf(stderr, "Signatures is empty\n");)
-        if(result.names_.size()) {
-            if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
-                THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
-            std::fputs("#Name\tCardinality\n", ofp);
-            for(size_t i = 0; i < result.names_.size(); ++i) {
-                const auto &n(result.names_[i]);
-                if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) THROW_EXCEPTION(std::runtime_error("Failed to write names to file"));
-                if(result.cardinalities_.size()) {
-                    std::fprintf(ofp, "\t%0.12g", result.cardinalities_[i]);
-                }
-                if(auto &kf = result.kmercountfiles_; kf.size())
-                    std::fputc('\t', ofp), std::fwrite(kf[i].data(), 1, kf[i].size(), ofp);
-                std::fputc('\n', ofp);
-            }
-            std::fclose(ofp);
+            std::fwrite(&terminus, sizeof(terminus), 1, ofp);
         }
-        if(result.kmers_.size()) {
-            const size_t nb = result.kmers_.size() * sizeof(uint64_t);
-            DBG_ONLY(std::fprintf(stderr, "About to write result kmers to %s of size %zu\n", outfile.data(), nb);)
-            if((ofp = std::fopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
-                if(std::fwrite(result.kmers_.data(), nb, 1, ofp) != size_t(1))
-                    std::fprintf(stderr, "Failed to write k-mers to disk properly, silent failing\n");
-                std::fclose(ofp);
-            } else {
-                DBG_ONLY(std::fprintf(stderr, "Failed to write k-mers, failing silently.\n");)
+        std::fclose(ofp);
+    } else {
+        // This should not overlap with the memory mapped for result.signatures_
+        const uint64_t t = result.cardinalities_.size();
+        const size_t nb = t * sizeof(double) + 2 * sizeof(uint64_t);
+        void *tmpptr = ::mmap(nullptr, nb, PROT_READ | PROT_WRITE, MAP_SHARED, result.signatures_.fd(), 0);
+        if(!tmpptr) {
+            perror("MMap the end");
+            THROW_EXCEPTION(std::runtime_error("Failed to mmap the remaining stuff."));
+        }
+        ((uint64_t *)tmpptr)[0] = t;
+        ((uint64_t *)tmpptr)[1] = opts.sketchsize_;
+        std::fprintf(stderr, "Copying out\n");
+        std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
+        std::fprintf(stderr, "Copyied out\n");
+        ::munmap(tmpptr, nb);
+    }
+    std::fprintf(stderr, "Now handling names and k-mers\n");
+    if(result.names_.size()) {
+        if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
+            THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
+        std::fputs("#Name\tCardinality\n", ofp);
+        for(size_t i = 0; i < result.names_.size(); ++i) {
+            const auto &n(result.names_[i]);
+            if(std::fwrite(n.data(), 1, n.size(), ofp) != n.size()) THROW_EXCEPTION(std::runtime_error("Failed to write names to file"));
+            if(result.cardinalities_.size()) {
+                std::fprintf(ofp, tfmt<double>, result.cardinalities_[i]);
             }
-        } DBG_ONLY(else std::fprintf(stderr, "Not saving k-mers because result kmers is empty\n");)
-        if(result.kmercounts_.size()) {
-            const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
-            DBG_ONLY(std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());)
-            if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {
-                if(std::fwrite(result.kmercounts_.data(), nb, 1, ofp) != size_t(1))
-                    std::fprintf(stderr, "Failed to write k-mer counts to disk properly, silent failing\n");
-                std::fclose(ofp);
-            } else {
-                DBG_ONLY(std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());)
-            }
+            if(auto &kf = result.kmercountfiles_; kf.size())
+                std::fputc('\t', ofp), std::fwrite(kf[i].data(), 1, kf[i].size(), ofp);
+            std::fputc('\n', ofp);
+        }
+        std::fclose(ofp);
+    }
+    if(result.kmers_.size()) {
+        const size_t nb = result.kmers_.size() * sizeof(uint64_t);
+        DBG_ONLY(std::fprintf(stderr, "About to write result kmers to %s of size %zu\n", outfile.data(), nb);)
+        if((ofp = std::fopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
+            if(std::fwrite(result.kmers_.data(), nb, 1, ofp) != size_t(1))
+                std::fprintf(stderr, "Failed to write k-mers to disk properly, silent failing\n");
+            std::fclose(ofp);
+        } else {
+            DBG_ONLY(std::fprintf(stderr, "Failed to write k-mers, failing silently.\n");)
+        }
+    } DBG_ONLY(else std::fprintf(stderr, "Not saving k-mers because result kmers is empty\n");)
+    if(result.kmercounts_.size()) {
+        const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
+        DBG_ONLY(std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());)
+        if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {
+            if(std::fwrite(result.kmercounts_.data(), nb, 1, ofp) != size_t(1))
+                std::fprintf(stderr, "Failed to write k-mer counts to disk properly, silent failing\n");
+            std::fclose(ofp);
+        } else {
+            DBG_ONLY(std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());)
         }
     }
     return result;

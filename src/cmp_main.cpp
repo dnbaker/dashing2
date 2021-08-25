@@ -45,6 +45,8 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         //size_t nregs = st.st_size / result.names_.size() / sizeof(RegT);
         std::FILE *fp = std::fopen(pf.data(), "w");
         if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + pf));
+        struct stat st;
+        ::fstat(::fileno(fp), &st);
         // Read in --
         // # of entities (64-bit integer)
         uint64_t l;
@@ -68,10 +70,10 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         // l * sizeof(double) for the cardinalitiy
         if(std::fread(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), fp) != result.cardinalities_.size())
             THROW_EXCEPTION(std::runtime_error("Failed to read cardinalities from disk"));
-        result.signatures_.resize((st.st_size - l * sizeof(double) - sizeof(uint64_t)) / sizeof(RegT));
-        if(std::fread(result.signatures_.data(), sizeof(RegT), result.signatures_.size(), fp) != result.signatures_.size())
-            THROW_EXCEPTION(std::runtime_error(std::string("Failed to read signatures from disk")));
         std::fclose(fp);
+        const auto offset = (l + 2) * sizeof(uint64_t);
+        assert((st.st_size - offset) % sizeof(RegT) == 0);
+        result.signatures_.assign(pf, offset, (st.st_size - offset) / sizeof(RegT));
     } else { // Else, we have to load sketches from each file
         result.nperfile_.resize(paths.size());
         auto &fsizes = result.nperfile_;
@@ -275,7 +277,7 @@ int cmp_main(int argc, char **argv) {
         }
         load_results(distopts, result, paths);
     } else {
-        result = sketch_core(distopts, paths, outfile);
+        sketch_core(result, distopts, paths, outfile);
         result.nqueries(nq);
     }
     cmp_core(distopts, result);

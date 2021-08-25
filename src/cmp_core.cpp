@@ -58,7 +58,7 @@ struct CompressedRet: public std::tuple<void *, long double, long double> {
 };
 
 CompressedRet
-make_compressed(int truncation_method, double fd, const std::vector<RegT> &sigs, const std::vector<uint64_t> &kmers, bool is_edit_distance) {
+make_compressed(int truncation_method, double fd, const mm::vector<RegT> &sigs, const std::vector<uint64_t> &kmers, bool is_edit_distance) {
     sketch::hash::CEHasher revhasher;
     CompressedRet ret;
     if(fd >= sizeof(RegT)) return ret;

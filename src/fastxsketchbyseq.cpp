@@ -82,10 +82,9 @@ struct OptSketcher {
 };
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads);
 
-FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs, bool parallel, size_t seqs_per_batch) {
+FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Options &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel, size_t seqs_per_batch) {
     const bool save_ids = opts.save_kmers_ || opts.build_mmer_matrix_;
     const bool save_idcounts = opts.save_kmercounts_ || opts.build_count_matrix_;
-    FastxSketchingResult ret;
     gzFile ifp;
     kseq_t *myseq = kseqs ? &kseqs[OMP_ELSE(omp_get_thread_num(), 0)]: (kseq_t *)std::calloc(sizeof(kseq_t), 1);
     size_t batch_index = 0;
@@ -110,6 +109,24 @@ FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string
     } else THROW_EXCEPTION(std::runtime_error("Should have been set space, multiset, probset, or edit distance"));
     if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
         sketcher.ctr.reset(new Counter(opts.cssize()));
+    }
+    uint64_t total_nseqs = 0;
+    for_each_substr([&total_nseqs](const std::string &path) {
+        gzFile fp = gzopen(path.data(), "r");
+        if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open gzfile"s + path + "to count sequences."));
+        kseq_t *ks = kseq_init(fp);
+        while(kseq_read(ks) >= 0) ++total_nseqs;
+        kseq_destroy(ks);
+        gzclose(fp);
+    }, path);
+    std::fprintf(stderr, "Sketching file of %zu seqs\n", total_nseqs);
+    {
+        if(::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs)) 
+            THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq"));
+        ret.signatures_.assign(outpath);
+        if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
+            ret.signatures_.reserve(total_nseqs * opts.sketchsize_);
+        }
     }
 
     std::vector<OptSketcher> sketching_data;
@@ -193,7 +210,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         sketchers.reset();
         const auto seqp = ret.sequences_[i].data();
         const auto seql = ret.sequences_[i].size();
-        if(sketchers.omh) {
+        if(sketchers.omh) { // OrderMinHash
             std::vector<uint64_t> res = sketchers.omh->hash(seqp, seql);
             auto destp = &ret.signatures_[i * opts.sketchsize_];
             if constexpr(sizeof(RegT) == sizeof(uint64_t)) { // double
@@ -210,7 +227,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 std::copy(res.begin(), res.end(), (uint32_t *)destp);
             }
             ret.cardinalities_[i] = seql;
-        } else if(seqmins) {
+        } else if(seqmins) { // Sequence of minimizers
             auto &myseq(seqmins[i - lastindex]);
             sketchers.for_each([&](auto x) {
                 x = maskfn(x);
@@ -254,21 +271,23 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             ret.cardinalities_[i] = myseq.size();
         } else {
             const bool isop = sketchers.opss.get(), isctr = sketchers.ctr.get(), isfs = sketchers.fss.get();
+            auto fsfunc = [&](auto x) {
+                x = maskfn(x);
+                if(opts.fs_->in_set(x)) return;
+                if(isop)    sketchers.opss->update(x);
+                else if(isctr) sketchers.ctr->add(x);
+                else if(isfs) sketchers.fss->update(x);
+            };
+            auto nofsfunc = [&](auto x) {
+                x = maskfn(x);
+                if(isop) sketchers.opss->update(x);
+                else if(isctr) sketchers.ctr->add(x);
+                else if(isfs) sketchers.fss->update(x);
+            };
             if(opts.fs_) {
-                sketchers.for_each([&](auto x) {
-                    x = maskfn(x);
-                    if(opts.fs_->in_set(x)) return;
-                    if(isop)    sketchers.opss->update(x);
-                    else if(isctr) sketchers.ctr->add(x);
-                    else if(isfs) sketchers.fss->update(x);
-                }, seqp, seql);
+                sketchers.for_each(fsfunc, seqp, seql);
             } else {
-                sketchers.for_each([&](auto x) {
-                    x = maskfn(x);
-                    if(isop) sketchers.opss->update(x);
-                    else if(isctr) sketchers.ctr->add(x);
-                    else if(isfs) sketchers.fss->update(x);
-                }, seqp, seql);
+                sketchers.for_each(nofsfunc, seqp, seql);
             }
             RegT *ptr = nullptr;
             const uint64_t *kmer_ptr = nullptr;
@@ -344,17 +363,31 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         const size_t seqminsz = oldsz - lastindex;
         using OT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditional_t<(sizeof(RegT) == 4), uint32_t, u128_t>>;
         static_assert(sizeof(RegT) == sizeof(OT), "Size of hash registers must match that being sketched");
+        size_t new_sigsz = std::accumulate(seqmins.get(), seqmins.get() + seqminsz, size_t(0), [](size_t cs, const auto &v) {return cs + v.size();});
+        if constexpr(sizeof(RegT) == 16) new_sigsz >>= 1;
+        else if constexpr(sizeof(RegT) == 4) new_sigsz <<= 1;
+        std::vector<size_t> offsets{{ret.signatures_.size()}};
+        ret.signatures_.resize(new_sigsz + ret.signatures_.size());
+        for(size_t i = 0; i < seqminsz; ++i) {
+            auto noff = seqmins[i].size();
+            if constexpr(sizeof(RegT) == 16) {
+                noff >>= 1;
+            }
+            offsets.push_back(offsets.back() + noff);
+        }
+        size_t oldnpf = ret.nperfile_.size();
+        ret.nperfile_.resize(oldnpf + seqminsz);
+        OMP_PFOR
         for(size_t i = 0; i < seqminsz; ++i) {
             //std::fprintf(stderr, "Copying out items from %zu/%zu\n", i, seqminsz);
             const auto &x(seqmins[i]);
             const OT *ptr = (const OT *)x.data();
             size_t xsz = x.size();
-            if constexpr(sizeof(RegT) == 16) xsz >>= 1;
-            ret.nperfile_.push_back(xsz);
-            if constexpr(sizeof(RegT) == 4)
-                std::copy((const uint64_t *)ptr, (const uint64_t *)ptr + xsz, std::back_inserter(ret.signatures_));
-            else
-                ret.signatures_.insert(ret.signatures_.end(), ptr, ptr + xsz);
+            if constexpr(sizeof(RegT) == 16) {
+                xsz >>= 1;
+            }
+            ret.nperfile_[oldnpf + i] = xsz;
+            std::copy(ptr, ptr + xsz, &ret.signatures_[offsets[i]]);
         }
     }
     lastindex = oldsz;
