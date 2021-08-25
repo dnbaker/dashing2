@@ -124,7 +124,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
     }
     const bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
 #endif
-    std::fprintf(stderr, "Writing values to disk.\n");
     std::FILE *ofp;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         if((ofp = std::fopen(outfile.data(), "r+")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
