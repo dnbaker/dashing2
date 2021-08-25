@@ -17,6 +17,7 @@ class vector {
     std::string path_;
     mio::mmap_sink ms_;
 public:
+    size_t capacity() const {return capacity_;}
     size_t size() const {return size_;}
     bool empty() const {return size_ == 0u;}
     int fd() const {return ms_.file_handle();}
@@ -42,9 +43,8 @@ public:
     }
     vector &operator=(const vector &o) = delete;
     vector &operator=(vector &&o) {
-        offset = o.offset; capacity_ = o.capacity_; size_ = o.size_;
-        path_ = o.path_;
-        ms_ = std::move(o.ms_);
+        static constexpr size_t n = sizeof(*this);
+        std::swap_ranges((uint8_t *)this, (uint8_t *)this + n, (uint8_t *)&o);
         return *this;
     }
     void assign(std::string path, size_t off=size_t(-1), size_t initial_size=0, T init=T(0)) {

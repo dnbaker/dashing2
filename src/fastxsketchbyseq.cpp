@@ -119,13 +119,20 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
         kseq_destroy(ks);
         gzclose(fp);
     }, path);
-    std::fprintf(stderr, "Sketching file of %zu seqs\n", total_nseqs);
+    /*std::fprintf(stderr, "Sketching file of %zu seqs\n", total_nseqs);*/
     {
         if(::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs)) 
             THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq"));
         ret.signatures_.assign(outpath);
         if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
             ret.signatures_.reserve(total_nseqs * opts.sketchsize_);
+        }
+        ret.cardinalities_.resize(total_nseqs);
+        if(opts.kmer_result_ != FULL_MMER_SEQUENCE && (opts.build_mmer_matrix_ || opts.save_kmers_)) {
+            ret.kmers_.resize(opts.sketchsize_ * total_nseqs);
+        }
+        if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
+            ret.kmercounts_.resize(opts.sketchsize_ * total_nseqs);
         }
     }
 
@@ -156,7 +163,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
                 DBG_ONLY(std::fprintf(stderr, "batch index = %zu\n", batch_index);)
-                resize_fill(opts, ret, seqs_per_batch, sketching_data, lastindex, nt);
+                resize_fill(opts, ret, std::min(size_t(seqs_per_batch), size_t(total_nseqs - ret.names_.size())), sketching_data, lastindex, nt);
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
             }
@@ -173,6 +180,9 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
 #ifndef NDEBUG
     std::fprintf(stderr, "ret kmer size %zu\n", ret.kmers_.size());
     std::fprintf(stderr, "ret names size %zu\n", ret.names_.size());
+    std::fprintf(stderr, "ret signatures size %zu\n", ret.signatures_.size());
+    std::fprintf(stderr, "ret signatures capacity %zu\n", ret.signatures_.capacity());
+    std::fprintf(stderr, "ret names size %zu\n", ret.names_.size());
 #endif
     return ret;
 }
@@ -180,23 +190,12 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     DBG_ONLY(std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);)
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
-    auto ru = sketch::integral::roundup(oldsz), oru = sketch::integral::roundup(newsz);
-    const bool orumismatch = oru != ru;
-    if(opts.kmer_result_ != FULL_MMER_SEQUENCE && opts.build_sig_matrix_) {
-        if(orumismatch) ret.signatures_.reserve(oru * opts.sketchsize_);
-        DBG_ONLY(std::fprintf(stderr, "old sig size %zu, new %zu\n", ret.signatures_.size(), newsz * opts.sketchsize_);)
-        ret.signatures_.resize(newsz * opts.sketchsize_);
+    if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
+        DBG_ONLY(std::fprintf(stderr, "old sig size %zu, cap %zu, new %zu\n", ret.signatures_.size(), ret.signatures_.capacity(), newsz * opts.sketchsize_);)
+        assert(oldsz * opts.sketchsize_ <= ret.signatures_.capacity());
+        ret.signatures_.resize(oldsz * opts.sketchsize_);
     }
-    ret.cardinalities_.resize(newsz);
     DBG_ONLY(std::fprintf(stderr, "mmer matrix size %zu. buuild %d, save kmers %d\n", ret.kmers_.size(), opts.build_mmer_matrix_, opts.save_kmers_);)
-    if(opts.kmer_result_ != FULL_MMER_SEQUENCE && (opts.build_mmer_matrix_ || opts.save_kmers_)) {
-        if(orumismatch) ret.kmers_.reserve(oru * opts.sketchsize_);
-        ret.kmers_.resize(opts.sketchsize_ * newsz);
-    }
-    if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && (opts.build_count_matrix_ || opts.save_kmercounts_)) {
-        if(orumismatch) ret.kmercounts_.reserve(oru * opts.sketchsize_);
-        ret.kmercounts_.resize(opts.sketchsize_ * newsz);
-    }
     DBG_ONLY(std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");)
     std::unique_ptr<std::vector<uint64_t>[]> seqmins;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {

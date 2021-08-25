@@ -127,9 +127,11 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
     std::fprintf(stderr, "Writing values to disk.\n");
     std::FILE *ofp;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
-        if((ofp = std::fopen(outfile.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
-        size_t offset = result.cardinalities_.size();
+        if((ofp = std::fopen(outfile.data(), "r+")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
+        size_t offset = result.names_.size();
         std::fwrite(&offset, sizeof(offset), 1, ofp);
+        if(std::fwrite(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), ofp) != result.cardinalities_.size())
+            THROW_EXCEPTION(std::runtime_error("Failed to write lengths of sequences to disk.\n"));
         offset = 0;
         const uint64_t terminus = uint64_t(-1);
         for(size_t i = 0; i < result.nperfile_.size(); ++i) {
@@ -137,7 +139,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
                 std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
                 offset += result.nperfile_.at(i);
             }
-            std::fwrite(&terminus, sizeof(terminus), 1, ofp);
         }
         std::fclose(ofp);
     } else {
@@ -151,9 +152,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         }
         ((uint64_t *)tmpptr)[0] = t;
         ((uint64_t *)tmpptr)[1] = opts.sketchsize_;
-        std::fprintf(stderr, "Copying out\n");
         std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
-        std::fprintf(stderr, "Copyied out\n");
         ::munmap(tmpptr, nb);
     }
     std::fprintf(stderr, "Now handling names and k-mers\n");

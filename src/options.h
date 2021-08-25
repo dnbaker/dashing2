@@ -315,7 +315,7 @@ static constexpr const char *siglen =
         "-G/--seq: Full k-mer sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"\
         "          On the other hand, it can require higher memory for large sequence collections\n"\
         "          If you use --parse-by-seq with this and an output path is provided, then the stacked minimizer sequences will be written to it\n"\
-        "          that file, with 0xFFFFFFFFFFFFFFFF-valued 64-bit integers appended to each to mark the end of the sequence.\n"\
+        "          The format is the similar to the standard stacked sketches, except that the cardinality fields instead represent minimizer sequence lengths.\n"\
         "    Dependent option (only for --seq/-G parsing)\n"\
         "          --hp-compress:\n"\
         "              Minimizer sequence will be homopolymer-compressed before emission. \n"\
