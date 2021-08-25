@@ -16,6 +16,7 @@
 
 
 namespace dashing2 {
+
 using namespace std::literals::string_literals;
 using namespace sketch;
 
@@ -227,6 +228,12 @@ using OPSetSketch = LazyOnePermSetSketch<KmerSigT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
 using ProbMinHash = sketch::pmh2_t<RegT>;
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
+template<typename T>
+INLINE auto total_weight(const T &x) {return x.total_weight();}
+template<>
+INLINE auto total_weight(const FullSetSketch &x) {return x.total_updates();}
+template<>
+INLINE auto total_weight(const OPSetSketch &x) {return x.total_updates();}
 
 static constexpr size_t nregperitem(bns::RollingHashingType it, bool is128=false) {
     using namespace bns;
@@ -243,6 +250,37 @@ static constexpr size_t nregperitem(bns::RollingHashingType it, bool is128=false
     }
     return 0; // Should not ever happen
 }
+
+struct KSeqHolder {
+    kseq_t *kseqs_;
+    size_t n_;
+    KSeqHolder(size_t n): kseqs_(static_cast<kseq_t *>(std::calloc(n, sizeof(kseq_t)))), n_(n) {
+        if(!kseqs_) THROW_EXCEPTION(std::bad_alloc());
+        for(auto p = kseqs_; p < kseqs_ + n_; ++p)
+            ks_resize(&p->seq, 1<<18);
+    }
+    KSeqHolder(const KSeqHolder &o) = delete;
+    KSeqHolder(KSeqHolder &&o): kseqs_(o.kseqs_), n_(o.n_) {
+        o.n_ = 0;
+        o.kseqs_ = 0;
+    }
+private:
+    void free_item(kseq_t &seq) {
+        std::free(seq.name.s);
+        std::free(seq.comment.s);
+        std::free(seq.seq.s);
+        std::free(seq.qual.s);
+        ks_destroy(seq.f);
+    }
+public:
+    ~KSeqHolder() {
+        for(size_t i = 0; i < n_; free_item(kseqs_[i++]));
+        std::free(kseqs_);
+        kseqs_ = 0;
+        n_ = 0;
+    }
+};
+
 
 extern bool entmin;
 

@@ -67,7 +67,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
         return ret;
     }
     bigWigFile_t *fp = bwOpen(path.data(), nullptr, "r");
-    if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Could not open bigwigfile"));
+    if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Could not open bigwigfile at"s + path));
 
     if(parallel_process || opts.by_chrom_) {
         auto ids(get_iterators(fp));

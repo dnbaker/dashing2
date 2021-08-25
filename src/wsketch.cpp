@@ -2,12 +2,9 @@
 #include "enums.h"
 #include "d2.h"
 #include "sketch/bmh.h"
+#include "mio.hpp"
 namespace dashing2 {
 
-template<typename T>
-auto total_weight(const T &x) {return x.total_weight();}
-template<>
-auto total_weight(const FullSetSketch &x) {return x.total_updates();}
 template<typename BMH>
 BMH construct(size_t sketchsize) {
     if constexpr(std::is_same_v<BMH, BagMinHash> || std::is_same_v<BMH, ProbMinHash>)
@@ -27,7 +24,7 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
     #pragma omp parallel for schedule(dynamic, 16)
 #endif
     for(size_t i = 0; i < nr; ++i) {
-        std::fprintf(stderr, "%zu/%zu\n", i, nr);
+        DBG_ONLY(std::fprintf(stderr, "%zu/%zu\n", i, nr);)
         ++total_processed;
         BMH h(construct<BMH>(m));
         const size_t b = indptr[i], e = indptr[i + 1];
@@ -42,23 +39,16 @@ std::vector<SimpleMHRet> minhash_rowwise_csr(const FT *weights, const IT *indice
         std::get<0>(ret[i]) = h.template to_sigs<RegT>();
         std::get<1>(ret[i]) = h.template to_sigs<uint64_t>();
         std::get<2>(ret[i]) = ids;
-        if(total_processed.load() % 65536 == 0) {
+        if((total_processed.load() & 1023u) == 0u) {
             std::chrono::duration<double, std::milli> diff(std::chrono::high_resolution_clock::now() - t1);
-            auto left = nr - total_processed.load();
+            auto left = nr - total_processed.load(), done = nr - left;
             auto sperit = diff.count() / (total_processed.load() + 1);
             auto timeleft = left * sperit;
-            std::fprintf(stderr, "%g of total done, expected %gms time left\n", double(left) / nr, timeleft);
-            std::fprintf(stderr, "Processed %zu/%zu in %gms; Expected < %zu seconds left...\n", total_processed.load(), nr, diff.count(), size_t(std::ceil(timeleft / 1e3)));
+            std::fprintf(stderr, "%g%% of total done, expected %gms time left. Processed %zu/%zu in %gms; Expected < %zu seconds left...\r\n", 100. * done / nr, timeleft, total_processed.load(), nr, diff.count(), size_t(std::ceil(timeleft / 1e3)));
         }
     }
     return ret;
 }
-
-template<typename T>
-static constexpr const char *fmt = "%0.17g\n";
-template<> constexpr const char *fmt<float> = "%0.16g\n";
-template<> constexpr const char *fmt<double> = "%0.24g\n";
-template<> constexpr const char *fmt<long double> = "%0.30Lg\n";
 
 
 template<typename BMH, typename FT, typename IT>
@@ -152,20 +142,17 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
     // For IDs, default is 64 bits
     //
     std::vector<SimpleMHRet> ret;
-    std::vector<std::thread> threads;
-#define PERF1(T) minhash_rowwise_csr<T>(lp, rvec.data(), cvec.data(), nr, sksz)
+#define PERF1(T) minhash_rowwise_csr<T>(lp, rp, ip, nr, sksz)
 #define PERF(TL, TR, IR) do {\
-            std::vector<TL> lvec;\
-            std::vector<TR> rvec;\
-            std::vector<IR> cvec;\
-            threads.emplace_back([&]() {if(!cpath.empty() || cpath != "-") lvec = fromfile<TL>(cpath);});\
-            threads.emplace_back([&]() {rvec = fromfile<TR>(idpath);});\
-            threads.emplace_back([&]() {cvec = fromfile<IR>(indptrpath);});\
-            for(auto &t: threads) t.join();\
-            threads.clear();\
-            const auto nr = cvec.size() - 1;\
-            assert(lvec.size() == rvec.size());\
-            const TL *lp = lvec.size() ? lvec.data(): (const TL *)nullptr;\
+            std::unique_ptr<mio::mmap_sink> lf;\
+            if(cpath.size() && cpath != "-") lf.reset(new mio::mmap_sink(cpath));\
+            mio::mmap_sink rf(idpath);\
+            const std::vector<IR> cvec(fromfile<IR>(indptrpath));\
+            const TL *lp = lf ? (const TL *)lf->data(): (const TL *)nullptr;\
+            const TR *rp = (const TR *)rf.data();\
+            const IR *ip = cvec.data();\
+            const size_t nr = cvec.size() - 1;\
+            assert(!lp || lf->size() / sizeof(TL) == rf.size() / sizeof(TR));\
             ret = usepmh == 1 ? PERF1(ProbMinHash)\
                               : usepmh == 0 ? PERF1(BagMinHash)\
                                             : PERF1(FullSetSketch);\
@@ -187,6 +174,8 @@ std::vector<SimpleMHRet> wmh_from_file_csr(std::string idpath, std::string cpath
         PERF2(float);
     } else if(usef32 == -1) {
         PERF2(uint16_t);
+    } else if(usef32 == -2) {
+        PERF2(uint32_t);
     } else {
         PERF2(double);
     }
@@ -233,14 +222,25 @@ int wsketchusage() {
                          "If two paths are provided, the second is treated as a weight vector, and the multiset is sketched via ProbMinHash or BagMinHash.\n"
                          "If three paths are provided, the second is treated as a weight vector, and the last is used as indptr; this yields a stacked set of sketches corresponding to the input matrix.\n"
                          "-S: set sketch size\n"
-                         "-f: Read 32-bit floating point weights from [input.weights.bin] (Default: double)\n"
+                         "Identifier size: 64-bit by default.\n"
+                         "-u: Read 32-bit identifiers from input.bin rather than 64-bit\n"
+                         "If your data has non-integral types, you can still convert them to b-bit signatures using hash functions/RNGs\n"
+                         "Weight data types:\n"
+                         "If a weights file is provided, double is the expected format.\n"\
+                         "-f: Read 32-bit floating point weights from [input.weights.bin] \n"
                          "-H: Read 16-bit data weights from [input.weight.bin] (Default: float64)\n"
-                         "-u: Read 32-bit identifiers from input.bin rather than 64-bit (Default: 64-bit integers)\n"
+                         "-U: Read 32-bit data weights from [input.weight.bin] (Default: float64)\n"
+                         "Indptr data types:\n"
+                         "If any indptr file is provided, it is expected to use 64-bit integers.\n"
                          "-P: Read 32-bit indptr integers [indptr.bin] (Default: uint64_t)\n"
-                         "-B: Sketch with BagMinHash (Default: Uses ProbMinHash)\n"
-                         "-q: Sketch with SetSketch (Default: Uses ProbMinHash unless no weights are provided.)\n"
+                         "Sketching options: \n"
+                         "By default, sketches with ProbMinHash, which treats datasets as discrete probability distributions\n"
+                         "This can be changed with the following flags:\n\n"
+                         "-B: Sketch with BagMinHash. This treats datasets as multisets.\n"
+                         "-q: Sketch with SetSketch\n"
                          "-o: outprefix. If unset, uses [input.bin]\n"
-                         "-p: Set number of threads (processes)\n"
+                         "Runtime options:\n"
+                         "-p: Set number of threads (processes) [1]\n"
             );
         std::fprintf(stderr, "If two are provided, then 1-D weighted minhashing is performed on the compressed vector. If three are passed, then this result is treated as a CSR-format matrix and then emits a matrix of sketches.\n");
         std::fprintf(stderr, "To unweighted sparse matrices (omitting the data field), use CSR-style sketching but replace the weights file with '-'");
@@ -270,7 +270,7 @@ int wsketch_main(int argc, char **argv) {
     bool ip32 = false;
     std::string outpref;
     int nthreads = 1;
-    for(int c;(c = getopt(argc, argv, "p:o:S:PqBHPufh?")) >= 0;) { switch(c) {
+    for(int c;(c = getopt(argc, argv, "p:o:S:UPqBHPufh?")) >= 0;) { switch(c) {
         case 'p': nthreads = std::atoi(optarg); break;
         case 'S': sketchsize = std::strtoull(optarg, nullptr, 10); break;
         case 'B': sketchtype = 0; break;
@@ -278,6 +278,7 @@ int wsketch_main(int argc, char **argv) {
         case 'u': u32 = true; break;
         case 'f': f32 = true; break;
         case 'H': f32 = -1; break;
+        case 'U': f32 = -2; break;
         case 'o': outpref = optarg; break;
         case 'P': ip32 = true; break;
         case '?': case 'h': return wsketchusage();
@@ -341,7 +342,7 @@ int wsketch_main(int argc, char **argv) {
         std::fclose(fp);
         fp = std::fopen((outpref + ".sampled.info.txt").data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
-        static constexpr const char *fmtstr = fmt<std::decay_t<decltype(mhrs.front().total_weight())>>;
+        static constexpr const char *fmtstr = nlfmt<std::decay_t<decltype(mhrs.front().total_weight())>>;
         for(size_t i = 0; i < nsketches; std::fprintf(fp, fmtstr, mhrs[i++].total_weight()));
         std::fclose(fp);
         return 0;

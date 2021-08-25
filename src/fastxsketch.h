@@ -2,6 +2,7 @@
 #ifndef DASHING2_FASTX_SKETCH_H__
 #define DASHING2_FASTX_SKETCH_H__
 #include "d2.h"
+#include "mmvec.h"
 
 namespace dashing2 {
 using std::to_string;
@@ -11,6 +12,13 @@ static inline std::string to_string(const T *ptr) {
     return std::string(buf_, std::sprintf(buf_, "%p", static_cast<const void *>(ptr)));
 }
 struct SketchingResult {
+    SketchingResult() {}
+    SketchingResult(SketchingResult &&o) = default;
+    SketchingResult(const SketchingResult &o) = default;
+    SketchingResult(SketchingResult &o) = default;
+    SketchingResult &operator=(SketchingResult &&o) = default;
+    SketchingResult &operator=(const SketchingResult &o) = delete;
+
     std::vector<std::string> names_; // List of files, potentially multiple per line
     std::vector<std::string> destination_files_; // Contains sketches/kmer-sets,kmer-sequences etc.
     std::vector<std::string> kmerfiles_;         // Contains file-paths for k-mers, if saved.
@@ -22,9 +30,11 @@ struct SketchingResult {
     std::vector<std::string> sequences_;
     // This is only filled if sspace is SPACE_EDIT_DISTANCE and
     // we are using LSH only for pre-filtering but performing exact distance calculations via edit distance
-    std::vector<RegT> signatures_; // Signatures, packed into a single array
-    std::vector<uint64_t> kmers_;  // This contains the k-mers corresponding to signatures, if asked for
-    std::vector<double> kmercounts_; // Contains counts for k-mers, if desired
+    mm::vector<RegT> signatures_;
+    // TODO: mmap these matrices to reduce peak memory footprint
+    std::vector<uint64_t> kmers_;
+    std::vector<float> kmercounts_; // Contains counts for k-mers, if desired
+    // This contains the k-mers corresponding to signatures, if asked for 128-bit k-mers, these are stored in chunks of 2 64-bit integers.
     size_t nq = 0;
     const Dashing2Options *options_ = nullptr;
     size_t total_seqs() const {
@@ -41,8 +51,8 @@ struct SketchingResult {
 using FastxSketchingResult = SketchingResult;
 
 
-FastxSketchingResult fastx2sketch(Dashing2Options &opts, const std::vector<std::string> &paths);
-FastxSketchingResult fastx2sketch_byseq(Dashing2Options &opts, const std::string &path, kseq_t *kseqs=static_cast<kseq_t *>(nullptr), bool parallel=false, const size_t seqs_per_batch = 8192);
+FastxSketchingResult &fastx2sketch(FastxSketchingResult &res, Dashing2Options &opts, const std::vector<std::string> &paths, std::string path);
+FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &res, Dashing2Options &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel=false, const size_t seqs_per_batch = 8192);
 std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer=false);
 }
 
