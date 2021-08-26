@@ -130,8 +130,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         size_t offset = result.names_.size();
         std::fwrite(&offset, sizeof(offset), 1, ofp);
         {
-            uint32_t k = opts.k();
-            uint32_t w = opts.w();
+            const uint32_t k = opts.k_, w = opts.w_;
             std::fwrite(&k, sizeof(k), 1, ofp);
             std::fwrite(&w, sizeof(w), 1, ofp);
         }
