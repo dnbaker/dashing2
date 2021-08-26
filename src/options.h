@@ -312,10 +312,11 @@ static constexpr const char *siglen =
         "-J/--countdict: Full k-mer countdict. \n"\
         "                This generates a sorted hash set for k-mers in the data, and additionally saves the associated counts for these k-mers.\n"\
         "                If an LSH table is generated, then weighted bottom-k hashes as in Cohen, E. \"Summarizing Data using Bottom-K Sketches\"\n"\
-        "-G/--seq: Full k-mer sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"\
+        "-G/--seq: Full k-mer (or minimizer) sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"\
         "          On the other hand, it can require higher memory for large sequence collections\n"\
-        "          If you use --parse-by-seq with this and an output path is provided, then the stacked minimizer sequences will be written to it\n"\
-        "          The format is the similar to the standard stacked sketches, except that the cardinality fields instead represent minimizer sequence lengths.\n"\
+        "          If you use --parse-by-seq with this and an output path is provided, then the stacked minimizer sequences will be written to it.\n"\
+        "          The format is the similar to the standard stacked sketches, except that the cardinality fields instead represent minimizer sequence lengths (in 64-bit registers).\n"\
+        "          Specifically, it consists of a header: [uint64_t nitems, uint32_t k, uint32_t w], followed by `nitems` [double], specifying sequence lengths of 64-bit registers\n"\
         "    Dependent option (only for --seq/-G parsing)\n"\
         "          --hp-compress:\n"\
         "              Minimizer sequence will be homopolymer-compressed before emission. \n"\

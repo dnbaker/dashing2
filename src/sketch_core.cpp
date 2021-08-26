@@ -129,10 +129,15 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         if((ofp = std::fopen(outfile.data(), "r+")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
         size_t offset = result.names_.size();
         std::fwrite(&offset, sizeof(offset), 1, ofp);
+        {
+            uint32_t k = opts.k();
+            uint32_t w = opts.w();
+            std::fwrite(&k, sizeof(k), 1, ofp);
+            std::fwrite(&w, sizeof(w), 1, ofp);
+        }
         if(std::fwrite(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), ofp) != result.cardinalities_.size())
             THROW_EXCEPTION(std::runtime_error("Failed to write lengths of sequences to disk.\n"));
         offset = 0;
-        const uint64_t terminus = uint64_t(-1);
         for(size_t i = 0; i < result.nperfile_.size(); ++i) {
             if(result.nperfile_[i]) {
                 std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
@@ -154,7 +159,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
         ::munmap(tmpptr, nb);
     }
-    std::fprintf(stderr, "Now handling names and k-mers\n");
     if(result.names_.size()) {
         if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
             THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
@@ -165,7 +169,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             if(result.cardinalities_.size()) {
                 std::fprintf(ofp, tfmt<double>, result.cardinalities_[i]);
             }
-            if(auto &kf = result.kmercountfiles_; kf.size())
+            if(auto &kf = result.kmercountfiles_; !kf.empty())
                 std::fputc('\t', ofp), std::fwrite(kf[i].data(), 1, kf[i].size(), ofp);
             std::fputc('\n', ofp);
         }
