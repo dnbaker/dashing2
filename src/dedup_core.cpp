@@ -309,7 +309,7 @@ double medsize(const std::vector<std::vector<T, Alloc>, VAlloc> &v) {
 void dedup_emit(const std::vector<LSHIDType> &ids, const std::vector<std::vector<LSHIDType>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result) {
     const std::string &outname = opts.outfile_path_;
     std::FILE *ofp = stdout;
-    if(outname.size() && (ofp = std::fopen(outname.data(), "wb")) == nullptr) {
+    if(outname.size() && (ofp = bfopen(outname.data(), "wb")) == nullptr) {
         THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file ") + outname + " for writing"));
     }
     const size_t nclusters = ids.size();

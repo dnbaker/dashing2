@@ -11,10 +11,12 @@ INLINE size_t nbytes_from_line(const std::string &line) {
 SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, const std::vector<std::string> &paths, std::string &outfile) {
     const size_t npaths = paths.size();
     std::string tmpfile;
+    bool rmfile = false;
     if(outfile.empty()) {
         uint64_t hv = opts.k_ * opts.sketchsize_ + (opts.w_ > 0 ? int(opts.w_): -13);
         for(const auto &p: paths) hv ^= std::hash<std::string>{}(p), hv ^= hv >> 31;
         outfile = std::to_string(hv) + ".sketchout.tmp";
+        rmfile = true;
     }
     if(opts.dtype_ == DataType::FASTX) {
         if(opts.parse_by_seq_) {
@@ -37,7 +39,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         result.names_ = std::move(res.sample_names());
         result.nperfile_.resize(res.nsamples_per_file().size());
         std::copy(res.nsamples_per_file().begin(), res.nsamples_per_file().end(), result.nperfile_.begin());
-        std::FILE *of = std::fopen(outfile.data(), "wb");
+        std::FILE *of = bfopen(outfile.data(), "wb");
         uint64_t ns = result.names_.size();
         std::fwrite(&ns, sizeof(ns), 1, of);
         ns = opts.sketchsize_;
@@ -126,7 +128,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
 #endif
     std::FILE *ofp;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
-        if((ofp = std::fopen(outfile.data(), "r+")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
+        if((ofp = bfopen(outfile.data(), "r+")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
         size_t offset = result.names_.size();
         std::fwrite(&offset, sizeof(offset), 1, ofp);
         {
@@ -159,7 +161,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         ::munmap(tmpptr, nb);
     }
     if(result.names_.size()) {
-        if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
+        if((ofp = bfopen((outfile + ".names.txt").data(), "wb")) == nullptr)
             THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
         std::fputs("#Name\tCardinality\n", ofp);
         for(size_t i = 0; i < result.names_.size(); ++i) {
@@ -177,7 +179,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
     if(result.kmers_.size()) {
         const size_t nb = result.kmers_.size() * sizeof(uint64_t);
         DBG_ONLY(std::fprintf(stderr, "About to write result kmers to %s of size %zu\n", outfile.data(), nb);)
-        if((ofp = std::fopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
+        if((ofp = bfopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
             if(std::fwrite(result.kmers_.data(), nb, 1, ofp) != size_t(1))
                 std::fprintf(stderr, "Failed to write k-mers to disk properly, silent failing\n");
             std::fclose(ofp);
@@ -188,13 +190,18 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
     if(result.kmercounts_.size()) {
         const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
         DBG_ONLY(std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());)
-        if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {
+        if((ofp = bfopen((outfile + ".kmercounts.f64").data(), "wb"))) {
             if(std::fwrite(result.kmercounts_.data(), nb, 1, ofp) != size_t(1))
                 std::fprintf(stderr, "Failed to write k-mer counts to disk properly, silent failing\n");
             std::fclose(ofp);
         } else {
             DBG_ONLY(std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());)
         }
+    }
+    if(rmfile) {
+        const int rc = std::system(("rm "s + outfile).data());
+        if(rc)
+            std::fprintf(stderr, "Failed to rm %s, but this is perhaps unimportant. rc %d, exit status %d, and signal %d\n", outfile.data(), rc, WEXITSTATUS(rc), WSTOPSIG(rc));
     }
     return result;
 }

@@ -44,9 +44,8 @@ int print_tabs(size_t n, std::FILE *ofp) {
 
 void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t ns = result.names_.size();
-    std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: std::fopen(opts.outfile_path_.data(), "w");
+    std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: bfopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
-    std::setvbuf(ofp, nullptr, _IOFBF, 1<<17);
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
     std::deque<QTup> datq;
     volatile int loopint = 0;
@@ -61,7 +60,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     // Emit Header
     if(opts.output_format_ == HUMAN_READABLE) {
         if(opts.output_kind_ != PHYLIP) {
-            std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": "PHYLIP pairwise");
+            std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": opts.output_kind_ == PANEL ? "Panel (Query/Refernce)": "Symmetric pairwise");
             std::fprintf(ofp, "#Dashing2Options: %s\n", opts.to_string().data());
             std::fprintf(ofp, "#Sources");
             for(size_t i = 0; i < result.names_.size(); ++i) {

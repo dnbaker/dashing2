@@ -101,7 +101,7 @@ struct FReader{
             c = "bzip2 -dc ";
         else {
             pclose = false;
-            fp_ = std::fopen(path_.data(), "r");
+            fp_ = bfopen(path_.data(), "r");
             return;
         }
         c += path;
@@ -130,7 +130,7 @@ struct FReader{
 
 template<typename T>
 std::vector<T> fromfile(std::string path) {
-    std::FILE *fp = std::fopen(&path[0], "rb");
+    std::FILE *fp = bfopen(&path[0], "rb");
     std::vector<T> ret;
     for(T v;std::fread(&v, sizeof(T), 1, fp) == 1;ret.push_back(v));
     std::fclose(fp);
@@ -255,7 +255,7 @@ int wsketchusage() {
 template<typename T>
 void write_container(const T &vec, std::string path) {
     const size_t nb = vec.size();
-    std::FILE *ifp = std::fopen(path.data(), "wb");
+    std::FILE *ifp = bfopen(path.data(), "wb");
     if(!ifp)
         THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path '") + path + "' for reading"));
     static constexpr size_t vnb = sizeof(std::decay_t<decltype(*vec.begin())>);
@@ -300,7 +300,7 @@ int wsketch_main(int argc, char **argv) {
         }
         const uint64_t nsketches = mhrs.size();
         std::string of = outpref + ".sampled.indices.stacked." + std::to_string(nsketches) + "." + std::to_string(sketchsize) + ".i64";
-        std::FILE *fp = std::fopen(of.data(), "wb");
+        std::FILE *fp = bfopen(of.data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         for(size_t i = 0; i < nsketches; ++i) {
             if(std::fwrite(std::get<2>(mhrs[i]).data(), sizeof(uint64_t), std::get<2>(mhrs[i]).size(), fp) != std::get<2>(mhrs[i]).size()) {
@@ -309,7 +309,7 @@ int wsketch_main(int argc, char **argv) {
         }
         std::fclose(fp);
         of =  outpref + ".sampled.regs.stacked." + std::to_string(nsketches) + "." + std::to_string(sketchsize) + ".f" + std::to_string(sizeof(RegT) * 8);
-        fp = std::fopen(of.data(), "wb");
+        fp = bfopen(of.data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         checked_fwrite(fp, &nsketches, sizeof(nsketches));
         checked_fwrite(fp, &sketchsize, sizeof(sketchsize));
@@ -329,7 +329,7 @@ int wsketch_main(int argc, char **argv) {
         }
         std::fclose(fp);
         of = outpref + ".sampled.hashes.stacked." + std::to_string(nsketches) + "." + std::to_string(sketchsize) + ".i64";
-        fp = std::fopen(of.data(), "wb");
+        fp = bfopen(of.data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         for(size_t i = 0; i < nsketches; ++i) {
             auto &regs = std::get<1>(mhrs[i]);
@@ -340,7 +340,7 @@ int wsketch_main(int argc, char **argv) {
             }
         }
         std::fclose(fp);
-        fp = std::fopen((outpref + ".sampled.info.txt").data(), "wb");
+        fp = bfopen((outpref + ".sampled.info.txt").data(), "wb");
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         static constexpr const char *fmtstr = nlfmt<std::decay_t<decltype(mhrs.front().total_weight())>>;
         for(size_t i = 0; i < nsketches; std::fprintf(fp, fmtstr, mhrs[i++].total_weight()));
@@ -359,7 +359,7 @@ int wsketch_main(int argc, char **argv) {
     const std::string suffix = (sizeof(RegT) == 4  ? "32" : sizeof(RegT) == 8 ? "64": sizeof(RegT) == 16 ? "128": "UNKNOWN");
     if(suffix == "UNKNOWN") THROW_EXCEPTION(std::runtime_error("RegT is not float32, float64, or long double...."));
     std::string sigpath = outpref + ".sampled.hashes.f" + suffix;
-    std::FILE *sigfp = std::fopen(sigpath.data(), "wb");
+    std::FILE *sigfp = bfopen(sigpath.data(), "wb");
     if(sigfp == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open sigpath ") + sigpath));
     double tw = total_weight;
     std::fwrite(&tw, sizeof(tw), 1, sigfp);

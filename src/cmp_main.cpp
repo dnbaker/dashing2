@@ -43,7 +43,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             }
         }
         //size_t nregs = st.st_size / result.names_.size() / sizeof(RegT);
-        std::FILE *fp = std::fopen(pf.data(), "w");
+        std::FILE *fp = bfopen(pf.data(), "w");
         if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + pf));
         struct stat st;
         ::fstat(::fileno(fp), &st);
@@ -107,7 +107,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         OMP_PFOR_DYN
         for(size_t i = 0; i < paths.size(); ++i) {
             auto &path = paths[i];
-            std::FILE *ifp = std::fopen(path.data(), "rb");
+            std::FILE *ifp = bfopen(path.data(), "rb");
             if(even && result.cardinalities_.size() > i) {
                 std::fread(&result.cardinalities_[i], sizeof(double), 1, ifp);
             }
@@ -118,7 +118,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             }
             std::fclose(ifp);
             if(std::string p(path + ".kmerhashes.u64"); bns::isfile(p)) {
-                if((ifp = std::fopen(p.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Could not open path ") + p));
+                if((ifp = bfopen(p.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Could not open path ") + p));
                 if(std::fread(&result.kmers_[csizes[i]], sizeof(uint64_t), fsizes[i], ifp) != fsizes[i]) {
                     std::fprintf(stderr, "Failed to read at path %s\n", p.data());
                     std::fclose(ifp);
@@ -127,7 +127,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                 std::fclose(ifp);
             }
             if(std::string p(path + ".kmercounts.f64"); bns::isfile(p)) {
-                if((ifp = std::fopen(p.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open kmer count file"));
+                if((ifp = bfopen(p.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open kmer count file"));
                 if(std::fread(&result.kmercounts_[csizes[i]], sizeof(double), fsizes[i], ifp) != fsizes[i]) {
                     std::fprintf(stderr, "Failed to read k-mer counts at path %s\n", p.data());
                     std::fclose(ifp);

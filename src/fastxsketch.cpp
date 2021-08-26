@@ -63,7 +63,7 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
         ::pclose(fp);
         return ptr - origptr;
     }
-    std::FILE *fp = std::fopen(path.data(), "rb");
+    std::FILE *fp = bfopen(path.data(), "rb");
     if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + path));
     std::fread(cardinality, sizeof(*cardinality), 1, fp);
     const int fd = ::fileno(fp);
@@ -362,7 +362,7 @@ do {\
                     std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[mss]);
                 }
             }
-            std::FILE * ofp = std::fopen(destination.data(), "wb");
+            std::FILE * ofp = bfopen(destination.data(), "wb");
             std::fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
             const void *buf = nullptr;
@@ -397,7 +397,7 @@ do {\
                                       static_cast<uint64_t *>(nullptr);
                 if(!ptr) THROW_EXCEPTION(std::runtime_error("This shouldn't happen"));
                 DBG_ONLY(std::fprintf(stderr, "Opening destkmer %s\n", destkmer.data());)
-                if((ofp = std::fopen(destkmer.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
+                if((ofp = bfopen(destkmer.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
                 //std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 
                 checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
@@ -410,7 +410,7 @@ do {\
                 //std::fprintf(stderr, "About to save kmer counts manually\n");
                 assert(ret.kmercountfiles_.size());
                 ret.kmercountfiles_.at(i) = destkmercounts;
-                if((ofp = std::fopen(destkmercounts.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
+                if((ofp = bfopen(destkmercounts.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
                 std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
                 if(opts.kmer_result_ == FULL_MMER_COUNTDICT || (opts.kmer_result_ == FULL_MMER_SET && opts.save_kmercounts_)) {
@@ -430,7 +430,7 @@ do {\
             ret.kmers_.clear();
             //std::fprintf(stderr, "Full mmer sequence\n");
             std::FILE * ofp;
-            if((ofp = std::fopen(destination.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open file for writing minimizer sequence"));
+            if((ofp = bfopen(destination.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open file for writing minimizer sequence"));
             void *dptr = nullptr;
             size_t m = 1 << 18;
             size_t l = 0;
@@ -457,7 +457,7 @@ do {\
             std::fclose(ofp);
         } else if(opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) {
             std::FILE * ofp;
-            if((ofp = std::fopen(destination.data(), "wb")) == nullptr)
+            if((ofp = bfopen(destination.data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
             checked_fwrite(ofp, &ret.cardinalities_[myind], sizeof(double));
             if(opss.empty() && fss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
