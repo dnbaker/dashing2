@@ -45,6 +45,7 @@ enum OptArg {
     OPTARG_GREEDY,
     OPTARG_NLSH,
     OPTARG_ENTROPYMIN,
+    OPTARG_SIGRAMLIMIT,
     OPTARG_DUMMY
 };
 
@@ -133,7 +134,8 @@ enum OptArg {
     {"nLSH", required_argument, 0, OPTARG_NLSH},\
     {"entmin", no_argument, 0, OPTARG_ENTROPYMIN},\
     {"by-chrom", no_argument, (int *)&by_chrom, 1},\
-    {"sketch-size-l2", required_argument, 0, 'L'},
+    {"sketch-size-l2", required_argument, 0, 'L'},\
+    {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT}
 
 
 
@@ -212,6 +214,9 @@ enum OptArg {
             std::fprintf(stderr, "Using log_2 sketchsize = %d, yielding sketchsize = %zu\n", ssl2, sketchsize);\
             break;\
         }\
+        case OPTARG_SIGRAMLIMIT: {\
+            MEMSIGTHRESH = std::strtoull(optarg, nullptr, 10);\
+        } break;
 
 
 

@@ -98,6 +98,7 @@ void Dashing2Options::validate() const {
 }
 
 bool entmin = false;
+size_t MEMSIGTHRESH = 20ull << 30;
 
 } // dashing2
 

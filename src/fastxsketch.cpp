@@ -140,7 +140,6 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     const size_t nt = std::max(opts.nthreads(), 1u);
     const size_t ss = opts.sketchsize();
     KSeqHolder kseqs(nt);
-    ret.options_ = &opts;
     std::vector<BagMinHash> bmhs;
     std::vector<ProbMinHash> pmhs;
     std::vector<OPSetSketch> opss;
@@ -191,11 +190,12 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     } while(0)
 
     const uint64_t nitems = paths.size();
-    const size_t offset_within = sizeof(nitems) * 2 + sizeof(double) * nitems;
-    ::truncate(outpath.data(), offset_within);
+    if(outpath.size()) {
+        ::truncate(outpath.data(), sizeof(nitems) * 2 + sizeof(double) * nitems);
+        ret.signatures_.assign(outpath);
+    }
     //std::fprintf(stderr, "Writing to %s: items %zu and sketchsize %zu, offset within %zu\n", outpath.data(), nitems, opts.sketchsize_, offset_within);
     // File size before signatures:
-    ret.signatures_.assign(outpath, offset_within);
     ret.signatures_.resize(ss * nitems);
     if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));

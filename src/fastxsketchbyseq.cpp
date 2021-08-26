@@ -123,7 +123,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
     {
         if(::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs)) 
             THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq"));
-        ret.signatures_.assign(outpath);
+        if(outpath.size()) ret.signatures_.assign(outpath);
         if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
             ret.signatures_.reserve(total_nseqs * opts.sketchsize_);
         }
