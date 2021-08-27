@@ -261,6 +261,8 @@ struct KSeqHolder {
         o.n_ = 0;
         o.kseqs_ = 0;
     }
+    kseq_t &operator[](size_t i) {return kseqs_[i];}
+    const kseq_t &operator[](size_t i) const {return kseqs_[i];}
 private:
     void free_item(kseq_t &seq) {
         std::free(seq.name.s);

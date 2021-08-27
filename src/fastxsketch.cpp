@@ -190,16 +190,33 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     } while(0)
 
     const uint64_t nitems = paths.size();
-    std::string kmeroutpath;
+    std::string kmeroutpath, kmernamesoutpath;
     if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
         ::truncate(outpath.data(), sizeof(nitems) * 2 + sizeof(double) * nitems);
         ret.signatures_.assign(outpath);
         if(opts.save_kmers_) {
             kmeroutpath = outpath + ".kmer64";
+            kmernamesoutpath = kmeroutpath + ".names.txt";
         }
     }
     if(kmeroutpath.size()) {
+        std::FILE *fp = std::fopen(kmeroutpath.data(), "wb");
+        uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8);
+        uint32_t sketchsize = opts.sketchsize_;
+        uint32_t k = opts.k_;
+        uint32_t w = opts.w_;
+        std::fwrite(&dtype, sizeof(dtype), 1, fp);
+        std::fwrite(&sketchsize, sizeof(sketchsize), 1, fp);
+        std::fwrite(&k_, sizeof(k_), 1, fp);
+        std::fwrite(&w_, sizeof(w_), 1, fp);
+        std::fclose(fp);
         ret.kmers_.assign(kmeroutpath);
+        if((fp = bfopen(kmernamesoutpath.data(), "wb")) == 0) THROW_EXCEPTION(std::runtime_error("Failed to open "s + kmernamesoutpath + " for writing."));
+        for(const auto &n: paths) {
+            std::fwrite(n.data(), 1, n.size(), fp);
+            std::fputc('\n', fp);
+        }
+        std::fclose(fp);
     }
     //std::fprintf(stderr, "Writing to %s: items %zu and sketchsize %zu, offset within %zu\n", outpath.data(), nitems, opts.sketchsize_, offset_within);
     // File size before signatures:

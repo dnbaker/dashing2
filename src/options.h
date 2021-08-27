@@ -414,7 +414,10 @@ static constexpr const char *siglen =
         "If sketching, you can also choose to save k-mers (the IDs corresponding to the k-mer selected), or\n"\
         " and optionally save the counts for these k-mers\n"\
         "This could be used to build inverted indexes (using samples to estimate containment), or for frequency estimation\n"\
-        "-s/--save-kmers: Save k-mers. This puts the k-mers saved into .kmer files to correspond with the minhash samples.\n"\
+        "-s/--save-kmers: Save k-mers. This puts the k-mers saved into .kmer files to correspond with the minhash samples. \n"\
+        "If an output path is specified for dashing2 and --save-kmers is enabled, stacked k-mers will be written to <arg>.kmer64, and names will be written to <arg>.kmer.names.txt\n"\
+        "This has a 16-byte header containing a 32-bit integer describing the alphabet used, 32 bits describing sketch size, one 32-bit integer for k, and one 32-bit integer for window-length.\n"\
+        "This database can be used for dashing2 contain.\n"\
         "-N/--save-kmercounts: Save k-mer counts for sketches. This puts the k-mer counts saved into .kmercounts.f64 files to correspond with the k-mers.\n"\
         "-o/--outfile: sketches are stacked into a single file and written to <arg>\n"\
         "This is the path for the stacked sketches; to set output location, use --cmpout instead. (This is the distance matrix betweek sketches).\n"\

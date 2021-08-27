@@ -124,6 +124,8 @@ int main(int argc, char **argv) {
             return cmp_main(argc - 1, argv + 1);
         if(std::strcmp(argv[1], "wsketch") == 0)
             return wsketch_main(argc - 1, argv + 1);
+        if(std::strcmp(argv[1], "contain") == 0)
+            return wsketch_main(argc - 1, argv + 1);
     }
     return main_usage();
 }
