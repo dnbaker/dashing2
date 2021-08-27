@@ -206,15 +206,13 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         uint32_t sketchsize = opts.sketchsize_;
         uint32_t k = opts.k_;
         uint32_t w = opts.w_ < 0 ? opts.k_: opts.w_;
-        std::array<uint32_t, 4> au{{dtype, sketchsize, k, w}};
         checked_fwrite(fp, &dtype, sizeof(dtype));
         checked_fwrite(fp, &sketchsize, sizeof(sketchsize));
         checked_fwrite(fp, &k, sizeof(k));
         checked_fwrite(fp, &w, sizeof(w));
         std::fclose(fp);
-        assert(bns::filesize(kmeroutpath.data()) == 16);
+        if(bns::filesize(kmeroutpath.data()) != 16) THROW_EXCEPTION(std::runtime_error("kmer out path is the wrong size (expected 16, got "s + std::to_string(bns::filesize(kmeroutpath.data()))));
         ret.kmers_.assign(kmeroutpath, sizeof(uint32_t) * 4);
-        ret.kmers_.set_prepend(au.data(), au.size());
         if((fp = bfopen(kmernamesoutpath.data(), "wb")) == 0) THROW_EXCEPTION(std::runtime_error("Failed to open "s + kmernamesoutpath + " for writing."));
         for(const auto &n: paths) {
             std::fwrite(n.data(), 1, n.size(), fp);
@@ -255,7 +253,6 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     }
     OMP_PFOR_DYN
     for(size_t i = 0; i < nitems; ++i) {
-        std::fprintf(stderr, "processing %s/%d\n", paths[i].data(), int(i));
         int tid = 0;
         OMP_ONLY(tid = omp_get_thread_num();)
         //const int tid = OMP_ELSE(omp_get_thread_num(), 0);

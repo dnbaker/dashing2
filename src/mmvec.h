@@ -52,7 +52,6 @@ class vector {
     mio::mmap_sink ms_;
     size_t memthreshold_ = 20ull << 30;
     std::vector<T> ram_;
-    std::vector<uint8_t> prepend_buffer_;
     // TODO: add in additional option for backing to use anonymous mmap'd data
     // using fd = -1, which makes a temporary file which is cleared when no longer needed.
 public:
@@ -66,14 +65,6 @@ public:
     size_t capacity() const {return capacity_;}
     size_t size() const {return size_;}
     bool empty() const {return size_ == 0u;}
-    template<typename U>
-    void set_prepend(const U *ptr, size_t n) {
-        if(sizeof(U) * n != offset_) {
-            throw std::runtime_error("set_prepend failed because the prefix size is incorrect.");
-        }
-        prepend_buffer_.resize(n * sizeof(T));
-        std::memcpy(prepend_buffer_.data(), ptr, n * sizeof(T));
-    }
     bool using_ram() const {
         return path_.empty() || capacity_ < countthreshold();
     }
@@ -141,14 +132,10 @@ public:
         if(ms_.is_open()) ms_.unmap();
         path_ = inpath;
         if(path_.size()) {
-            std::FILE *ifp;
-            if((ifp = std::fopen(path(), "wb")) == nullptr)
-                throw std::runtime_error(std::string("Failed to open ") + path_);
             struct stat st;
-            if(::fstat(::fileno(ifp), &st)) throw std::runtime_error("Failed to fstat");
+            if(::stat(path(), &st))
+                throw std::runtime_error("Failed to stat");
             offset_ = off == size_t(-1) ? size_t(st.st_size): off;
-            std::fprintf(stderr, "offset: %zu\n", offset_);
-            if(std::fclose(ifp)) throw std::runtime_error("Error in closing ifp\n");
         }
         std::error_code ec;
         capacity_ = size_ = initial_size;
@@ -199,15 +186,6 @@ public:
     ~vector() noexcept(false) {
         // shrink to fit, then flush to disk if necessary
         if(path_.empty()) return;
-        if(prepend_buffer_.size()) {
-            mio::mmap_sink check(path_, 0, offset_);
-            std::memcpy(check.data(), prepend_buffer_.data(), prepend_buffer_.size());
-#ifndef NDEBUG
-            for(size_t i = 0; i < offset_ / 4; ++i) {
-                std::fprintf(stderr, "Appending %u\n", ((uint32_t *)check.data())[i]);
-            }
-#endif
-        }
         if(capacity_ < countthreshold()) {
             ram_.resize(size_);
             ram_.shrink_to_fit();
