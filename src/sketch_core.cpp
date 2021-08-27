@@ -1,6 +1,7 @@
 #include "sketch_core.h"
 
 namespace dashing2 {
+extern size_t MEMSIGTHRESH;
 
 INLINE size_t nbytes_from_line(const std::string &line) {
     size_t ret = 0;
@@ -9,32 +10,25 @@ INLINE size_t nbytes_from_line(const std::string &line) {
 }
 
 SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, const std::vector<std::string> &paths, std::string &outfile) {
+    if(opts.kmer_result() == FULL_MMER_SEQUENCE && outfile.empty()) {
+        THROW_EXCEPTION(std::runtime_error("outfile must be specified for --seq mode."));
+    }
+    result.signatures_.memthreshold(MEMSIGTHRESH);
     const size_t npaths = paths.size();
     std::string tmpfile;
-    bool rmfile = false;
-    if(outfile.empty()) {
-        uint64_t hv = opts.k_ * opts.sketchsize_ + (opts.w_ > 0 ? int(opts.w_): -13);
-        for(const auto &p: paths) hv ^= std::hash<std::string>{}(p), hv ^= hv >> 31;
-        outfile = std::to_string(hv) + ".sketchout.tmp";
-        rmfile = true;
-    }
     if(opts.dtype_ == DataType::FASTX) {
         if(opts.parse_by_seq_) {
             if(paths.size() != 1) {
                 result.nperfile_.resize(paths.size());
                 THROW_EXCEPTION(std::runtime_error("parse-by-seq currently only handles one file at a time. To process multiple files, simply concatenate them into one file, and run dashing2 on that."));
             }
-            std::fprintf(stderr, "Returning result from by_seq\n");
             KSeqHolder kseqs(std::max(opts.nthreads(), 1u));
             fastx2sketch_byseq(result, opts, paths.front(), kseqs.kseqs_, outfile, true);
-            std::fprintf(stderr, "Returned result from by_seq\n");
         } else {
-            std::fprintf(stderr, "Returning result from xsketch\n");
             fastx2sketch(result, opts, paths, outfile);
-            std::fprintf(stderr, "Returned result from xsketch\n");
         }
-        std::fprintf(stderr, "Returned results to sketch_core.\n");
     } else if(opts.dtype_ == DataType::LEAFCUTTER) {
+        if(outfile.empty()) THROW_EXCEPTION(std::runtime_error("Outfile required for LeafCutter input."));
         auto res = lf2sketch(paths, opts);
         result.names_ = std::move(res.sample_names());
         result.nperfile_.resize(res.nsamples_per_file().size());
@@ -107,25 +101,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             }
         }
     }
-#if 0
-    if(paths.size() == 1 && outfile.empty()) {
-        const std::string suf =
-                opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
-                opts.sspace_ == SPACE_MULTISET ? ".bmh":
-                opts.sspace_ == SPACE_PSET ? ".pmh" :
-                opts.sspace_ == SPACE_EDIT_DISTANCE ? ".omh": ".unknown_sketch";
-        outfile = paths.front();
-        outfile = outfile.substr(0, outfile.find_first_of(' '));
-        // In case the first path has multiple entries, trim to just the first
-        outfile = outfile + suf;
-        if(opts.trim_folder_paths()) {
-            outfile = trim_folder(outfile);
-            if(opts.outprefix_.size())
-                outfile = opts.outprefix_ + '/' + outfile;
-        }
-    }
-    const bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
-#endif
     std::FILE *ofp;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         if((ofp = bfopen(outfile.data(), "r+")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
@@ -147,18 +122,25 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         }
         std::fclose(ofp);
     } else {
-        // This should not overlap with the memory mapped for result.signatures_
-        const uint64_t t = result.cardinalities_.size();
-        const size_t nb = t * sizeof(double) + 2 * sizeof(uint64_t);
-        void *tmpptr = ::mmap(nullptr, nb, PROT_READ | PROT_WRITE, MAP_SHARED, result.signatures_.fd(), 0);
-        if(!tmpptr) {
-            perror("MMap the end");
-            THROW_EXCEPTION(std::runtime_error("Failed to mmap the remaining stuff."));
+        if(outfile.size() && outfile != "/dev/stdout" && outfile != "-") {
+            // This should not overlap with the memory mapped for result.signatures_
+            const uint64_t t = result.cardinalities_.size();
+            const size_t nb = t * sizeof(double) + 2 * sizeof(uint64_t);
+            int fd = ::open(outfile.data(), O_RDWR);
+            void *tmpptr = ::mmap(nullptr, nb, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            ::close(fd);
+            if(!tmpptr) {
+                THROW_EXCEPTION(std::runtime_error("Failed to set metadata for final stacked sketches."));
+            }
+            ((uint64_t *)tmpptr)[0] = t;
+            ((uint64_t *)tmpptr)[1] = opts.sketchsize_;
+            std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
+            ::munmap(tmpptr, nb);
+        } else {
+            if(outfile.size() && (outfile == "-" || outfile == "/dev/stdout")) {
+                THROW_EXCEPTION(std::runtime_error("Not yet supported: writing stacked sketches to file streams. This may change."));
+            }
         }
-        ((uint64_t *)tmpptr)[0] = t;
-        ((uint64_t *)tmpptr)[1] = opts.sketchsize_;
-        std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
-        ::munmap(tmpptr, nb);
     }
     if(result.names_.size()) {
         if((ofp = bfopen((outfile + ".names.txt").data(), "wb")) == nullptr)
@@ -197,11 +179,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         } else {
             DBG_ONLY(std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());)
         }
-    }
-    if(rmfile) {
-        const int rc = std::system(("rm "s + outfile).data());
-        if(rc)
-            std::fprintf(stderr, "Failed to rm %s, but this is perhaps unimportant. rc %d, exit status %d, and signal %d\n", outfile.data(), rc, WEXITSTATUS(rc), WSTOPSIG(rc));
     }
     return result;
 }

@@ -107,9 +107,6 @@ private:
     bool trim_folder_paths_ = false; // When writing output files, write to cwd instead of the directory the files came from
 public:
     bool cache_sketches_ = false;
-    bool build_mmer_matrix_ = false;
-    bool build_count_matrix_ = false;
-    bool build_sig_matrix_ = true;
     std::string outprefix_;
     std::string spacing_;
     std::string cmd_;
