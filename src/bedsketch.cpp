@@ -54,7 +54,7 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
             for(auto i = start; i < stop; ctr.add(chrhash ^ i++, inc));
         }
     }
-    std::FILE *ofp = std::fopen(cache_path.data(), "w");
+    std::FILE *ofp = bfopen(cache_path.data(), "w");
     if(opts.sspace_ > SPACE_SET) {
         if(opts.ct() == EXACT_COUNTING) {
             if(opts.sspace_ == SPACE_MULTISET) {

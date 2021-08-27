@@ -32,11 +32,10 @@ struct SketchingResult {
     // we are using LSH only for pre-filtering but performing exact distance calculations via edit distance
     mm::vector<RegT> signatures_;
     // TODO: mmap these matrices to reduce peak memory footprint
-    std::vector<uint64_t> kmers_;
+    mm::vector<uint64_t> kmers_;
     std::vector<float> kmercounts_; // Contains counts for k-mers, if desired
     // This contains the k-mers corresponding to signatures, if asked for 128-bit k-mers, these are stored in chunks of 2 64-bit integers.
     size_t nq = 0;
-    const Dashing2Options *options_ = nullptr;
     size_t total_seqs() const {
         // Sum of nperfile if nonempty
         // otherwise, just one sequence/bag of k-mers per "name"

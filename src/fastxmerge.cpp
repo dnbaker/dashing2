@@ -4,7 +4,6 @@ namespace dashing2 {
 SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const std::vector<std::string> &names=std::vector<std::string>()) {
     DBG_ONLY(std::fprintf(stderr, "About to merge from %p of size %zu, names has size %zu\n", (void *)start, n, names.size());)
     SketchingResult ret;
-    ret.options_ = start->options_;
     if(n == 0) return ret;
     else if(n == 1) {
         ret = std::move(*start);
