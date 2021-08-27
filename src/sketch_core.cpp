@@ -16,7 +16,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
     result.signatures_.memthreshold(MEMSIGTHRESH);
     const size_t npaths = paths.size();
     std::string tmpfile;
-    bool rmfile = false;
     if(opts.dtype_ == DataType::FASTX) {
         if(opts.parse_by_seq_) {
             if(paths.size() != 1) {
@@ -180,11 +179,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         } else {
             DBG_ONLY(std::fprintf(stderr, "Failed to open file at %s to write k-mer counts, failing silently.\n", (outfile + ".kmercounts.f64").data());)
         }
-    }
-    if(rmfile) {
-        const int rc = std::system(("rm "s + outfile).data());
-        if(rc)
-            std::fprintf(stderr, "Failed to rm %s, but this is perhaps unimportant. rc %d, exit status %d, and signal %d\n", outfile.data(), rc, WEXITSTATUS(rc), WSTOPSIG(rc));
     }
     return result;
 }
