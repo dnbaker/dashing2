@@ -139,8 +139,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             ::munmap(tmpptr, nb);
         } else {
             if(outfile.size() && (outfile == "-" || outfile == "/dev/stdout")) {
-                std::fprintf(stderr, "Here I should write the stacked results to this file, not using any mmap or streaming stuff.");
-                throw 1;
+                THROW_EXCEPTION(std::runtime_error("Not yet supported: writing stacked sketches to file streams. This may change."));
             }
         }
     }
