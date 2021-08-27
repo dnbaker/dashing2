@@ -9,6 +9,37 @@
 namespace mm {
 using namespace std::literals::string_literals;
 
+class AnonMMapper {
+    void *data_;
+    size_t n_;
+public:
+    void *data() {return data_;}
+    const void *data() const {return data_;}
+    static void *allocate(size_t nbytes) {
+        return ::mmap(nullptr, nbytes, PROT_READ | PROT_WRITE, MAP_SHARED | MMAP_HUGE_FLAGS | MAP_ANON, -1, 0);
+    }
+    AnonMMapper(size_t nbytes): n_(nbytes) {
+        if(nbytes == 0) {
+            return;
+        }
+        void *tmp = allocate(nbytes);
+        if(tmp == reinterpret_cast<void *>(0xffffffffffffffff)) {
+            perror("Failed to perform mmap call; throwing std::bad_alloc");
+            throw std::bad_alloc();
+        }
+        data_ = tmp;
+    }
+    ~AnonMMapper() {
+        if(data_) {
+            ::munmap(data_, n_);
+        }
+    }
+    AnonMMapper(AnonMMapper &&o): data_(o.data_), n_(o.n_) {
+        o.data_ = nullptr;
+        o.n_ = 0u;
+    }
+};
+
 template<typename T>
 class vector {
     static_assert(std::is_trivial_v<T>, "T must be trivial");
@@ -21,7 +52,15 @@ class vector {
     mio::mmap_sink ms_;
     size_t memthreshold_ = 20ull << 30;
     std::vector<T> ram_;
+    // TODO: add in additional option for backing to use anonymous mmap'd data
+    // using fd = -1, which makes a temporary file which is cleared when no longer needed.
 public:
+    using value_type = T;
+    using reference_type = T &;
+    using pointer_type = T *;
+    using const_reference_type = T &;
+    using const_pointer_type = T *;
+    using different_type = std::ptrdiff_t;
     const char *path() const {return path_.data();}
     size_t capacity() const {return capacity_;}
     size_t size() const {return size_;}
@@ -139,10 +178,8 @@ public:
     T &emplace_back(Args &&...args) {
         if(size() == 0u || size() == capacity_) {
             size_t newcap = std::max(static_cast<size_t>(1), size() << 1);
-            std::fprintf(stderr, "Reached cap %zu, now resizing to %zu\n", capacity_, newcap);
             reserve(newcap);
         }
-        std::fprintf(stderr, "Current size: %zu. Capacity: %zu. is kept in RAM: %d\n", size_, capacity_, using_ram());
         T *ptr = data() + size_++;
         new(ptr) T(std::forward<Args>(args)...);
         return *ptr;
@@ -167,17 +204,12 @@ public:
 #ifndef NDEBUG
                 if(ec) std::fprintf(stderr, "Error mmaping %s\n", ec.message().data());
 #endif
+                if(ec) throw std::system_error(ec);
                 std::copy(ram_.begin(), ram_.end(), (T *)ms_.data());
-#ifndef NDEBUG
-                std::fprintf(stderr, "Copied from RAM file to disk.\n");
-#endif
             }
         } else if(capacity_ > 0 && capacity_ > size_) {
             const bool wasopen = ms_.is_open();
             if(wasopen) ms_.unmap();
-#ifndef NDEBUG
-            std::fprintf(stderr, "Shrinking %zu to %zu\n", capacity_, size_);
-#endif
             if(::truncate(path(), offset_ + (size_ * sizeof(T))))
                 throw std::runtime_error("Failed to truncate to shrink_to_fit");
 #ifndef NDEBUG
@@ -229,7 +261,11 @@ public:
         }
         capacity_ = newcap;
     }
-    void shrink_to_fit() {
+    void clear() {
+        if(using_ram()) {
+            ram_.clear();
+        }
+        size_ = 0;
     }
 };
 

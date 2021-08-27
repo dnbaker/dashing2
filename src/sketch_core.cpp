@@ -23,16 +23,11 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
                 result.nperfile_.resize(paths.size());
                 THROW_EXCEPTION(std::runtime_error("parse-by-seq currently only handles one file at a time. To process multiple files, simply concatenate them into one file, and run dashing2 on that."));
             }
-            std::fprintf(stderr, "Returning result from by_seq\n");
             KSeqHolder kseqs(std::max(opts.nthreads(), 1u));
             fastx2sketch_byseq(result, opts, paths.front(), kseqs.kseqs_, outfile, true);
-            std::fprintf(stderr, "Returned result from by_seq\n");
         } else {
-            std::fprintf(stderr, "Returning result from xsketch\n");
             fastx2sketch(result, opts, paths, outfile);
-            std::fprintf(stderr, "Returned result from xsketch\n");
         }
-        std::fprintf(stderr, "Returned results to sketch_core.\n");
     } else if(opts.dtype_ == DataType::LEAFCUTTER) {
         if(outfile.empty()) THROW_EXCEPTION(std::runtime_error("Outfile required for LeafCutter input."));
         auto res = lf2sketch(paths, opts);
@@ -128,7 +123,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         }
         std::fclose(ofp);
     } else {
-        if(outfile.size()) {
+        if(outfile.size() && outfile != "/dev/stdout" && outfile != "-") {
             // This should not overlap with the memory mapped for result.signatures_
             const uint64_t t = result.cardinalities_.size();
             const size_t nb = t * sizeof(double) + 2 * sizeof(uint64_t);
@@ -142,6 +137,11 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             ((uint64_t *)tmpptr)[1] = opts.sketchsize_;
             std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
             ::munmap(tmpptr, nb);
+        } else {
+            if(outfile.size() && (outfile == "-" || outfile == "/dev/stdout")) {
+                std::fprintf(stderr, "Here I should write the stacked results to this file, not using any mmap or streaming stuff.");
+                throw 1;
+            }
         }
     }
     if(result.names_.size()) {

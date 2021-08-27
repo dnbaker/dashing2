@@ -135,6 +135,9 @@ read%-f: test/read%.fo $(FLIBOBJ)
 %.f64o: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
 
+mmtest: test/mmtest.cpp src/mmvec.h
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -o $@ $(LIB) $(EXTRA)
+
 
 BWF=libBigWig/bwRead.o libBigWig/bwStats.o libBigWig/bwValues.o libBigWig/bwWrite.o libBigWig/io.o
 bwf:

@@ -1,6 +1,7 @@
 #pragma once
 #ifndef DASHING2_OPTIONS_H__
 #define DASHING2_OPTIONS_H__
+#include <enums.h>
 #include <getopt.h>
 
 namespace dashing2 {
@@ -419,6 +420,7 @@ static constexpr const char *siglen =
         "This is the path for the stacked sketches; to set output location, use --cmpout instead. (This is the distance matrix betweek sketches).\n"\
 
 
+extern size_t MEMSIGTHRESH;
 
 }
 

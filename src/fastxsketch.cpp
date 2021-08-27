@@ -158,7 +158,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     auto make_save = [&](auto &x) {
         x.reserve(nt);
         for(size_t i = 0; i < nt; ++i)
-            x.emplace_back(ss, opts.save_kmers_ || opts.build_mmer_matrix_, opts.save_kmercounts_ || opts.build_count_matrix_);
+            x.emplace_back(ss, opts.save_kmers_, opts.save_kmercounts_);
     };
     if(opts.sspace_ == SPACE_SET) {
         if(opts.kmer_result_ == ONE_PERM) {
@@ -167,7 +167,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         } else if(opts.kmer_result_ == FULL_SETSKETCH) {
             fss.reserve(nt);
             for(size_t i = 0; i < nt; ++i)
-                fss.emplace_back(opts.count_threshold_, ss, opts.save_kmers_ || opts.build_mmer_matrix_, opts.save_kmercounts_ || opts.build_count_matrix_);
+                fss.emplace_back(opts.count_threshold_, ss, opts.save_kmers_, opts.save_kmercounts_);
         }
     } else if(opts.sspace_ == SPACE_MULTISET) make_save(bmhs);
     else if(opts.sspace_ == SPACE_PSET) make(pmhs);
@@ -190,9 +190,16 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     } while(0)
 
     const uint64_t nitems = paths.size();
-    if(outpath.size()) {
+    std::string kmeroutpath;
+    if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
         ::truncate(outpath.data(), sizeof(nitems) * 2 + sizeof(double) * nitems);
         ret.signatures_.assign(outpath);
+        if(opts.save_kmers_) {
+            kmeroutpath = outpath + ".kmer64";
+        }
+    }
+    if(kmeroutpath.size()) {
+        ret.kmers_.assign(kmeroutpath);
     }
     //std::fprintf(stderr, "Writing to %s: items %zu and sketchsize %zu, offset within %zu\n", outpath.data(), nitems, opts.sketchsize_, offset_within);
     // File size before signatures:
@@ -217,10 +224,10 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
 #endif
     // We make an exception for iskmer - we only use this if
     //
-    if((opts.build_mmer_matrix_ || opts.save_kmers_) && opts.kmer_result_ != FULL_MMER_SEQUENCE) {
+    if(opts.save_kmers_ && opts.kmer_result_ != FULL_MMER_SEQUENCE) {
         ret.kmers_.resize(ss * nitems);
     }
-    if(opts.build_count_matrix_) {
+    if(opts.save_kmercounts_) {
         ret.kmercounts_.resize(ss * nitems);
     }
     if(opts.kmer_result_ == FULL_MMER_SET) {
@@ -387,7 +394,7 @@ do {\
                 std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
             checked_fwrite(ofp, buf, nb);
             std::fclose(ofp);
-            if((opts.save_kmers_ || opts.build_mmer_matrix_) && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
+            if(opts.save_kmers_ && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
                 assert(ret.kmerfiles_.size());
                 ret.kmerfiles_[myind] = destkmer;
                 const uint64_t *ptr = opts.sspace_ == SPACE_PSET ? pmhs[tid].ids().data():
@@ -480,9 +487,9 @@ do {\
             const uint32_t *counts = nullptr;
             const RegT *ptr = opsssz ? opss[tid].data(): fss[tid].data();
             assert(ptr);
-            if(opts.build_mmer_matrix_)
+            if(opts.save_kmers_)
                 ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
-            if(opts.build_count_matrix_)
+            if(opts.save_kmercounts_)
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
             ::write(::fileno(ofp), ptr, sizeof(RegT) * ss);
             //checked_fwrite(ofp, ptr, sizeof(RegT) * ss);
