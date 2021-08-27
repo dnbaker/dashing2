@@ -1,6 +1,7 @@
 #include "d2.h"
 #include <mio.hpp>
 #include "robin_hood.h"
+#include "bonsai/encoder.h"
 
 namespace dashing2 {
 template<typename Key, typename V, typename Hash>
@@ -19,13 +20,13 @@ int contain_usage() {
     return EXIT_FAILURE;
 }
 
-std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::score::Lex, uint64> &eenc, bns::RollingHasher<uint64_t> &renc, std::vector<std::string> input_files, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, int nthreads) {
+std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::vector<std::string> input_files, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, int nthreads) {
     std::vector<flat_hash_map<uint64_t, uint64_t>> res(input_files.size());
     KSeqHolder kseqs(nthreads);
     OMP_PFOR_DYN
     for(size_t i = 0; i < input_files.size(); ++i) {
         auto &myres = res[i];
-        auto func = [&](uint64_t kmer) {
+        auto func = [&](auto kmer) {
             auto kmeridit = kmer2ids.find(kmer);
             if(kmeridit == kmer2ids.end()) {
                 // We don't have to process any k-mers not in this set!
