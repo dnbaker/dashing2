@@ -1,6 +1,7 @@
 #pragma once
 #ifndef DASHING2_OPTIONS_H__
 #define DASHING2_OPTIONS_H__
+#include <enums.h>
 #include <getopt.h>
 
 namespace dashing2 {
@@ -45,6 +46,7 @@ enum OptArg {
     OPTARG_GREEDY,
     OPTARG_NLSH,
     OPTARG_ENTROPYMIN,
+    OPTARG_SIGRAMLIMIT,
     OPTARG_DUMMY
 };
 
@@ -133,7 +135,8 @@ enum OptArg {
     {"nLSH", required_argument, 0, OPTARG_NLSH},\
     {"entmin", no_argument, 0, OPTARG_ENTROPYMIN},\
     {"by-chrom", no_argument, (int *)&by_chrom, 1},\
-    {"sketch-size-l2", required_argument, 0, 'L'},
+    {"sketch-size-l2", required_argument, 0, 'L'},\
+    {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT}
 
 
 
@@ -212,6 +215,9 @@ enum OptArg {
             std::fprintf(stderr, "Using log_2 sketchsize = %d, yielding sketchsize = %zu\n", ssl2, sketchsize);\
             break;\
         }\
+        case OPTARG_SIGRAMLIMIT: {\
+            MEMSIGTHRESH = std::strtoull(optarg, nullptr, 10);\
+        } break;
 
 
 
@@ -312,10 +318,11 @@ static constexpr const char *siglen =
         "-J/--countdict: Full k-mer countdict. \n"\
         "                This generates a sorted hash set for k-mers in the data, and additionally saves the associated counts for these k-mers.\n"\
         "                If an LSH table is generated, then weighted bottom-k hashes as in Cohen, E. \"Summarizing Data using Bottom-K Sketches\"\n"\
-        "-G/--seq: Full k-mer sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"\
+        "-G/--seq: Full k-mer (or minimizer) sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"\
         "          On the other hand, it can require higher memory for large sequence collections\n"\
-        "          If you use --parse-by-seq with this and an output path is provided, then the stacked minimizer sequences will be written to it\n"\
-        "          The format is the similar to the standard stacked sketches, except that the cardinality fields instead represent minimizer sequence lengths.\n"\
+        "          If you use --parse-by-seq with this and an output path is provided, then the stacked minimizer sequences will be written to it.\n"\
+        "          The format is the similar to the standard stacked sketches, except that the cardinality fields instead represent minimizer sequence lengths (in 64-bit registers).\n"\
+        "          Specifically, it consists of a header: [uint64_t nitems, uint32_t k, uint32_t w], followed by `nitems` [double], specifying sequence lengths of 64-bit registers\n"\
         "    Dependent option (only for --seq/-G parsing)\n"\
         "          --hp-compress:\n"\
         "              Minimizer sequence will be homopolymer-compressed before emission. \n"\
@@ -413,6 +420,7 @@ static constexpr const char *siglen =
         "This is the path for the stacked sketches; to set output location, use --cmpout instead. (This is the distance matrix betweek sketches).\n"\
 
 
+extern size_t MEMSIGTHRESH;
 
 }
 

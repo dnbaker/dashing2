@@ -931,11 +931,21 @@ inline mmap_context memory_map(const file_handle_type file_handle, const int64_t
         return {};
     }
 #else // POSIX
+
+#if defined(MAP_HUGETLB) && defined(MAP_HUGE_1GB)
+#define MMAP_HUGE_FLAGS (MAP_HUGETLB | MAP_HUGE_1GB)
+#elif defined(MAP_HUGETLB) && defined(MAP_HUGE_2MB)
+#define MMAP_HUGE_FLAGS (MAP_HUGETLB | MAP_HUGE_2MB)
+#elif defined(MAP_HUGETLB)
+#define MMAP_HUGE_FLAGS MAP_HUGETLB
+#else
+#define MMAP_HUGE_FLAGS 0
+#endif
     char* mapping_start = static_cast<char*>(::mmap(
             0, // Don't give hint as to where to map.
             length_to_map,
             mode == access_mode::read ? PROT_READ : PROT_WRITE,
-            MAP_SHARED,
+            MAP_SHARED | MMAP_HUGE_FLAGS,
             file_handle,
             aligned_offset));
     if(mapping_start == MAP_FAILED)

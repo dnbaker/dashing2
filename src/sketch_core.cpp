@@ -1,6 +1,7 @@
 #include "sketch_core.h"
 
 namespace dashing2 {
+extern size_t MEMSIGTHRESH;
 
 INLINE size_t nbytes_from_line(const std::string &line) {
     size_t ret = 0;
@@ -9,35 +10,30 @@ INLINE size_t nbytes_from_line(const std::string &line) {
 }
 
 SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, const std::vector<std::string> &paths, std::string &outfile) {
+    if(opts.kmer_result() == FULL_MMER_SEQUENCE && outfile.empty()) {
+        THROW_EXCEPTION(std::runtime_error("outfile must be specified for --seq mode."));
+    }
+    result.signatures_.memthreshold(MEMSIGTHRESH);
     const size_t npaths = paths.size();
     std::string tmpfile;
-    if(outfile.empty()) {
-        uint64_t hv = opts.k_ * opts.sketchsize_ + (opts.w_ > 0 ? int(opts.w_): -13);
-        for(const auto &p: paths) hv ^= std::hash<std::string>{}(p), hv ^= hv >> 31;
-        outfile = std::to_string(hv) + ".sketchout.tmp";
-    }
     if(opts.dtype_ == DataType::FASTX) {
         if(opts.parse_by_seq_) {
             if(paths.size() != 1) {
                 result.nperfile_.resize(paths.size());
                 THROW_EXCEPTION(std::runtime_error("parse-by-seq currently only handles one file at a time. To process multiple files, simply concatenate them into one file, and run dashing2 on that."));
             }
-            std::fprintf(stderr, "Returning result from by_seq\n");
             KSeqHolder kseqs(std::max(opts.nthreads(), 1u));
             fastx2sketch_byseq(result, opts, paths.front(), kseqs.kseqs_, outfile, true);
-            std::fprintf(stderr, "Returned result from by_seq\n");
         } else {
-            std::fprintf(stderr, "Returning result from xsketch\n");
             fastx2sketch(result, opts, paths, outfile);
-            std::fprintf(stderr, "Returned result from xsketch\n");
         }
-        std::fprintf(stderr, "Returned results to sketch_core.\n");
     } else if(opts.dtype_ == DataType::LEAFCUTTER) {
+        if(outfile.empty()) THROW_EXCEPTION(std::runtime_error("Outfile required for LeafCutter input."));
         auto res = lf2sketch(paths, opts);
         result.names_ = std::move(res.sample_names());
         result.nperfile_.resize(res.nsamples_per_file().size());
         std::copy(res.nsamples_per_file().begin(), res.nsamples_per_file().end(), result.nperfile_.begin());
-        std::FILE *of = std::fopen(outfile.data(), "wb");
+        std::FILE *of = bfopen(outfile.data(), "wb");
         uint64_t ns = result.names_.size();
         std::fwrite(&ns, sizeof(ns), 1, of);
         ns = opts.sketchsize_;
@@ -105,34 +101,19 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             }
         }
     }
-#if 0
-    if(paths.size() == 1 && outfile.empty()) {
-        const std::string suf =
-                opts.sspace_ == SPACE_SET ? (opts.kmer_result_ == ONE_PERM ? ".opss": ".ss"):
-                opts.sspace_ == SPACE_MULTISET ? ".bmh":
-                opts.sspace_ == SPACE_PSET ? ".pmh" :
-                opts.sspace_ == SPACE_EDIT_DISTANCE ? ".omh": ".unknown_sketch";
-        outfile = paths.front();
-        outfile = outfile.substr(0, outfile.find_first_of(' '));
-        // In case the first path has multiple entries, trim to just the first
-        outfile = outfile + suf;
-        if(opts.trim_folder_paths()) {
-            outfile = trim_folder(outfile);
-            if(opts.outprefix_.size())
-                outfile = opts.outprefix_ + '/' + outfile;
-        }
-    }
-    const bool even = (opts.kmer_result_ != FULL_MMER_SEQUENCE && (result.nperfile_.empty() || std::all_of(result.nperfile_.begin() + 1, result.nperfile_.end(), [v=result.nperfile_.front()](auto x) {return x == v;})));
-#endif
     std::FILE *ofp;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
-        if((ofp = std::fopen(outfile.data(), "r+")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
+        if((ofp = bfopen(outfile.data(), "r+")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open output file for mmer sequence results."));
         size_t offset = result.names_.size();
         std::fwrite(&offset, sizeof(offset), 1, ofp);
+        {
+            const uint32_t k = opts.k_, w = opts.w_;
+            std::fwrite(&k, sizeof(k), 1, ofp);
+            std::fwrite(&w, sizeof(w), 1, ofp);
+        }
         if(std::fwrite(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), ofp) != result.cardinalities_.size())
             THROW_EXCEPTION(std::runtime_error("Failed to write lengths of sequences to disk.\n"));
         offset = 0;
-        const uint64_t terminus = uint64_t(-1);
         for(size_t i = 0; i < result.nperfile_.size(); ++i) {
             if(result.nperfile_[i]) {
                 std::fwrite(&result.signatures_.at(offset), sizeof(RegT), result.nperfile_[i], ofp);
@@ -141,22 +122,28 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         }
         std::fclose(ofp);
     } else {
-        // This should not overlap with the memory mapped for result.signatures_
-        const uint64_t t = result.cardinalities_.size();
-        const size_t nb = t * sizeof(double) + 2 * sizeof(uint64_t);
-        void *tmpptr = ::mmap(nullptr, nb, PROT_READ | PROT_WRITE, MAP_SHARED, result.signatures_.fd(), 0);
-        if(!tmpptr) {
-            perror("MMap the end");
-            THROW_EXCEPTION(std::runtime_error("Failed to mmap the remaining stuff."));
+        if(outfile.size() && outfile != "/dev/stdout" && outfile != "-") {
+            // This should not overlap with the memory mapped for result.signatures_
+            const uint64_t t = result.cardinalities_.size();
+            const size_t nb = t * sizeof(double) + 2 * sizeof(uint64_t);
+            int fd = ::open(outfile.data(), O_RDWR);
+            void *tmpptr = ::mmap(nullptr, nb, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            ::close(fd);
+            if(!tmpptr) {
+                THROW_EXCEPTION(std::runtime_error("Failed to set metadata for final stacked sketches."));
+            }
+            ((uint64_t *)tmpptr)[0] = t;
+            ((uint64_t *)tmpptr)[1] = opts.sketchsize_;
+            std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
+            ::munmap(tmpptr, nb);
+        } else {
+            if(outfile.size() && (outfile == "-" || outfile == "/dev/stdout")) {
+                THROW_EXCEPTION(std::runtime_error("Not yet supported: writing stacked sketches to file streams. This may change."));
+            }
         }
-        ((uint64_t *)tmpptr)[0] = t;
-        ((uint64_t *)tmpptr)[1] = opts.sketchsize_;
-        std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
-        ::munmap(tmpptr, nb);
     }
-    std::fprintf(stderr, "Now handling names and k-mers\n");
     if(result.names_.size()) {
-        if((ofp = std::fopen((outfile + ".names.txt").data(), "wb")) == nullptr)
+        if((ofp = bfopen((outfile + ".names.txt").data(), "wb")) == nullptr)
             THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
         std::fputs("#Name\tCardinality\n", ofp);
         for(size_t i = 0; i < result.names_.size(); ++i) {
@@ -165,7 +152,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             if(result.cardinalities_.size()) {
                 std::fprintf(ofp, tfmt<double>, result.cardinalities_[i]);
             }
-            if(auto &kf = result.kmercountfiles_; kf.size())
+            if(auto &kf = result.kmercountfiles_; !kf.empty())
                 std::fputc('\t', ofp), std::fwrite(kf[i].data(), 1, kf[i].size(), ofp);
             std::fputc('\n', ofp);
         }
@@ -174,7 +161,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
     if(result.kmers_.size()) {
         const size_t nb = result.kmers_.size() * sizeof(uint64_t);
         DBG_ONLY(std::fprintf(stderr, "About to write result kmers to %s of size %zu\n", outfile.data(), nb);)
-        if((ofp = std::fopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
+        if((ofp = bfopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
             if(std::fwrite(result.kmers_.data(), nb, 1, ofp) != size_t(1))
                 std::fprintf(stderr, "Failed to write k-mers to disk properly, silent failing\n");
             std::fclose(ofp);
@@ -185,7 +172,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
     if(result.kmercounts_.size()) {
         const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
         DBG_ONLY(std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());)
-        if((ofp = std::fopen((outfile + ".kmercounts.f64").data(), "wb"))) {
+        if((ofp = bfopen((outfile + ".kmercounts.f64").data(), "wb"))) {
             if(std::fwrite(result.kmercounts_.data(), nb, 1, ofp) != size_t(1))
                 std::fprintf(stderr, "Failed to write k-mer counts to disk properly, silent failing\n");
             std::fclose(ofp);

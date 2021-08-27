@@ -208,7 +208,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
     if(opts.by_chrom_)
         ret.chrmap_.reset(new flat_hash_map<std::string, std::vector<RegT>>(std::move(retmap)));
     if(opts.kmer_result_ <= FULL_SETSKETCH) {
-        std::FILE *ofp = std::fopen(cache_path.data(), "wb");
+        std::FILE *ofp = bfopen(cache_path.data(), "wb");
         if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Could not open file at ") + cache_path + " for writing"));
         std::fwrite(&ret.card_, sizeof(ret.card_), 1, ofp);
         checked_fwrite(ofp, ret.global_->data(), sizeof(RegT) * ret.global_->size());

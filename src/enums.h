@@ -58,6 +58,9 @@ enum CountingType {
         throw exception__;\
     } while(0)
 
+void buffer_to_blksize(std::FILE *fp);
+std::FILE *bfopen(const char *path, const char *fmt);
+
 
 enum KmerSketchResultType {
     ONE_PERM = 0,       // Faster (3-4x) than Full, comparable accuracy for both cardinality and set similarities

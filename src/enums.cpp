@@ -87,6 +87,23 @@ std::FILE *xopen(const std::string &path) {
     }
     return fp;
 }
+long signed int BLKSIZE = -1;
+std::mutex blksizelock;
+
+void buffer_to_blksize(std::FILE *fp) {
+    if(BLKSIZE < 0) {
+        struct stat st;
+        ::fstat(STDIN_FILENO, &st);
+        BLKSIZE = st.st_blksize;
+    }
+    std::setvbuf(fp, nullptr, _IOFBF, BLKSIZE);
+}
+
+std::FILE *bfopen(const char *s, const char *fmt) {
+    std::FILE *ifp = std::fopen(s, fmt);
+    if(ifp) buffer_to_blksize(ifp);
+    return ifp;
+}
 
 uint64_t XORMASK = 0x724526e320f9967dull;
 u128_t XORMASK2 = (u128_t(12499408336417088522ull) << 64) | XORMASK;

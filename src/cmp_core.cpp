@@ -7,6 +7,7 @@
 #include "mio.hpp"
 #include "wcompare.h"
 #include "levenshtein-sse.hpp"
+#include "options.h"
 
 
 namespace dashing2 {
@@ -43,6 +44,8 @@ std::string path2cmd(const std::string &path) {
 
 struct CompressedRet: public std::tuple<void *, long double, long double> {
     using super = std::tuple<void *, long double, long double>;
+    size_t nbytes = 0;
+    bool ismapped = 0;
     CompressedRet &a(long double v) {
         std::get<1>(*this) = v;
         return *this;
@@ -55,17 +58,31 @@ struct CompressedRet: public std::tuple<void *, long double, long double> {
     long double b() const {return std::get<2>(*this);}
     CompressedRet(): super{nullptr, 0.L, 0.L} {
     }
+    CompressedRet(CompressedRet &&o) = default;
+    CompressedRet(const CompressedRet &o) = delete;
+    ~CompressedRet() {
+        auto ptr = std::get<0>(*this);
+        if(ismapped) {
+            if(ptr) ::munmap(ptr, nbytes);
+        } else std::free(ptr);
+    }
 };
 
 CompressedRet
-make_compressed(int truncation_method, double fd, const mm::vector<RegT> &sigs, const std::vector<uint64_t> &kmers, bool is_edit_distance) {
+make_compressed(int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance) {
     sketch::hash::CEHasher revhasher;
     CompressedRet ret;
     if(fd >= sizeof(RegT)) return ret;
-    size_t mem = fd * sigs.size();
+    ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
     auto &compressed_reps = std::get<0>(ret);
-    if(posix_memalign((void **)&compressed_reps, 64, mem)) THROW_EXCEPTION(std::bad_alloc());
+    if(ret.nbytes >= MEMSIGTHRESH) {
+        void *ptr = mm::AnonMMapper::allocate(ret.nbytes);
+        if(reinterpret_cast<uint64_t>(ptr) == uint64_t(-1)) THROW_EXCEPTION(std::bad_alloc());
+        ret.ismapped = true;
+    } else {
+        if(posix_memalign((void **)&compressed_reps, 64, ret.nbytes)) THROW_EXCEPTION(std::bad_alloc());
+    }
     const size_t nsigs = sigs.size();
     assert(fd != 0.5 || sigs.size() % 2 == 0);
     if(is_edit_distance) {

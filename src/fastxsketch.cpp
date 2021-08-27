@@ -63,7 +63,7 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
         ::pclose(fp);
         return ptr - origptr;
     }
-    std::FILE *fp = std::fopen(path.data(), "rb");
+    std::FILE *fp = bfopen(path.data(), "rb");
     if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + path));
     std::fread(cardinality, sizeof(*cardinality), 1, fp);
     const int fd = ::fileno(fp);
@@ -140,7 +140,6 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     const size_t nt = std::max(opts.nthreads(), 1u);
     const size_t ss = opts.sketchsize();
     KSeqHolder kseqs(nt);
-    ret.options_ = &opts;
     std::vector<BagMinHash> bmhs;
     std::vector<ProbMinHash> pmhs;
     std::vector<OPSetSketch> opss;
@@ -159,7 +158,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     auto make_save = [&](auto &x) {
         x.reserve(nt);
         for(size_t i = 0; i < nt; ++i)
-            x.emplace_back(ss, opts.save_kmers_ || opts.build_mmer_matrix_, opts.save_kmercounts_ || opts.build_count_matrix_);
+            x.emplace_back(ss, opts.save_kmers_, opts.save_kmercounts_);
     };
     if(opts.sspace_ == SPACE_SET) {
         if(opts.kmer_result_ == ONE_PERM) {
@@ -168,7 +167,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         } else if(opts.kmer_result_ == FULL_SETSKETCH) {
             fss.reserve(nt);
             for(size_t i = 0; i < nt; ++i)
-                fss.emplace_back(opts.count_threshold_, ss, opts.save_kmers_ || opts.build_mmer_matrix_, opts.save_kmercounts_ || opts.build_count_matrix_);
+                fss.emplace_back(opts.count_threshold_, ss, opts.save_kmers_, opts.save_kmercounts_);
         }
     } else if(opts.sspace_ == SPACE_MULTISET) make_save(bmhs);
     else if(opts.sspace_ == SPACE_PSET) make(pmhs);
@@ -191,11 +190,19 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     } while(0)
 
     const uint64_t nitems = paths.size();
-    const size_t offset_within = sizeof(nitems) * 2 + sizeof(double) * nitems;
-    ::truncate(outpath.data(), offset_within);
+    std::string kmeroutpath;
+    if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
+        ::truncate(outpath.data(), sizeof(nitems) * 2 + sizeof(double) * nitems);
+        ret.signatures_.assign(outpath);
+        if(opts.save_kmers_) {
+            kmeroutpath = outpath + ".kmer64";
+        }
+    }
+    if(kmeroutpath.size()) {
+        ret.kmers_.assign(kmeroutpath);
+    }
     //std::fprintf(stderr, "Writing to %s: items %zu and sketchsize %zu, offset within %zu\n", outpath.data(), nitems, opts.sketchsize_, offset_within);
     // File size before signatures:
-    ret.signatures_.assign(outpath, offset_within);
     ret.signatures_.resize(ss * nitems);
     if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));
@@ -217,10 +224,10 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
 #endif
     // We make an exception for iskmer - we only use this if
     //
-    if((opts.build_mmer_matrix_ || opts.save_kmers_) && opts.kmer_result_ != FULL_MMER_SEQUENCE) {
+    if(opts.save_kmers_ && opts.kmer_result_ != FULL_MMER_SEQUENCE) {
         ret.kmers_.resize(ss * nitems);
     }
-    if(opts.build_count_matrix_) {
+    if(opts.save_kmercounts_) {
         ret.kmercounts_.resize(ss * nitems);
     }
     if(opts.kmer_result_ == FULL_MMER_SET) {
@@ -362,7 +369,7 @@ do {\
                     std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[mss]);
                 }
             }
-            std::FILE * ofp = std::fopen(destination.data(), "wb");
+            std::FILE * ofp = bfopen(destination.data(), "wb");
             std::fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
             const void *buf = nullptr;
@@ -387,7 +394,7 @@ do {\
                 std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
             checked_fwrite(ofp, buf, nb);
             std::fclose(ofp);
-            if((opts.save_kmers_ || opts.build_mmer_matrix_) && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
+            if(opts.save_kmers_ && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
                 assert(ret.kmerfiles_.size());
                 ret.kmerfiles_[myind] = destkmer;
                 const uint64_t *ptr = opts.sspace_ == SPACE_PSET ? pmhs[tid].ids().data():
@@ -397,7 +404,7 @@ do {\
                                       static_cast<uint64_t *>(nullptr);
                 if(!ptr) THROW_EXCEPTION(std::runtime_error("This shouldn't happen"));
                 DBG_ONLY(std::fprintf(stderr, "Opening destkmer %s\n", destkmer.data());)
-                if((ofp = std::fopen(destkmer.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
+                if((ofp = bfopen(destkmer.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
                 //std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 
                 checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
@@ -410,7 +417,7 @@ do {\
                 //std::fprintf(stderr, "About to save kmer counts manually\n");
                 assert(ret.kmercountfiles_.size());
                 ret.kmercountfiles_.at(i) = destkmercounts;
-                if((ofp = std::fopen(destkmercounts.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
+                if((ofp = bfopen(destkmercounts.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
                 std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
                 if(opts.kmer_result_ == FULL_MMER_COUNTDICT || (opts.kmer_result_ == FULL_MMER_SET && opts.save_kmercounts_)) {
@@ -430,7 +437,7 @@ do {\
             ret.kmers_.clear();
             //std::fprintf(stderr, "Full mmer sequence\n");
             std::FILE * ofp;
-            if((ofp = std::fopen(destination.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open file for writing minimizer sequence"));
+            if((ofp = bfopen(destination.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open file for writing minimizer sequence"));
             void *dptr = nullptr;
             size_t m = 1 << 18;
             size_t l = 0;
@@ -457,7 +464,7 @@ do {\
             std::fclose(ofp);
         } else if(opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) {
             std::FILE * ofp;
-            if((ofp = std::fopen(destination.data(), "wb")) == nullptr)
+            if((ofp = bfopen(destination.data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
             checked_fwrite(ofp, &ret.cardinalities_[myind], sizeof(double));
             if(opss.empty() && fss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
@@ -480,9 +487,9 @@ do {\
             const uint32_t *counts = nullptr;
             const RegT *ptr = opsssz ? opss[tid].data(): fss[tid].data();
             assert(ptr);
-            if(opts.build_mmer_matrix_)
+            if(opts.save_kmers_)
                 ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
-            if(opts.build_count_matrix_)
+            if(opts.save_kmercounts_)
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
             ::write(::fileno(ofp), ptr, sizeof(RegT) * ss);
             //checked_fwrite(ofp, ptr, sizeof(RegT) * ss);
