@@ -592,7 +592,7 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
     using super = CSetSketch<FT>;
     const uint32_t mc_;
     ska::flat_hash_map<uint64_t, uint32_t> potentials_;
-#ifndef NDEBUG
+#ifndef VERBOSE_AF
     size_t numremoved = 0;
     ~CountFilteredCSetSketch() {
         std::fprintf(stderr, "%zu removed total in lifetime\n", numremoved);
@@ -624,7 +624,7 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         return mi * std::log(tv);
     }
     INLINE void erase_if(typename ska::flat_hash_map<uint64_t, uint32_t>::iterator it) {
-#ifndef NDEBUG
+#ifndef VERBOSE_AF
         ++numremoved;
 #endif
         potentials_.erase(it);

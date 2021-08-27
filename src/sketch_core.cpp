@@ -1,4 +1,5 @@
 #include "sketch_core.h"
+#include <cinttypes>
 
 namespace dashing2 {
 extern size_t MEMSIGTHRESH;
@@ -14,6 +15,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         THROW_EXCEPTION(std::runtime_error("outfile must be specified for --seq mode."));
     }
     result.signatures_.memthreshold(MEMSIGTHRESH);
+    result.kmers_.memthreshold(MEMSIGTHRESH);
     const size_t npaths = paths.size();
     std::string tmpfile;
     if(opts.dtype_ == DataType::FASTX) {
@@ -122,20 +124,18 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         }
         std::fclose(ofp);
     } else {
+        //{mm::vector<RegT> t(std::move(result.signatures_));}
+        //std::fprintf(stderr, "Cleared.\n");
         if(outfile.size() && outfile != "/dev/stdout" && outfile != "-") {
             // This should not overlap with the memory mapped for result.signatures_
             const uint64_t t = result.cardinalities_.size();
-            const size_t nb = t * sizeof(double) + 2 * sizeof(uint64_t);
-            int fd = ::open(outfile.data(), O_RDWR);
-            void *tmpptr = ::mmap(nullptr, nb, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-            ::close(fd);
-            if(!tmpptr) {
-                THROW_EXCEPTION(std::runtime_error("Failed to set metadata for final stacked sketches."));
-            }
-            ((uint64_t *)tmpptr)[0] = t;
-            ((uint64_t *)tmpptr)[1] = opts.sketchsize_;
-            std::copy(result.cardinalities_.begin(), result.cardinalities_.end(), ((double *)tmpptr) + 2);
-            ::munmap(tmpptr, nb);
+            std::FILE *fp = std::fopen(outfile.data(), "r+");
+            if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open file "s + outfile + " for in-place modification"));
+            const uint64_t sketchsize = opts.sketchsize_;
+            checked_fwrite(fp, &t, sizeof(t));
+            checked_fwrite(fp, &sketchsize, sizeof(sketchsize));
+            checked_fwrite(fp, result.cardinalities_.data(), result.cardinalities_.size() * sizeof(double));
+            std::fclose(fp);
         } else {
             if(outfile.size() && (outfile == "-" || outfile == "/dev/stdout")) {
                 THROW_EXCEPTION(std::runtime_error("Not yet supported: writing stacked sketches to file streams. This may change."));
@@ -158,17 +158,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         }
         std::fclose(ofp);
     }
-    if(result.kmers_.size()) {
-        const size_t nb = result.kmers_.size() * sizeof(uint64_t);
-        DBG_ONLY(std::fprintf(stderr, "About to write result kmers to %s of size %zu\n", outfile.data(), nb);)
-        if((ofp = bfopen((outfile + ".kmerhashes.u64").data(), "wb"))) {
-            if(std::fwrite(result.kmers_.data(), nb, 1, ofp) != size_t(1))
-                std::fprintf(stderr, "Failed to write k-mers to disk properly, silent failing\n");
-            std::fclose(ofp);
-        } else {
-            DBG_ONLY(std::fprintf(stderr, "Failed to write k-mers, failing silently.\n");)
-        }
-    } DBG_ONLY(else std::fprintf(stderr, "Not saving k-mers because result kmers is empty\n");)
     if(result.kmercounts_.size()) {
         const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
         DBG_ONLY(std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());)

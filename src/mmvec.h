@@ -52,6 +52,7 @@ class vector {
     mio::mmap_sink ms_;
     size_t memthreshold_ = 20ull << 30;
     std::vector<T> ram_;
+    std::vector<uint8_t> prepend_buffer_;
     // TODO: add in additional option for backing to use anonymous mmap'd data
     // using fd = -1, which makes a temporary file which is cleared when no longer needed.
 public:
@@ -65,6 +66,14 @@ public:
     size_t capacity() const {return capacity_;}
     size_t size() const {return size_;}
     bool empty() const {return size_ == 0u;}
+    template<typename U>
+    void set_prepend(const U *ptr, size_t n) {
+        if(sizeof(U) * n != offset_) {
+            throw std::runtime_error("set_prepend failed because the prefix size is incorrect.");
+        }
+        prepend_buffer_.resize(n * sizeof(T));
+        std::memcpy(prepend_buffer_.data(), ptr, n * sizeof(T));
+    }
     bool using_ram() const {
         return path_.empty() || capacity_ < countthreshold();
     }
@@ -109,6 +118,7 @@ public:
         return memthreshold_;
     }
     size_t memthreshold() const {return memthreshold_;}
+    size_t offset() const {return offset_ != size_t(-1) ? offset_: size_t(0);}
     T *begin() {return data();}
     T *end() {return data() + size_;}
     T &operator[](size_t i) {return data()[i];}
@@ -137,11 +147,12 @@ public:
             struct stat st;
             if(::fstat(::fileno(ifp), &st)) throw std::runtime_error("Failed to fstat");
             offset_ = off == size_t(-1) ? size_t(st.st_size): off;
+            std::fprintf(stderr, "offset: %zu\n", offset_);
             if(std::fclose(ifp)) throw std::runtime_error("Error in closing ifp\n");
         }
         std::error_code ec;
+        capacity_ = size_ = initial_size;
         if(initial_size) {
-            capacity_ = size_ = initial_size;
             reserve(initial_size);
             while(size_ < initial_size) push_back(init);
         } else {
@@ -188,33 +199,34 @@ public:
     ~vector() noexcept(false) {
         // shrink to fit, then flush to disk if necessary
         if(path_.empty()) return;
+        if(prepend_buffer_.size()) {
+            mio::mmap_sink check(path_, 0, offset_);
+            std::memcpy(check.data(), prepend_buffer_.data(), prepend_buffer_.size());
+#ifndef NDEBUG
+            for(size_t i = 0; i < offset_ / 4; ++i) {
+                std::fprintf(stderr, "Appending %u\n", ((uint32_t *)check.data())[i]);
+            }
+#endif
+        }
         if(capacity_ < countthreshold()) {
             ram_.resize(size_);
             ram_.shrink_to_fit();
             capacity_ = size_;
-            if(!path_.empty()) {
-                size_t diskspace = offset_ + capacity_ * sizeof(T);
-                if(::truncate(path(), diskspace))
-                    throw std::runtime_error("Failed to resize "s + path_ + "via ::truncate");
+            if(::truncate(path(), offset_ + capacity_ * sizeof(T)))
+                throw std::runtime_error("Failed to resize "s + path_ + "via ::truncate");
 #ifndef NDEBUG
-                std::fprintf(stderr, "Capacity is < threshold, so we need to flush the data in RAM to the file.\n");
+            std::fprintf(stderr, "Capacity is < threshold, so we need to flush the data in RAM to the file.\n");
 #endif
-                std::error_code ec;
-                ms_.map(path_, offset_, sizeof(T) * capacity_, ec);
-#ifndef NDEBUG
-                if(ec) std::fprintf(stderr, "Error mmaping %s\n", ec.message().data());
-#endif
-                if(ec) throw std::system_error(ec);
-                std::copy(ram_.begin(), ram_.end(), (T *)ms_.data());
-            }
+            std::error_code ec;
+            ms_.map(path_, offset_, sizeof(T) * capacity_, ec);
+            if(ec) throw std::system_error(ec);
+            //std::fprintf(stderr, "Flushing to file with %zu as offset.\n", offset_);
+            std::copy(ram_.begin(), ram_.end(), (T *)ms_.data());
         } else if(capacity_ > 0 && capacity_ > size_) {
             const bool wasopen = ms_.is_open();
             if(wasopen) ms_.unmap();
             if(::truncate(path(), offset_ + (size_ * sizeof(T))))
                 throw std::runtime_error("Failed to truncate to shrink_to_fit");
-#ifndef NDEBUG
-            std::fprintf(stderr, "Size, cap at end: %zu, %zu. Path = %s (%p)\n", size_, capacity_, path(), (void *)this);
-#endif
             if(wasopen) {
                 std::error_code ec;
                 ms_.map(path(), offset_, size_ * sizeof(T), ec);
