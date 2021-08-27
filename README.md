@@ -240,9 +240,15 @@ See `dashing2 wsketch --help` for usage and examples.
 
 ### Installation
 
-Easiest installation is `git clone --recursive https://github.com/dnbaker/dashing2 && make -j4`.
+The easiest way to get started is to download a statically-linked binary in the [dashing2-binaries](https://github.com/dnbaker/dashing2-binaries) repo.
+There are different folders for osx and linux, so select the latest version from the folder corresponding to your operating system.
+Dashing2 has not been tested on Windows, and we do not support it.
 
-Dashing2 is written in C++17, and therefore needs a relatively recent compiler.
+
+Alternatively, you can build from source with  `git clone --recursive https://github.com/dnbaker/dashing2 && make -j4`.
+
+Dashing2 is written in C++17, and therefore needs a relatively recent compiler, but the binary will be smaller than the statically-linked options provided
+and the code may be more directly tailored to your architecture.
 
 
 ## Versions + Configuration
