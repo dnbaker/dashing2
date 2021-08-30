@@ -112,6 +112,7 @@ int main_usage() {
     std::fprintf(stderr, "\twsketch: Takes a tuple of [1-3] input binary files [(u32 or u64), (float or double), (u32 or u64)] and performs weighted minhash sketching.\n"
                          "Three files are treated as Compressed Sparse Row (CSR)-format, where the third file contains indptr values, specifying the lengths of consecutive runs of pairs in the first two files corresponding to each row.\n"
                          "wsketch is for sketching binary files which have already been summed, whereas sketch is for parsing and sketching (from Fast{qa}, BED, BigWig)\n");
+    std::fprintf(stderr, "contain: Takes a k-mer database (built with dashing2 sketch --save-kmers), then computes coverage for all k-mer references using input streams.\n");
     return 1;
 }
 using namespace dashing2;
