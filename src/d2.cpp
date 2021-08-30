@@ -2,6 +2,7 @@
 
 namespace dashing2 {
 int cmp_main(int argc, char **argv);
+int contain_main(int argc, char **argv);
 int wsketch_main(int argc, char **argv);
 int sketch_main(int argc, char **argv);
 std::string Dashing2Options::to_string() const {
@@ -125,7 +126,7 @@ int main(int argc, char **argv) {
         if(std::strcmp(argv[1], "wsketch") == 0)
             return wsketch_main(argc - 1, argv + 1);
         if(std::strcmp(argv[1], "contain") == 0)
-            return wsketch_main(argc - 1, argv + 1);
+            return contain_main(argc - 1, argv + 1);
     }
     return main_usage();
 }

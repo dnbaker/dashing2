@@ -210,9 +210,11 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         checked_fwrite(fp, &sketchsize, sizeof(sketchsize));
         checked_fwrite(fp, &k, sizeof(k));
         checked_fwrite(fp, &w, sizeof(w));
+        checked_fwrite(fp, &opts.seedseed_, sizeof(opts.seedseed_));
         std::fclose(fp);
-        if(bns::filesize(kmeroutpath.data()) != 16) THROW_EXCEPTION(std::runtime_error("kmer out path is the wrong size (expected 16, got "s + std::to_string(bns::filesize(kmeroutpath.data()))));
-        ret.kmers_.assign(kmeroutpath, sizeof(uint32_t) * 4);
+        if(bns::filesize(kmeroutpath.data()) != 24) THROW_EXCEPTION(std::runtime_error("kmer out path is the wrong size (expected 16, got "s + std::to_string(bns::filesize(kmeroutpath.data()))));
+        static_assert(sizeof(uint32_t) * 4 + sizeof(uint64_t) == 24, "Sanity check");
+        ret.kmers_.assign(kmeroutpath, 24);
         if((fp = bfopen(kmernamesoutpath.data(), "wb")) == 0) THROW_EXCEPTION(std::runtime_error("Failed to open "s + kmernamesoutpath + " for writing."));
         for(const auto &n: paths) {
             std::fwrite(n.data(), 1, n.size(), fp);
