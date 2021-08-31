@@ -71,8 +71,9 @@ void checked_fwrite(std::FILE *const fp, const void *const ptr, const size_t nb)
          throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered write of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead writing " + std::to_string(lrc) + " bytes");
 }
 
-std::FILE *xopen(const std::string &path) {
+std::pair<std::FILE *, int> xopen(const std::string &path) {
     std::FILE *fp;
+    int ispopen = 1;
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
         auto cmd = std::string("xz -dc ") + path;
         fp = ::popen(cmd.data(), "r");
@@ -83,9 +84,10 @@ std::FILE *xopen(const std::string &path) {
         auto cmd = std::string("bzip2 -dc ") + path;
         fp = ::popen(cmd.data(), "r");
     } else {
-        fp = ::popen((std::string("cat ") + path).data(), "r");
+        ispopen = 0;
+        fp = bfopen(path.data(), "r");
     }
-    return fp;
+    return {fp, ispopen};
 }
 long signed int BLKSIZE = -1;
 std::mutex blksizelock;

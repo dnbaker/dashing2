@@ -39,7 +39,8 @@ std::string path2cmd(const std::string &path) {
     if(std::equal(path.rbegin(), path.rbegin() + 3, "zg.")) return "gzip -dc "s + path;
     if(std::equal(path.rbegin(), path.rbegin() + 3, "zx.")) return "xz -dc "s + path;
     if(std::equal(path.rbegin(), path.rbegin() + 4, "2zb.")) return "bzip2 -dc "s + path;
-    return "cat "s + path;
+    if(std::equal(path.rbegin(), path.rbegin() + 4, "tsz.")) return "zstd -dc "s + path;
+    return ""s;
 }
 
 struct CompressedRet: public std::tuple<void *, long double, long double> {
@@ -324,14 +325,22 @@ case v: {\
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
         std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;
-        std::string lcmd = path2cmd(lpath), rcmd = path2cmd(rpath);
-        if((lhk = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + lcmd + "'"));
-        if((rhk = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run rcmd '"s + rcmd + "'"));
+        std::string lcmd = path2cmd(lpath), rcmd = path2cmd(rpath), lkcmd, rkcmd;
+        lhk = lcmd.empty() ? bfopen(lpath.data(), "rb"): ::popen(lcmd.data(), "r");
+        rhk = rcmd.empty() ? bfopen(rpath.data(), "rb"): ::popen(rcmd.data(), "r");
+        if(lhk == 0) THROW_EXCEPTION(std::runtime_error("Failed to "s + (lcmd.empty() ? " read from "s + lpath: "Run cmd '"s + lcmd + "'")));
+        if(rhk == 0) THROW_EXCEPTION(std::runtime_error("Failed to "s + (rcmd.empty() ? " read from "s + rpath: "Run cmd '"s + rcmd + "'")));
         if(result.kmercountfiles_.size()) {
-            lcmd = path2cmd(result.kmercountfiles_[i]);
-            rcmd = path2cmd(result.kmercountfiles_[j]);
-            if((lhn = ::popen(lcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + lcmd + "'"));
-            if((rhn = ::popen(rcmd.data(), "r")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to run lcmd '"s + rcmd + "'"));
+            lkcmd = path2cmd(result.kmercountfiles_[i]);
+            rkcmd = path2cmd(result.kmercountfiles_[j]);
+            lhn = lkcmd.empty() ? bfopen(result.kmercountfiles_[i].data(), "rb"): ::popen(lkcmd.data(), "r");
+            if(rkcmd.empty()) {
+                rhn = bfopen(result.kmercountfiles_[j].data(), "rb");
+            } else {
+                rhn = ::popen(rkcmd.data(), "r");
+            }
+            if(lhn == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to read from "s + result.kmercountfiles_[i]));
+            if(rhn == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to read from "s + result.kmercountfiles_[j]));
         }
         if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
             if(opts.exact_kmer_dist_) {
@@ -348,8 +357,14 @@ case v: {\
             double res = isz_size;
             CORRECT_RES(res, opts.measure_, lhc, rhc)
         }
-        ::pclose(lhk); ::pclose(rhk);
-        if(lhn) ::pclose(lhn), ::pclose(rhn);
+        if(lcmd.empty()) std::fclose(lhk); else ::pclose(lhk);
+        if(rcmd.empty()) std::fclose(rhk); else ::pclose(rhk);
+        if(lhn) {
+            if(lkcmd.empty()) std::fclose(lhn); else ::pclose(lhn);
+        }
+        if(rhn) {
+            if(rkcmd.empty()) std::fclose(rhn); else ::pclose(rhn);
+        }
 #undef CORRECT_RES
         // Compare exact representations, not compressed shrunk
     }
@@ -391,14 +406,20 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
             int ft;
             std::FILE *ifp = nullptr;
             std::string fn = opts.kmer_result_ == FULL_MMER_SET ? result.kmerfiles_.at(i): result.destination_files_.at(i);
+            std::string cmd;
             if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE) {
                 if(!check_compressed(fn, ft)) throw std::runtime_error(std::string("Missing kmerfile or destination file: ") + fn);
                 if(endswith(fn, ".xz")) ft = 2;
                 else if(endswith(fn, ".gz")) ft = 1;
                 else ft = 0;
-                std::string cmd = std::string(ft == 0 ? "cat ": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
-                if(!(ifp = ::popen(cmd.data(), "r")))
-                    THROW_EXCEPTION(std::runtime_error(std::string("Command ") + "'" + cmd + "' failed."));
+                cmd = std::string(ft == 0 ? "": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
+                if(cmd.empty()) {
+                    ifp = bfopen(fn.data(), "rb");
+                } else {
+                    ifp = ::popen(cmd.data(), "r");
+                }
+                if(!ifp)
+                    THROW_EXCEPTION(std::runtime_error("Failed to read from '"s + cmd + "' for file " + fn));
                 size_t c = 0;
                 for(uint64_t x;std::fread(&x, sizeof(x), 1, ifp) == 1u;++c)
                 result.cardinalities_[i] = c;
@@ -407,16 +428,24 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                 if(endswith(result.kmercountfiles_[i], ".xz")) ft = 2;
                 else if(endswith(result.kmercountfiles_[i], ".gz")) ft = 1;
                 else ft = 0;
-                std::string cmd = ft == 0 ? "cat "s: ft == 1 ? "gzip -dc "s: ft == 2 ? "xz -dc "s : "unknowncommand"s;
+                cmd = ft == 0 ? ""s: ft == 1 ? "gzip -dc "s: ft == 2 ? "xz -dc "s : "unknowncommand"s;
                 if(cmd == "unknowncommand") THROW_EXCEPTION(std::runtime_error("Failure"));
-                cmd += result.kmercountfiles_[i];
-                if(!(ifp = ::popen(cmd.data(), "r")))
-                    THROW_EXCEPTION(std::runtime_error("Command '"s + cmd + "' failed."));
+                if(cmd.empty()) {
+                    ifp = bfopen(fn.data(), "rb");
+                } else {
+                    cmd += result.kmercountfiles_[i];
+                    ifp = ::popen(cmd.data(), "r");
+                }
+                if(0 == ifp)
+                    THROW_EXCEPTION(std::runtime_error(cmd.empty() ? "Parsing "s + fn : ": Command '"s + cmd + "' failed."));
                 double x, c, s;
                 for(x = c = s = 0.;std::fread(&x, sizeof(x), 1, ifp) == 1u;sketch::kahan::update(s, c, x));
                 result.cardinalities_[i] = s;
             }
-            if(ifp) ::pclose(ifp);
+            if(ifp) {
+                if(cmd.empty()) std::fclose(ifp);
+                else ::pclose(ifp);
+            }
         }
     }
     if(opts.kmer_result_ == ONE_PERM) {

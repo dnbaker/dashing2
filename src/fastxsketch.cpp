@@ -201,7 +201,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         }
     }
     if(kmeroutpath.size()) {
-        std::FILE *fp = std::fopen(kmeroutpath.data(), "w");
+        std::FILE *fp = bfopen(kmeroutpath.data(), "w");
         uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8);
         uint32_t sketchsize = opts.sketchsize_;
         uint32_t k = opts.k_;

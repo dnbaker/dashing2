@@ -43,15 +43,11 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
     cache_path += opts.kmer_result_ <= FULL_SETSKETCH ? to_string(opts.sspace_): to_string(opts.kmer_result_);
     DBG_ONLY(std::fprintf(stderr, "Cache path: %s. isfile: %d\n", cache_path.data(), bns::isfile(cache_path));)
     if(opts.cache_sketches_ && !opts.by_chrom_ && bns::isfile(cache_path)) {
-        std::FILE *ifp = xopen(cache_path);
+        auto [ifp, ispopen] = xopen(cache_path);
         std::fread(&ret.card_, sizeof(ret.card_), 1, ifp);
         auto res = new std::vector<RegT>;
-        while(!std::feof(ifp)) {
-            RegT v;
-            std::fread(&v, sizeof(v), 1, ifp);
-            res->push_back(v);
-        }
-        ::pclose(ifp);
+        for(RegT v;std::fread(&v, sizeof(v), 1, ifp) == 1u;res->push_back(v));
+        if(ispopen) ::pclose(ifp); else std::fclose(ifp);
         ret.global_.reset(res);
         return ret;
     }

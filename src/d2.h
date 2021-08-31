@@ -192,8 +192,8 @@ public:
         OMP_ONLY(omp_set_num_threads(nt);)
         return *this;
     }
-    void filterset(std::string path, bool is_kmer);
-    void filterset(std::string fsarg);
+    void filterset(const std::string &path, bool is_kmer);
+    void filterset(const std::string &fsarg);
     CountingType ct() const {return cssize_ > 0 ? COUNTMIN_COUNTING: EXACT_COUNTING;}
     CountingType count() const {return ct();}
     bool trim_folder_paths() const {

@@ -129,7 +129,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         if(outfile.size() && outfile != "/dev/stdout" && outfile != "-") {
             // This should not overlap with the memory mapped for result.signatures_
             const uint64_t t = result.cardinalities_.size();
-            std::FILE *fp = std::fopen(outfile.data(), "r+");
+            std::FILE *fp = bfopen(outfile.data(), "r+");
             if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open file "s + outfile + " for in-place modification"));
             const uint64_t sketchsize = opts.sketchsize_;
             checked_fwrite(fp, &t, sizeof(t));
