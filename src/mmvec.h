@@ -5,6 +5,7 @@
 #include <cassert>
 #include <string>
 #include <stdexcept>
+#include "sketch/sseutil.h"
 
 namespace mm {
 using namespace std::literals::string_literals;
@@ -51,7 +52,8 @@ class vector {
     std::string path_;
     mio::mmap_sink ms_;
     size_t memthreshold_ = 20ull << 30;
-    std::vector<T> ram_;
+    using VecT = std::vector<T, sse::AlignedAllocator<T>>;
+    VecT ram_;
     // TODO: add in additional option for backing to use anonymous mmap'd data
     // using fd = -1, which makes a temporary file which is cleared when no longer needed.
 public:
@@ -136,9 +138,20 @@ public:
             if(::stat(path(), &st))
                 throw std::runtime_error("Failed to stat");
             offset_ = off == size_t(-1) ? size_t(st.st_size): off;
+            if(off == size_t(-1)) {
+                offset_ = st.st_size;
+                capacity_ = size_ = 0;
+            } else {
+                offset_ = off;
+                capacity_ = size_ = (st.st_size - off) / sizeof(T);
+                assert((st.st_size - off) % sizeof(T) == 0u);
+                ::truncate(path(), size_ * sizeof(T) + offset_);
+                countthreshold(size_);
+                capacity_ = size_;
+            }
+        } else {
+            capacity_ = size_ = initial_size;
         }
-        std::error_code ec;
-        capacity_ = size_ = initial_size;
         if(initial_size) {
             reserve(initial_size);
             while(size_ < initial_size) push_back(init);
@@ -152,22 +165,28 @@ public:
     vector(): offset_(-1), capacity_(0), size_(0) {
     }
     vector(vector &&o): vector((vector &)o) {}
-    vector(vector &o): offset_(o.offset_), capacity_(o.capacity_), size_(o.size_), path_(o.path_), ms_(std::move(o.ms_)) {
+    vector(vector &o): offset_(o.offset_), capacity_(o.capacity_), size_(o.size_), path_(o.path_), ms_(std::move(o.ms_)), memthreshold_(o.memthreshold_), ram_(std::move(ram_)) {
         o.offset_ = o.capacity_ = o.size_ = 0;
         o.path_.clear();
     }
     vector(const vector &o) = delete;
     vector(std::string inpath, size_t off=size_t(-1), size_t initial_size=0, T init=T(0)): capacity_(0), size_(0), path_(inpath) {
-        std::FILE *ifp;
-        if((ifp = std::fopen(path(), "wb")) == nullptr)
-            throw std::runtime_error(std::string("Failed to open ") + path_);
         struct stat st;
-        if(::fstat(::fileno(ifp), &st)) throw std::runtime_error("Failed to fstat");
-        if(off == size_t(-1))
-            off = st.st_size;
-        offset_ = off;
-        if(std::fclose(ifp)) throw std::runtime_error("Error in closing ifp\n");
+        if(inpath.size()) {
+            const char *const ipp = inpath.data();
+            if(::stat(ipp, &st)) {
+                std::FILE *ifp = std::fopen(ipp, "wb");
+                if(0 == ifp || ::fstat(::fileno(ifp), &st))
+                    throw std::runtime_error("Failed to create file at "s +path);
+                std::fclose(ifp);
+            }
+            offset_ = off != size_t(-1) ? off: size_t(st.st_size);
+        }
         if(initial_size) while(size_ < initial_size) push_back(init);
+        else {
+            size_ = (st.st_size - offset_) / sizeof(T);
+            assert((st.st_size - offset_ ) % sizeof(T) == 0u);
+        }
 #ifndef NDEBUG
         std::fprintf(stderr, "Construction finished. Total number of items: %zu\n", size_);
 #endif
@@ -241,12 +260,12 @@ public:
         std::error_code ec;
         ms_.map(path_, offset_, sizeof(T) * newcap, ec);
         if(ec) throw std::runtime_error(ec.message());
-        if(capacity_ < ct && newcap >= ct) {
+        if(capacity_ <= ct && newcap >= ct && ram_.size()) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Crossing from %zu to %zu passes count threshold %zu, so we are writing the vector from RAM to disk and switching to mmap.\n", capacity_, newcap, ct);
 #endif
             std::copy(ram_.begin(), ram_.end(), (T *)ms_.data());
-            std::vector<T> tmp(std::move(ram_));
+            VecT tmp(std::move(ram_));
             assert(ram_.empty());
         }
         capacity_ = newcap;

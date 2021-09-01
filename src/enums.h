@@ -109,7 +109,7 @@ struct Dashing2Options;
 
 std::string to_suffix(const Dashing2Options &opts);
 void checked_fwrite(std::FILE *fp, const void *src, const size_t nb);
-std::FILE *xopen(const std::string &path);
+std::pair<std::FILE *, int> xopen(const std::string &path);
 
 extern uint64_t XORMASK;
 extern u128_t XORMASK2;

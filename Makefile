@@ -68,7 +68,7 @@ dashing2-v: $(OBJV) libBigWig.a $(wildcard src/*.h)
 dashing2-d0: $(OBJDBG) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-add: $(OBJADD) libBigWig.a
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJADD) -o $@ $(LIB) $(EXTRA) libBigWig.a -fsanitize=thread
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJADD) -o $@ $(LIB) $(EXTRA) libBigWig.a -fsanitize=address
 dashing2-g: $(OBJG) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJG) -o $@ $(LIB) $(EXTRA) libBigWig.a -fno-lto -pg
 dashing2-ld: $(OBJLD) libBigWig.a
@@ -117,9 +117,9 @@ read%-f: test/read%.fo $(FLIBOBJ)
 %.do: %.c $(wildcard src/*.h)
 	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0 -std=c11
 %.sano: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto -fsanitize=address
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -fsanitize=address -O1
 %.sano: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -flto -fsanitize=address
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -fsanitize=address -O1
 %.gobj: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -pg -fno-lto -DNDEBUG
 %.ldo: %.cpp $(wildcard src/*.h)

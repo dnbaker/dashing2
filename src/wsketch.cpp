@@ -92,7 +92,7 @@ struct FReader{
     bool pclose = true;
     FReader(std::string path): path_(path), fp_(nullptr) {
         std::fprintf(stderr, "Reading from %s\n", path.data());
-        std::string c = "cat ";
+        std::string c;
         if(endswith(path, ".gz"))
             c = "gzip -dc ";
         else if(endswith(path, ".xz"))
@@ -105,7 +105,7 @@ struct FReader{
             return;
         }
         c += path;
-        std::fprintf(stderr, "Using cmd = '%s'\n", c.data());
+        //std::fprintf(stderr, "Using cmd = '%s'\n", c.data());
         if((fp_ = ::popen(c.data(), "r")) == nullptr)
             THROW_EXCEPTION(std::runtime_error(std::string("Failed to run cmd '") + c + "'"));
     }

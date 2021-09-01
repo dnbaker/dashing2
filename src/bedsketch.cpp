@@ -22,7 +22,7 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
             cache_path = opts.outprefix_ + '/' + cache_path;
     }
     if(opts.cache_sketches_ && bns::isfile(cache_path)) {
-        std::FILE *ifp = xopen(cache_path);
+        auto [ifp, ispopen] = xopen(cache_path);
         std::fread(&ret.second, sizeof(ret.second), 1, ifp);
         while(!std::feof(ifp)) {
             RegT v;
@@ -30,7 +30,7 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
             retvec.push_back(v);
         }
         ret.second = retvec.size() / std::accumulate(retvec.begin(), retvec.end(), 0.L);
-        ::pclose(ifp);
+        if(ispopen) ::pclose(ifp); else std::fclose(ifp);
         return ret;
     }
     for(std::string s;std::getline(ifs, s);) {

@@ -43,29 +43,39 @@ std::string Dashing2Options::to_string() const {
     return ret;
 }
 
-void Dashing2Options::filterset(std::string fsarg) {
+void Dashing2Options::filterset(const std::string &fsarg) {
     if(fsarg.empty()) return;
     auto i = fsarg.find_last_of(':');
     filterset(fsarg.substr(0, i), (i != std::string::npos && static_cast<char>(fsarg[i + 1] & 0xdf) != 'K'));
 }
 
-void Dashing2Options::filterset(std::string path, bool is_kmer) {
+void Dashing2Options::filterset(const std::string &path, bool is_kmer) {
     fs_.reset(new FilterSet());
     if(is_kmer) {
         std::string cmd;
         if(endswith(path, ".xz")) cmd = "xz -dc ";
         else if(endswith(path, ".gz")) cmd = "gzip -dc ";
         else if(endswith(path, ".bz2")) cmd = "bzip2 -dc ";
-        else cmd = "cat ";
-        cmd += path;
-        std::FILE *ifp = ::popen(cmd.data(), "r");
+        else if(endswith(path, ".zst")) cmd = "zstd -dc ";
+        else cmd = "";
+        std::FILE *ifp;
+        if(cmd.empty()) {
+            if((ifp = bfopen(cmd.data(), "rb")) == 0)
+                THROW_EXCEPTION(std::runtime_error("Failed to open file "s + path + " for reading"));
+        } else {
+            if((ifp= ::popen((cmd + path).data(), "r")) == 0)
+                THROW_EXCEPTION(std::runtime_error("Failed to run command "s + cmd + path));
+        }
         uint64_t u6; u128_t u12;
         void *const ptr = use128() ? (void *)&u12: (void *)&u6;
         for(const auto is(use128() ? 16: 8);std::fread(ptr, is, 1, ifp) == 1;) {
             if(use128()) fs_->add(u12);
             else         fs_->add(u6);
         }
-        ::pclose(ifp);
+        if(cmd.empty())
+            std::fclose(ifp);
+        else
+            ::pclose(ifp);
     } else {
         for_each_substr([&](const std::string &subpath) {
             //std::fprintf(stderr, "Doing for_each_substr for subpath = %s\n", subpath.data());
@@ -103,12 +113,13 @@ bool entmin = false;
 } // dashing2
 
 int main_usage() {
-    std::fprintf(stderr, "dashing2 has several subcommands\n");
-    std::fprintf(stderr, "Usage can be seen in those commands.\n\n");
+    std::fprintf(stderr, "dashing2 has several subcommands: sketch, cmp, wsketch, and contain.\n");
+    std::fprintf(stderr, "Usage can be seen in those subcommands. (e.g., `dashing2 sketch -h`)\n\n");
     std::fprintf(stderr, "\tsketch: converts FastX into k-mer sets/sketches, and sketches BigWig and BED files; also contains functionality from cmp, for one-step sketch and comparisons\n"
                          "This is probably the most common subcommand to use.\n\n"
     );
     std::fprintf(stderr, "\tcmp: compares previously sketched/decomposed k-mer sets and emits results. alias: dist\n\n");
+    std::fprintf(stderr, "\tcontain: Takes a k-mer database (built with dashing2 sketch --save-kmers), then computes coverage for all k-mer references using input streams.\n");
     std::fprintf(stderr, "\twsketch: Takes a tuple of [1-3] input binary files [(u32 or u64), (float or double), (u32 or u64)] and performs weighted minhash sketching.\n"
                          "Three files are treated as Compressed Sparse Row (CSR)-format, where the third file contains indptr values, specifying the lengths of consecutive runs of pairs in the first two files corresponding to each row.\n"
                          "wsketch is for sketching binary files which have already been summed, whereas sketch is for parsing and sketching (from Fast{qa}, BED, BigWig)\n");
