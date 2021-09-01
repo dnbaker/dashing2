@@ -79,9 +79,6 @@ struct Dashing2DistOptions: public Dashing2Options {
         if(nLSH < 1) nLSH = 1;
         validate();
     }
-    ~Dashing2DistOptions() {
-        std::free(compressed_ptr_); compressed_ptr_ = 0;
-    }
     void validate() const {
         Dashing2Options::validate();
         if(num_neighbors_ > 0 && min_similarity_ > 0.) {

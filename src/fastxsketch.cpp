@@ -201,7 +201,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         }
     }
     if(kmeroutpath.size()) {
-        std::FILE *fp = std::fopen(kmeroutpath.data(), "w");
+        std::FILE *fp = bfopen(kmeroutpath.data(), "w");
         uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8);
         uint32_t sketchsize = opts.sketchsize_;
         uint32_t k = opts.k_;
@@ -210,9 +210,11 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         checked_fwrite(fp, &sketchsize, sizeof(sketchsize));
         checked_fwrite(fp, &k, sizeof(k));
         checked_fwrite(fp, &w, sizeof(w));
+        checked_fwrite(fp, &opts.seedseed_, sizeof(opts.seedseed_));
         std::fclose(fp);
-        if(bns::filesize(kmeroutpath.data()) != 16) THROW_EXCEPTION(std::runtime_error("kmer out path is the wrong size (expected 16, got "s + std::to_string(bns::filesize(kmeroutpath.data()))));
-        ret.kmers_.assign(kmeroutpath, sizeof(uint32_t) * 4);
+        if(bns::filesize(kmeroutpath.data()) != 24) THROW_EXCEPTION(std::runtime_error("kmer out path is the wrong size (expected 16, got "s + std::to_string(bns::filesize(kmeroutpath.data()))));
+        static_assert(sizeof(uint32_t) * 4 + sizeof(uint64_t) == 24, "Sanity check");
+        ret.kmers_.assign(kmeroutpath, 24);
         if((fp = bfopen(kmernamesoutpath.data(), "wb")) == 0) THROW_EXCEPTION(std::runtime_error("Failed to open "s + kmernamesoutpath + " for writing."));
         for(const auto &n: paths) {
             std::fwrite(n.data(), 1, n.size(), fp);
@@ -484,7 +486,6 @@ do {\
             std::FILE * ofp;
             if((ofp = bfopen(destination.data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
-            checked_fwrite(ofp, &ret.cardinalities_[myind], sizeof(double));
             if(opss.empty() && fss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
             const size_t opsssz = opss.size();
             if(opsssz) {
@@ -501,6 +502,8 @@ do {\
                 perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
                 ret.cardinalities_[myind] = fss[tid].getcard();
             }
+            checked_fwrite(ofp, &ret.cardinalities_[myind], sizeof(double));
+            std::fflush(ofp);
             const uint64_t *ids = nullptr;
             const uint32_t *counts = nullptr;
             const RegT *ptr = opsssz ? opss[tid].data(): fss[tid].data();
