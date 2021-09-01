@@ -5,6 +5,7 @@
 #include <cassert>
 #include <string>
 #include <stdexcept>
+#include "sketch/sseutil.h"
 
 namespace mm {
 using namespace std::literals::string_literals;
@@ -51,7 +52,8 @@ class vector {
     std::string path_;
     mio::mmap_sink ms_;
     size_t memthreshold_ = 20ull << 30;
-    std::vector<T> ram_;
+    using VecT = std::vector<T, sse::AlignedAllocator<T>>;
+    VecT ram_;
     // TODO: add in additional option for backing to use anonymous mmap'd data
     // using fd = -1, which makes a temporary file which is cleared when no longer needed.
 public:
@@ -163,7 +165,7 @@ public:
     vector(): offset_(-1), capacity_(0), size_(0) {
     }
     vector(vector &&o): vector((vector &)o) {}
-    vector(vector &o): offset_(o.offset_), capacity_(o.capacity_), size_(o.size_), path_(o.path_), ms_(std::move(o.ms_)) {
+    vector(vector &o): offset_(o.offset_), capacity_(o.capacity_), size_(o.size_), path_(o.path_), ms_(std::move(o.ms_)), memthreshold_(o.memthreshold_), ram_(std::move(ram_)) {
         o.offset_ = o.capacity_ = o.size_ = 0;
         o.path_.clear();
     }
@@ -263,7 +265,7 @@ public:
             std::fprintf(stderr, "Crossing from %zu to %zu passes count threshold %zu, so we are writing the vector from RAM to disk and switching to mmap.\n", capacity_, newcap, ct);
 #endif
             std::copy(ram_.begin(), ram_.end(), (T *)ms_.data());
-            std::vector<T> tmp(std::move(ram_));
+            VecT tmp(std::move(ram_));
             assert(ram_.empty());
         }
         capacity_ = newcap;
