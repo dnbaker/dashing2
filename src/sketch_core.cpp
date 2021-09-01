@@ -142,7 +142,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             }
         }
     }
-    if(result.names_.size()) {
+    if(!outfile.empty() && result.names_.size()) {
         if((ofp = bfopen((outfile + ".names.txt").data(), "wb")) == nullptr)
             THROW_EXCEPTION(std::runtime_error(std::string("Failed to open outfile at ") + outfile + ".names.txt"));
         std::fputs("#Name\tCardinality\n", ofp);
@@ -158,7 +158,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         }
         std::fclose(ofp);
     }
-    if(result.kmercounts_.size()) {
+    if(!outfile.empty() && result.kmercounts_.size()) {
         const size_t nb = result.kmercounts_.size() * sizeof(decltype(result.kmercounts_)::value_type);
         DBG_ONLY(std::fprintf(stderr, "Writing kmercounts of size %zu\n", result.kmercounts_.size());)
         if((ofp = bfopen((outfile + ".kmercounts.f64").data(), "wb"))) {
