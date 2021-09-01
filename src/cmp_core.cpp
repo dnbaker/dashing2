@@ -67,25 +67,19 @@ struct CompressedRet: public std::tuple<void *, long double, long double> {
     CompressedRet(const CompressedRet &o) = delete;
 };
 
-void *ptr_roundup(void *ptr) {
-    uint64_t tv((uint64_t)ptr);
-    auto rem = tv % 64;
-    if(rem) {
-        tv += (64 - rem);
-    }
-    ptr = (void *)tv;
+INLINE void *ptr_roundup(void *ptr) {
+    uint8_t *tv = static_cast<uint8_t *>(ptr);
+    if(auto rem = (uint64_t)tv & 63; rem) tv += (64 - rem);
+    ptr = static_cast<void *>(tv);
     return ptr;
 }
 
-CompressedRet
-make_compressed(int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance) {
+void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance) {
     sketch::hash::CEHasher revhasher;
-    CompressedRet ret;
-    if(fd >= sizeof(RegT)) return ret;
+    if(fd >= sizeof(RegT)) return;
     ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
     auto &compressed_reps = std::get<0>(ret);
-    std::fprintf(stderr, "nbytes to alloc: %zu\n", ret.nbytes);
     ret.up.reset(new uint8_t[ret.nbytes + 63]);
     compressed_reps = ptr_roundup(static_cast<void *>(ret.up.get()));
     const size_t nsigs = sigs.size();
@@ -124,8 +118,7 @@ make_compressed(int truncation_method, double fd, const mm::vector<RegT> &sigs, 
         std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %Lg, %Lg\n", a, b, static_cast<long double>(minreg), static_cast<long double>(maxreg));
         if(a == 0. || std::isinf(b)) {
             std::fprintf(stderr, "Note: setsketch compression yielded infinite value; falling back to b-bit compression\n");
-            return make_compressed(1, fd, sigs, kmers, is_edit_distance);
-            //throw 1;
+            return make_compressed(ret, 1, fd, sigs, kmers, is_edit_distance);
         }
         ret.a(a); ret.b(b);
         logbinv = 1.L / std::log1p(b - 1.L);
@@ -182,7 +175,6 @@ make_compressed(int truncation_method, double fd, const mm::vector<RegT> &sigs, 
             }
         }
     }
-    return ret;
 }
 static inline long double g_b(long double b, long double arg) {
     return (1.L - std::pow(b, -arg)) / (1.L - 1.L / b);
@@ -484,7 +476,8 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
     if(opts.kmer_result_ <= FULL_MMER_SET && opts.fd_level_ < sizeof(RegT)) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
-    CompressedRet cret = make_compressed(opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE);
+    CompressedRet cret;
+    make_compressed(cret, opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE);
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = cret;
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS || opts.output_kind_ == PANEL) {
         emit_rectangular(opts, result);
