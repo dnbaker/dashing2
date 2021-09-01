@@ -59,13 +59,18 @@ struct CompressedRet: public std::tuple<void *, long double, long double> {
     long double b() const {return std::get<2>(*this);}
     CompressedRet(): super{nullptr, 0.L, 0.L} {
     }
-    CompressedRet(CompressedRet &&o) = default;
+    CompressedRet(CompressedRet &&o): super(static_cast<super>(o)), nbytes(o.nbytes), ismapped(o.ismapped) {
+        o.nbytes = o.ismapped = std::get<1>(o) = std::get<2>(o) = 0.;
+        std::get<0>(o) = 0;
+    }
     CompressedRet(const CompressedRet &o) = delete;
     ~CompressedRet() {
         auto ptr = std::get<0>(*this);
+        std::fprintf(stderr, "Freeing memory at %p\n", (void *)ptr);
         if(ismapped) {
             if(ptr) ::munmap(ptr, nbytes);
         } else std::free(ptr);
+        ptr = 0;
     }
 };
 
@@ -77,12 +82,16 @@ make_compressed(int truncation_method, double fd, const mm::vector<RegT> &sigs, 
     ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
     auto &compressed_reps = std::get<0>(ret);
+    std::fprintf(stderr, "nbytes to alloc: %zu\n", ret.nbytes);
     if(ret.nbytes >= MEMSIGTHRESH) {
         void *ptr = mm::AnonMMapper::allocate(ret.nbytes);
+        std::fprintf(stderr, "Allocated via mmap, ptr = %zu\n", (size_t)ptr);
         if(reinterpret_cast<uint64_t>(ptr) == uint64_t(-1)) THROW_EXCEPTION(std::bad_alloc());
+        compressed_reps = ptr;
         ret.ismapped = true;
     } else {
         if(posix_memalign((void **)&compressed_reps, 64, ret.nbytes)) THROW_EXCEPTION(std::bad_alloc());
+        std::fprintf(stderr, "Allocated via malloc, ptr = %zu\n", (size_t)compressed_reps);
     }
     const size_t nsigs = sigs.size();
     assert(fd != 0.5 || sigs.size() % 2 == 0);
