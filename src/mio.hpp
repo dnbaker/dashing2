@@ -948,10 +948,21 @@ inline mmap_context memory_map(const file_handle_type file_handle, const int64_t
             MAP_SHARED | MMAP_HUGE_FLAGS,
             file_handle,
             aligned_offset));
-    if(mapping_start == MAP_FAILED)
-    {
-        error = detail::last_error();
-        return {};
+    if(mapping_start == MAP_FAILED) {
+#ifndef NDEBUG
+        std::fprintf(stderr, "Failed to map with huge pages, falling back to regular mmaping\n");
+#endif
+        if((mapping_start = static_cast<char*>(::mmap(
+            0, // Don't give hint as to where to map.
+            length_to_map,
+            mode == access_mode::read ? PROT_READ : PROT_WRITE,
+            MAP_SHARED | MMAP_HUGE_FLAGS,
+            file_handle,
+            aligned_offset))) == MAP_FAILED)
+        {
+            error = detail::last_error();
+            return {};
+        }
     }
 #endif
     mmap_context ctx;
@@ -1078,14 +1089,15 @@ void basic_mmap<AccessMode, ByteT>::map(const handle_type handle,
         return;
     }
 
-    if(offset + length > file_size)
+    const auto totalsize = offset + length;
+    if(totalsize > file_size)
     {
         error = std::make_error_code(std::errc::invalid_argument);
         return;
     }
+    const auto mapped_size = length == map_entire_file ? (file_size - offset): length;
 
-    const auto ctx = detail::memory_map(handle, offset,
-            length == map_entire_file ? (file_size - offset) : length,
+    const auto ctx = detail::memory_map(handle, offset, mapped_size,
             AccessMode, error);
     if(!error)
     {
@@ -1102,6 +1114,11 @@ void basic_mmap<AccessMode, ByteT>::map(const handle_type handle,
         mapped_length_ = ctx.mapped_length;
 #ifdef _WIN32
         file_mapping_handle_ = ctx.file_mapping_handle;
+#endif
+#if 0
+        if(int rc = ::madvise((void *)data_, length_, MADV_HUGEPAGE); rc) {
+            std::fprintf(stderr, "Madvise for MADV_HUGEPAGE at %p of size %zu failed with error code %d. Ignoring.\n", (void *)data_, length_, rc);
+        }
 #endif
     }
 }
