@@ -486,7 +486,6 @@ do {\
             std::FILE * ofp;
             if((ofp = bfopen(destination.data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
-            checked_fwrite(ofp, &ret.cardinalities_[myind], sizeof(double));
             if(opss.empty() && fss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
             const size_t opsssz = opss.size();
             if(opsssz) {
@@ -503,6 +502,8 @@ do {\
                 perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
                 ret.cardinalities_[myind] = fss[tid].getcard();
             }
+            checked_fwrite(ofp, &ret.cardinalities_[myind], sizeof(double));
+            std::fflush(ofp);
             const uint64_t *ids = nullptr;
             const uint32_t *counts = nullptr;
             const RegT *ptr = opsssz ? opss[tid].data(): fss[tid].data();
