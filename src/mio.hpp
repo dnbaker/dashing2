@@ -956,7 +956,7 @@ inline mmap_context memory_map(const file_handle_type file_handle, const int64_t
             0, // Don't give hint as to where to map.
             length_to_map,
             mode == access_mode::read ? PROT_READ : PROT_WRITE,
-            MAP_SHARED | MMAP_HUGE_FLAGS,
+            MAP_SHARED,
             file_handle,
             aligned_offset))) == MAP_FAILED)
         {
