@@ -108,6 +108,9 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
             update(neighbor_lists[id], neighbor_sets[id], PairT{cd, oid}, topk, ntoquery, mutexes[id]);
         }
     }
+    OMP_PFOR_DYN
+    for(size_t i = 0; i < ns; ++i)
+        neighbor_lists[i].sort();
     auto knnstop = std::chrono::high_resolution_clock::now();
 
 VERBOSE_ONLY(
