@@ -941,22 +941,21 @@ inline mmap_context memory_map(const file_handle_type file_handle, const int64_t
 #else
 #define MMAP_HUGE_FLAGS 0
 #endif
+    const auto modearg = mode == access_mode::read ? PROT_READ : PROT_WRITE;
     char* mapping_start = static_cast<char*>(::mmap(
             0, // Don't give hint as to where to map.
             length_to_map,
-            mode == access_mode::read ? PROT_READ : PROT_WRITE,
+            modearg,
             MAP_SHARED | MMAP_HUGE_FLAGS,
             file_handle,
             aligned_offset));
     if(mapping_start == MAP_FAILED) {
-#ifndef NDEBUG
-        std::fprintf(stderr, "Failed to map with huge pages, falling back to regular mmaping\n");
-#endif
+        //Failed to map with huge pages, falling back to regular mmaping.
         if((mapping_start = static_cast<char*>(::mmap(
-            0, // Don't give hint as to where to map.
+            0,
             length_to_map,
-            mode == access_mode::read ? PROT_READ : PROT_WRITE,
-            MAP_SHARED,
+            modearg,
+            MAP_SHARED, // WIthout MMAP_HUGE_FLAGS
             file_handle,
             aligned_offset))) == MAP_FAILED)
         {
