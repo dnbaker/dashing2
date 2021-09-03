@@ -124,8 +124,6 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         }
         std::fclose(ofp);
     } else {
-        //{mm::vector<RegT> t(std::move(result.signatures_));}
-        //std::fprintf(stderr, "Cleared.\n");
         if(outfile.size() && outfile != "/dev/stdout" && outfile != "-") {
             // This should not overlap with the memory mapped for result.signatures_
             const uint64_t t = result.cardinalities_.size();

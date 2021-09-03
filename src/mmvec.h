@@ -135,19 +135,37 @@ public:
         path_ = inpath;
         if(path_.size()) {
             struct stat st;
-            if(::stat(path(), &st))
-                throw std::runtime_error("Failed to stat");
-            offset_ = off == size_t(-1) ? size_t(st.st_size): off;
+            if(::stat(path(), &st)) {
+                std::FILE *fp = std::fopen(path(), "wb");
+                if(fp == 0) {
+                    throw std::runtime_error("Failed to open path "s + path());
+                }
+                const int fd = ::fileno(fp);
+                if(::fstat(fd, &st) < 0) throw std::runtime_error("Failed to stat "s + path());
+                std::fclose(fp);
+            }
             if(off == size_t(-1)) {
-                offset_ = st.st_size;
+                offset_ = static_cast<size_t>(st.st_size);
                 capacity_ = size_ = 0;
             } else {
                 offset_ = off;
-                capacity_ = size_ = (st.st_size - off) / sizeof(T);
-                assert((st.st_size - off) % sizeof(T) == 0u);
-                ::truncate(path(), size_ * sizeof(T) + offset_);
+                if(off >= static_cast<size_t>(st.st_size)) {
+                    capacity_ = size_ = 0;
+                } else {
+                    assert((static_cast<size_t>(st.st_size) - off) % sizeof(T) == 0u);
+                    size_ = capacity_ = (static_cast<size_t>(st.st_size) - off) / sizeof(T);
+                }
+                if(::truncate(path(), size_ * sizeof(T) + offset_)) {
+                    perror("Failed to truncate");
+                    throw std::runtime_error("Failed to truncate from size "s + std::to_string(st.st_size) + " to size " + std::to_string(size_ * sizeof(T) + offset_));
+                }
                 countthreshold(size_);
-                capacity_ = size_;
+            }
+            std::error_code ec;
+            ms_.map(path_, offset_, sizeof(T) * capacity_, ec);
+            if(ec) {
+                perror("Failure");
+                throw std::runtime_error("Failed to map path "s + path_);
             }
         } else {
             capacity_ = size_ = initial_size;
@@ -184,8 +202,8 @@ public:
         }
         if(initial_size) while(size_ < initial_size) push_back(init);
         else {
-            size_ = (st.st_size - offset_) / sizeof(T);
-            assert((st.st_size - offset_ ) % sizeof(T) == 0u);
+            size_ = (static_cast<size_t>(st.st_size) - offset_) / sizeof(T);
+            assert((static_cast<size_t>(st.st_size) - offset_ ) % sizeof(T) == 0u);
         }
 #ifndef NDEBUG
         std::fprintf(stderr, "Construction finished. Total number of items: %zu\n", size_);
@@ -202,15 +220,33 @@ public:
         return *ptr;
     }
     T &push_back(T x) {return emplace_back(std::move(x));}
+    static size_t fsize(const std::string &path) {
+        struct stat st;
+        if(::stat(path.data(), &st)) throw std::runtime_error("Failed to stat "s + path + " for fsize");
+        return st.st_size;
+    }
+    static size_t fsize(std::FILE *fp) {
+        struct stat st;
+        if(::fstat(::fileno(fp), &st)) throw std::runtime_error("Failed to fstat for ptr"s + std::to_string(reinterpret_cast<uint64_t>(fp)));
+        return st.st_size;
+    }
+    static size_t fsize(int fd) {
+        struct stat st;
+        if(::fstat(fd, &st)) throw std::runtime_error("Failed to fsize");
+        return st.st_size;
+    }
     ~vector() noexcept(false) {
         // shrink to fit, then flush to disk if necessary
         if(path_.empty()) return;
-        if(capacity_ < countthreshold()) {
+        if(ram_.size() && capacity_ < countthreshold()) {
             ram_.resize(size_);
             ram_.shrink_to_fit();
             capacity_ = size_;
-            if(::truncate(path(), offset_ + capacity_ * sizeof(T)))
-                throw std::runtime_error("Failed to resize "s + path_ + "via ::truncate");
+            if(::truncate(path(), offset_ + capacity_ * sizeof(T))) {
+                struct stat st;
+                ::stat(path(), &st);
+                throw std::runtime_error("Failed to resize "s + path_ + "via ::truncate to size " + std::to_string(offset_ + capacity_ * sizeof(T)) + " from " + std::to_string(st.st_size) + __FILE__ + ", " + __PRETTY_FUNCTION__);
+            }
 #ifndef NDEBUG
             std::fprintf(stderr, "Capacity is < threshold, so we need to flush the data in RAM to the file.\n");
 #endif
@@ -255,11 +291,17 @@ public:
         size_t newnbytes = offset_ + newcap * sizeof(T);
         if(path_.empty())
             throw std::runtime_error("Failed to spill to disk, as path is empty");
-        if(::truncate(path(), newnbytes))
+        if(::truncate(path(), newnbytes)) {
+            struct stat st;
+            ::stat(path(), &st);
             throw std::runtime_error("Failed to resize"s + path_ + " via ::truncate");
+        }
         std::error_code ec;
         ms_.map(path_, offset_, sizeof(T) * newcap, ec);
-        if(ec) throw std::runtime_error(ec.message());
+        if(ec) {
+            perror("Don't have permission to map.\n");
+            throw std::runtime_error(ec.message());
+        }
         if(capacity_ <= ct && newcap >= ct && ram_.size()) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Crossing from %zu to %zu passes count threshold %zu, so we are writing the vector from RAM to disk and switching to mmap.\n", capacity_, newcap, ct);

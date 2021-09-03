@@ -118,14 +118,11 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
         kseq_destroy(ks);
         gzclose(fp);
     }, path);
-    /*std::fprintf(stderr, "Sketching file of %zu seqs\n", total_nseqs);*/
-    {
-        if(::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs)) 
-            THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq"));
-        if(outpath.size()) ret.signatures_.assign(outpath);
-        if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
-            ret.signatures_.reserve(total_nseqs * opts.sketchsize_);
-        }
+    if(::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs))
+        THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq"));
+    if(outpath.size()) ret.signatures_.assign(outpath);
+    if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
+        ret.signatures_.reserve(total_nseqs * opts.sketchsize_);
     }
 
     ret.cardinalities_.resize(total_nseqs);
