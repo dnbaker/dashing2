@@ -1,9 +1,11 @@
 .PHONY=clean
 
 CXX?=g++
+CC?=gcc
 
 CACHE_SIZE?=4194304
 CACHE_SIZE_FLAG:=-DD2_CACHE_SIZE=${CACHE_SIZE}
+GIT_VERSION:=$(shell git describe --abbrev=4 --always)
 
 LIB=-lz
 INC=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
@@ -11,7 +13,7 @@ OPT+= -O3 -march=native -fopenmp -pipe $(CACHE_SIZE_FLAG)
 OPTMV:=$(OPT)
 OPT+= -std=c++17
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic # -Wno-shift-count-overflow
-EXTRA+=-DNOCURL
+EXTRA+=-DNOCURL -DDASHING2_VERSION=\"$(GIT_VERSION)\"
 CXXFLAGS+= -std=c++17
 CFLAGS+= -std=c11
 
@@ -41,6 +43,7 @@ ifeq ($(shell uname -s ),Darwin)
     SEDSTR = " '' "
 endif
 
+
 OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp src/bwreduce.cpp
 LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))
 LIB0=$(patsubst %.cpp,%.0,$(OBJFS))
@@ -50,6 +53,9 @@ GLIBOBJ=$(patsubst %.cpp,%.gobj,$(OBJFS))
 FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
 LONGLIBOBJ=$(patsubst %.cpp,%.64o,$(OBJFS))
 LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
+
+printv:
+	echo $(GIT_VERSION)
 
 dashing2: dashing2-tmp
 	cp $< $@

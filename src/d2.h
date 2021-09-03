@@ -109,7 +109,6 @@ public:
     bool cache_sketches_ = false;
     std::string outprefix_;
     std::string spacing_;
-    std::string cmd_;
     double kmer_downsample_frac_ = 1.;
     uint64_t sampler_rng_;
     uint64_t sampler_threshold_;
@@ -150,7 +149,7 @@ public:
     std::add_const_t<decltype(name)> &oname() const {return name;}\
     decltype(name) &oname() {return name;}
 #define D2O2(name) D2O(name##_, name)
-    D2O2(cmd) D2O2(outprefix) D2O2(save_kmers)
+    D2O2(outprefix) D2O2(save_kmers)
     D2O2(save_kmercounts) D2O2(homopolymer_compress_minimizers)
     D2O2(kmer_result) D2O2(use128) D2O2(cache_sketches)
     D2O2(sketchsize) D2O2(cssize) D2O2(parse_by_seq)

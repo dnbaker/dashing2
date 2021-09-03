@@ -1,4 +1,5 @@
 #include "d2.h"
+#include <filesystem>
 
 namespace dashing2 {
 int cmp_main(int argc, char **argv);
@@ -37,9 +38,6 @@ std::string Dashing2Options::to_string() const {
         pos += std::sprintf(&ret[pos], ";%s", fs_->to_string().data());
     }
     ret.resize(pos);
-    ret += ";command:\"";
-    ret += cmd_;
-    ret += "\"";
     return ret;
 }
 
@@ -129,6 +127,9 @@ using namespace dashing2;
 
 
 int main(int argc, char **argv) {
+    std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[0])));
+    for(char **s = argv; *s; cmd += std::string(" ") + *s++);
+    std::fprintf(stderr, "#Calling Dashing2 version %s with command '%s'\n", DASHING2_VERSION, cmd.data());
     if(argc > 1) {
         if(std::strcmp(argv[1], "sketch") == 0)
             return sketch_main(argc - 1, argv + 1);
