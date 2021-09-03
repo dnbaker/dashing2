@@ -170,6 +170,7 @@ dashing2_s512bw: $(D2SRC) $(wildcard src/*.h) libgomp.a $(BWF)
     libgomp.a $(BWF) -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -O0
 
 dashing2_static: dashing2_s128 dashing2_savx dashing2_savx2 dashing2_s512 dashing2_s512bw
+static: dashing2_static
 
 libBigWig/%.o: libBigWig/%.c libBigWig.a
 	cd libBigWig && make $(shell basename $@)
