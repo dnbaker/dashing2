@@ -211,11 +211,10 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         checked_fwrite(fp, &k, sizeof(k));
         checked_fwrite(fp, &w, sizeof(w));
         checked_fwrite(fp, &opts.seedseed_, sizeof(opts.seedseed_));
-        std::fclose(fp);
+        if((fp = bfreopen(kmernamesoutpath.data(), "wb", fp)) == 0) THROW_EXCEPTION(std::runtime_error("Failed to open "s + kmernamesoutpath + " for writing."));
         if(bns::filesize(kmeroutpath.data()) != 24) THROW_EXCEPTION(std::runtime_error("kmer out path is the wrong size (expected 16, got "s + std::to_string(bns::filesize(kmeroutpath.data()))));
         static_assert(sizeof(uint32_t) * 4 + sizeof(uint64_t) == 24, "Sanity check");
         ret.kmers_.assign(kmeroutpath, 24);
-        if((fp = bfopen(kmernamesoutpath.data(), "wb")) == 0) THROW_EXCEPTION(std::runtime_error("Failed to open "s + kmernamesoutpath + " for writing."));
         for(const auto &n: paths) {
             std::fwrite(n.data(), 1, n.size(), fp);
             std::fputc('\n', fp);
@@ -413,7 +412,6 @@ do {\
             if(srcptr && ret.signatures_.size())
                 std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
             checked_fwrite(ofp, buf, nb);
-            std::fclose(ofp);
             if(opts.save_kmers_ && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
                 assert(ret.kmerfiles_.size());
                 ret.kmerfiles_[myind] = destkmer;
@@ -424,20 +422,19 @@ do {\
                                       static_cast<uint64_t *>(nullptr);
                 if(!ptr) THROW_EXCEPTION(std::runtime_error("This shouldn't happen"));
                 DBG_ONLY(std::fprintf(stderr, "Opening destkmer %s\n", destkmer.data());)
-                if((ofp = bfopen(destkmer.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
+                if((ofp = bfreopen(destkmer.data(), "wb", ofp)) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
                 //std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 
                 checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
                 DBG_ONLY(std::fprintf(stderr, "About to copy to kmers of size %zu\n", ret.kmers_.size());)
                 if(ret.kmers_.size())
                     std::copy(ptr, ptr + ss, &ret.kmers_[mss]);
-                if(ofp) std::fclose(ofp);
             }
             if(opts.save_kmercounts_ || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 //std::fprintf(stderr, "About to save kmer counts manually\n");
                 assert(ret.kmercountfiles_.size());
                 ret.kmercountfiles_.at(i) = destkmercounts;
-                if((ofp = bfopen(destkmercounts.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
+                if((ofp = bfreopen(destkmercounts.data(), "wb", ofp)) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
                 std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
                 if(opts.kmer_result_ == FULL_MMER_COUNTDICT || (opts.kmer_result_ == FULL_MMER_SET && opts.save_kmercounts_)) {
@@ -447,12 +444,12 @@ do {\
 #undef DO_IF
                 const size_t nb = tmp.size() * sizeof(double);
                 checked_fwrite(ofp, tmp.data(), nb);
-                std::fclose(ofp);
                 if(ret.kmercounts_.size()) {
                     std::fprintf(stderr, "Copying range of size %zu from tmp to ret.kmercounts of size %zu\n", tmp.size(), ret.kmercounts_.size());
                     std::copy(tmp.begin(), tmp.begin() + ss, &ret.kmercounts_[mss]);
                 }
             }
+            std::fclose(ofp);
         } else if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
             ret.kmers_.clear();
             //std::fprintf(stderr, "Full mmer sequence\n");
