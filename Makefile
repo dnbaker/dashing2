@@ -79,8 +79,6 @@ dashing2-f64: $(OBJF64) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJF64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 dashing2-ld64: $(OBJLD64) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJLD64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
-dashing2-w: $(OBJW) libBigWig.a $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJW) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto -DWANGHASH_EXTRA=1
 read%: test/read%.o $(LIBOBJ)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 read%-ld: test/read%.ldo $(LDLIBOBJ)
@@ -92,8 +90,6 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	# $(wildcard src/*.h)
 %.o: %.cpp
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3
-%.wo: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DWANGHASH_EXTRA=1
 %.o: %.c
 	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -std=c11
 %.64o: %.cpp

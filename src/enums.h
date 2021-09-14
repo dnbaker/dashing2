@@ -1,9 +1,7 @@
 #pragma once
 #include <string>
 #include "sketch/macros.h"
-#if WANGHASH_EXTRA
 #include "sketch/hash.h"
-#endif
 
 namespace dashing2 {
 
@@ -116,20 +114,22 @@ extern u128_t XORMASK2;
 
 INLINE uint64_t maskfn(uint64_t x) {
     x ^= XORMASK;
-#if WANGHASH_EXTRA
     x = sketch::hash::WangHash::hash(x);
-#endif
     return x;
 }
 INLINE uint64_t invmaskfn(uint64_t x) {
-#if WANGHASH_EXTRA
-    x = sketch::hash::WangHash().inverse(x);
-#endif
-    x ^= XORMASK;
+    return sketch::hash::WangHash().inverse(x) ^ XORMASK;
+}
+INLINE u128_t maskfn(u128_t x) {
+    x ^= XORMASK2;
+    x = sketch::hash::WangHash::hash(uint64_t(x)) | (u128_t(sketch::hash::WangHash::hash(uint64_t(x >> 64))) << 64);
     return x;
 }
-INLINE u128_t maskfn(u128_t x) {return x ^ XORMASK2;}
-INLINE u128_t invmaskfn(u128_t x) {return x ^ XORMASK2;}
+INLINE u128_t invmaskfn(u128_t x) {
+    auto lower = sketch::hash::WangHash().inverse(uint64_t(x));
+    auto upper = u128_t(sketch::hash::WangHash().inverse(uint64_t(x >> 64))) << 64;
+    return (lower | upper) ^ XORMASK2;
+}
 void seed_mask(uint64_t); // This function sets the seeds
 
 

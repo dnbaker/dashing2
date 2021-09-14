@@ -949,9 +949,6 @@ inline mmap_context memory_map(const file_handle_type file_handle, const int64_t
             file_handle,
             aligned_offset));
     if(mapping_start == MAP_FAILED) {
-#ifndef NDEBUG
-        std::fprintf(stderr, "Failed to map with huge pages, falling back to regular mmaping\n");
-#endif
         if((mapping_start = static_cast<char*>(::mmap(
             0, // Don't give hint as to where to map.
             length_to_map,

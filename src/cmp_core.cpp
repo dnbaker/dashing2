@@ -408,17 +408,24 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                 if(endswith(fn, ".xz")) ft = 2;
                 else if(endswith(fn, ".gz")) ft = 1;
                 else ft = 0;
-                cmd = std::string(ft == 0 ? "": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
+                cmd = std::string(ft == 0 ? "": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
                 if(cmd.empty()) {
-                    ifp = bfopen(fn.data(), "rb");
+                    struct stat st;
+                    if(::stat(fn.data(), &st)) {
+                        perror((std::string("Failed to stat ") + fn).data());
+                        std::exit(1);
+                    }
+                    result.cardinalities_[i] = st.st_size / sizeof(uint64_t);
+                    assert(st.st_size % sizeof(uint64_t) == 0);
                 } else {
+                    cmd = cmd + " " + fn;
                     ifp = ::popen(cmd.data(), "r");
+                    if(!ifp)
+                        THROW_EXCEPTION(std::runtime_error("Failed to read from '"s + cmd + "' for file " + fn));
+                    size_t c = 0;
+                    for(uint64_t x;std::fread(&x, sizeof(x), 1, ifp) == 1u;++c)
+                    result.cardinalities_[i] = c;
                 }
-                if(!ifp)
-                    THROW_EXCEPTION(std::runtime_error("Failed to read from '"s + cmd + "' for file " + fn));
-                size_t c = 0;
-                for(uint64_t x;std::fread(&x, sizeof(x), 1, ifp) == 1u;++c)
-                result.cardinalities_[i] = c;
             } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 if(!check_compressed(result.kmercountfiles_[i], ft)) throw std::runtime_error("Missing kmercountfile");
                 if(endswith(result.kmercountfiles_[i], ".xz")) ft = 2;

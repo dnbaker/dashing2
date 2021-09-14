@@ -168,7 +168,7 @@ int cmp_main(int argc, char **argv) {
     bool hpcompress = false;
     std::string fsarg;
     Measure measure = SIMILARITY;
-    uint64_t seedseed = 13;
+    uint64_t seedseed = 0;
     size_t batch_size = 0;
     std::string spacing;
     // By default, use full hash values, but allow people to enable smaller

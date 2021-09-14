@@ -45,7 +45,7 @@ int sketch_main(int argc, char **argv) {
     bool parse_by_seq = false;
     int by_chrom = false;
     double downsample_frac = 1.;
-    uint64_t seedseed = 13;
+    uint64_t seedseed = 0;
     size_t batch_size = 0;
     int nLSH = 2;
     Measure measure = SIMILARITY;
