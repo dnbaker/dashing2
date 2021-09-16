@@ -1,6 +1,6 @@
 #include "d2.h"
 #include <mio.hpp>
-#include "robin_hood.h"
+#include "hash.h"
 #include "bonsai/encoder.h"
 
 namespace dashing2 {

@@ -46,6 +46,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     const size_t ns = result.names_.size();
     std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: bfopen(opts.outfile_path_.data(), "w");
     if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
+    if(ofp == stdout) buffer_to_blksize(ofp);
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
     std::deque<QTup> datq;
     volatile int loopint = 0;
@@ -97,8 +98,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                     if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS && print_tabs(i + 1, ofp) < 0) {
                         THROW_EXCEPTION(std::runtime_error("Failed to write tabs to for rows starting with "s + std::to_string(datq.front().start())));
                     }
-                    for(size_t j = 0; j < jend; ++j)
-                        std::fprintf(ofp, "\t%0.9g", *datp++);
+                    for(const auto dat8end = datp + ((jend / 8) * 8);datp < dat8end; datp += 8)
+                        std::fprintf(ofp, "\t%0.8g\t%0.8g\t%0.8g\t%0.8g\t%0.8g\t%0.8g\t%0.8g\t%0.8g", datp[0], datp[1], datp[2], datp[3], datp[4], datp[5], datp[6], datp[7]);
+                    for(;datp < datp + jend;std::fprintf(ofp, "\t%0.8g", *datp++));
                     std::fputc('\n', ofp);
                 }
             } else if(opts.output_format_ == MACHINE_READABLE) {

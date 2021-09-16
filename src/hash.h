@@ -1,6 +1,7 @@
 #pragma once
 #include "sketch/hash.h"
 #include "enums.h"
+#include "robin_hood.h"
 namespace dashing2 {
 
 namespace hash = sketch::hash;
@@ -26,5 +27,16 @@ struct FHasher {
         return rhasher_(uint64_t(x>>64)) ^ rhasher_(uint64_t(x));
     }
 };
+
+template<typename Key, typename V,
+         typename Hash=std::conditional_t<std::is_same_v<u128_t, Key>, FHasher, robin_hood::hash<Key>>>
+using flat_hash_map = robin_hood::unordered_flat_map<Key, V, Hash>;
+
+template<typename Key,
+         typename Hash=std::conditional_t<
+                std::is_same_v<u128_t, Key>, FHasher, robin_hood::hash<Key>
+         >
+        >
+using flat_hash_set = robin_hood::unordered_flat_set<Key>;
 
 }
