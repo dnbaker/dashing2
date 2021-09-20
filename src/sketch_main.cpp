@@ -126,7 +126,7 @@ int sketch_main(int argc, char **argv) {
     }
     SketchingResult result;
     sketch_core(result, opts, paths, outfile);
-    result.nqueries(nq); // TODO: use nqueries to perform asymmetric comparisons
+    result.nqueries(nq);
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
         distopts.measure_ = measure;

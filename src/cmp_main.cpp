@@ -63,8 +63,6 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             for(size_t i = 0; i < l; ++i)
                 result.names_[i] = std::to_string(i);
         }
-        // TODO:
-        // Instead of loading signatures, load the compressed form directly.
         assert(result.cardinalities_.empty() || result.cardinalities_.size() == l);
         result.cardinalities_.resize(l);
         // l * sizeof(double) for the cardinalitiy
