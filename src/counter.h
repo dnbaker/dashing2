@@ -5,17 +5,6 @@
 #include "hash.h"
 
 
-namespace std {
-template<>
-struct hash<dashing2::u128_t>{
-    template<typename T>
-    INLINE decltype(auto) operator()(const T val) const {
-        return dashing2::FHasher::hashi(val);
-    }
-};
-
-}
-
 namespace dashing2 {
 
 

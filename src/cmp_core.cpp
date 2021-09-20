@@ -16,15 +16,13 @@ void dedup_emit(const std::vector<LSHIDType> &, const std::vector<std::vector<LS
 //using sketch::lsh::SetSketchIndex;
 static INLINE uint64_t reg2sig(RegT x) {
     uint64_t seed = 0;
-    CONST_IF(sizeof(RegT) <= 8) {
+    static_assert(sizeof(RegT) <= 8 || sizeof(RegT) == 16, "Must be <= 8 or 16");
+    if constexpr(sizeof(RegT) <= 8) {
         std::memcpy(&seed, &x, sizeof(x));
-        seed ^= static_cast<uint64_t>(0xa3407fb23cd20ef);
-        seed = wy::wyhash64_stateless(&seed);
+        seed = sketch::hash::WangHash::hash(seed ^ 0xa3407fb23cd20eful);
     } else {
-        std::memcpy(&seed, &x, std::min(sizeof(x), sizeof(seed)));
-        uint64_t nextseed = wy::wyhash64_stateless(&seed);
-        nextseed ^= ((uint64_t *)&x)[1];
-        seed = wy::wyhash64_stateless(&nextseed);
+        const uint64_t *arr = (const uint64_t *)&x;
+        seed = sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(arr[0] ^ 0xa3407fb23cd20eful) ^ arr[1]);
     }
     return seed;
 }
@@ -75,7 +73,7 @@ INLINE void *ptr_roundup(void *ptr) {
 }
 
 void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance) {
-    sketch::hash::CEHasher revhasher;
+    sketch::hash::WangHash wanghasher;
     if(fd >= sizeof(RegT)) return;
     ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
@@ -139,7 +137,6 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
                     ((uint64_t *)compressed_reps)[i] = std::min(uint64_t(q + 1), uint64_t(sub));
                 } else {
                     const int64_t isub = std::max(int64_t(0), std::min(int64_t(q + 1), static_cast<int64_t>(sub)));
-                    //if(sub < 0.) std::fprintf(stderr, "Mapping %g to %zd with sub = %Lg\n", double(sigs[i]), isub, sub);
                     if(fd == 4)      ((uint32_t *)compressed_reps)[i] = isub;
                     else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
                     else             ((uint8_t *)compressed_reps)[i] = isub;
@@ -148,9 +145,8 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
         }
     } else {
         //bbit:
-        std::fprintf(stderr, "Performing %d-bit compression. If k-mers are saved and b-bit signatures are used, the actual kmers are emitted.\n", int(fd * 8.));
-        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&revhasher](auto x) {
-            return kne ? revhasher(kmers[x]): reg2sig(sigs[x]);
+        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&wanghasher](auto x) {
+            return kne ? wanghasher(kmers[x]): reg2sig(sigs[x]);
         };
         if(fd == 0.5) {
             uint8_t *ptr = (uint8_t *)compressed_reps;
