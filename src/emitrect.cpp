@@ -1,4 +1,7 @@
 #include "cmp_main.h"
+#include "fmt/format.h"
+#include "fmt/os.h"
+#include <optional>
 
 namespace dashing2 {
 using namespace std::literals::string_literals;
@@ -31,9 +34,11 @@ constexpr std::array<char, 2 * L + 1> make_tablut() {
     return ret;
 }
 
-int print_tabs(size_t n, std::FILE *ofp) {
-    static constexpr std::array<char, 513> arr = make_tablut<256>();
-    static constexpr const char *ts = arr.data();
+static constexpr const std::array<char, 513> tabarr = make_tablut<256>();
+static constexpr std::string_view tabstr(tabarr.data(), 512);
+
+static INLINE int print_tabs(size_t n, std::FILE *ofp) {
+    static constexpr const char *ts = tabarr.data();
     while(n > 256) {
         if(std::fwrite(ts, 512, 1, ofp) != 1u) return -1;
         n -= 256;
@@ -42,11 +47,80 @@ int print_tabs(size_t n, std::FILE *ofp) {
     return std::fwrite(ts, 1, nw, ofp) == nw ? 0: -2;
 }
 
+static INLINE void print_tabs(size_t n, std::back_insert_iterator<fmt::memory_buffer> &biof) {
+    for(;n > 256; format_to(biof, tabstr), n -= 256);
+    const auto substr = tabstr.substr(0, n << 1);
+    format_to(biof, substr);
+}
+
+static INLINE void print_tabs(size_t n, fmt::ostream &os) {
+    for(;n > 256; os.print("{}", tabstr), n -= 256);
+    const auto substr = tabstr.substr(0, n << 1);
+#ifndef NDEBUG
+    for(size_t i = 0; i < substr.size() >> 1; ++i) {
+        assert(substr[i * 2] == '\t');
+        assert(substr[i * 2 + 1] == '-');
+    }
+#endif
+    os.print("{}", substr);
+}
+#ifndef NDEBUG
+#define EMPTY -137.
+#endif
+using cfloatp = const float *;
+#if USE_FMT_FPRINTF
+static constexpr const char *FMT8 = "\t{:0.7g}\t{:0.7g}\t{:0.7g}\t{:0.7g}\t{:0.7g}\t{:0.7g}\t{:0.7g}\t{:0.7g}";
+static constexpr const char *FMT1 = "\t{:0.7g}";
+#else
+static constexpr const char *FMT8 = "\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}";
+static constexpr const char *FMT1 = "\t{}";
+#endif
+
+void batched_write(cfloatp &src, fmt::ostream &of, const size_t jend) {
+    // Batched formatting provides a significant speed advantage
+    const float *dat8end = src + (jend / 8) * 8;
+    const float *datend = src + jend;
+    for(;src < dat8end; src += 8)
+        of.print(FMT8,
+                 *src, src[1], src[2], src[3], src[4], src[5], src[6], src[7]);
+
+    for(;src < datend; ++src)
+        of.print(FMT1, *src);
+    of.print("\n");
+}
+
+void batched_write(const float * &src, std::back_insert_iterator<fmt::memory_buffer> &biof, const size_t jend) {
+    // Batched formatting provides a significant speed advantage
+    const float *dat8end = src + (jend / 8) * 8;
+    const float *datend = src + jend;
+    for(;src < dat8end; src += 8)
+        fmt::format_to(biof, FMT8,
+            *src, src[1], src[2], src[3], src[4], src[5], src[6], src[7]);
+
+    for(;src < datend; ++src) {
+        fmt::format_to(biof, FMT1, *src);
+    }
+    fmt::format_to(biof, "\n");
+}
+
 void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result) {
     const size_t ns = result.names_.size();
-    std::FILE *ofp = opts.outfile_path_.empty() || opts.outfile_path_ == "-" ? stdout: bfopen(opts.outfile_path_.data(), "w");
-    if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path at ") + opts.outfile_path_));
-    if(ofp == stdout) buffer_to_blksize(ofp);
+    const std::string outp = opts.outfile_path_.empty() || opts.outfile_path_.front() == '-'
+            ? "/dev/stdout"s: opts.outfile_path_;
+    // Only make fmt::ostream if emitting in human-readable form
+    std::optional<fmt::ostream> ofopt(opts.output_format_ == HUMAN_READABLE
+                ? std::optional<fmt::ostream>(fmt::output_file(outp, fmt::buffer_size=131072))
+                : std::optional<fmt::ostream>(std::nullopt));
+    std::FILE *ofp = 0;
+    if(opts.output_format_ == MACHINE_READABLE) {
+        if(opts.outfile_path_.empty() || opts.outfile_path_.front() == '-') {
+            ofp = stdout;
+            buffer_to_blksize(ofp);
+        } else {
+            if((ofp = bfopen(opts.outfile_path_.data(), "wb")) == 0)
+                THROW_EXCEPTION(std::runtime_error("Failed to open path "s + opts.outfile_path_ + " for writing"));
+        }
+    }
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
     std::deque<QTup> datq;
     volatile int loopint = 0;
@@ -60,17 +134,16 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
 #endif
     // Emit Header
     if(opts.output_format_ == HUMAN_READABLE) {
+        auto &of = ofopt.value();
         if(opts.output_kind_ != PHYLIP) {
-            std::fprintf(ofp, "#Dashing2 %s Output\n", asym ? "Asymmetric pairwise": opts.output_kind_ == PANEL ? "Panel (Query/Refernce)": "Symmetric pairwise");
-            std::fprintf(ofp, "#Dashing2Options: %s\n", opts.to_string().data());
-            std::fprintf(ofp, "#Sources");
-            for(size_t i = 0; i < result.names_.size(); ++i) {
-                std::fputc('\t', ofp);
-                std::fwrite(result.names_[i].data(), 1, result.names_[i].size(), ofp);
-            }
-            std::fputc('\n', ofp);
+            const char *labelstr = asym ? "Asymmetric pairwise": opts.output_kind_ == PANEL ? "Panel (Query/Refernce)": "Symmetric pairwise";
+            of.print("#Dashing2 {} Output\n", labelstr);
+            of.print("#Dashing2Options: {}\n", opts.to_string());
+            of.print("#Sources");
+            for(size_t i = 0; i < result.names_.size(); of.print("\t{}", result.names_[i++]));
+            of.print("\n");
         } else {
-            std::fprintf(ofp, "%zu\n", ns);
+            of.print("{}\n", ns);
         }
     }
     /*
@@ -80,30 +153,32 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
      */
     const size_t nq = result.nqueries(), nf = ns - nq;
     std::thread sub = std::thread([&](){
-        while(loopint == 0 || datq.size()) {
+        while(loopint == 0) {
             if(datq.empty()) {
-                std::this_thread::sleep_for(std::chrono::duration<size_t, std::nano>(2000));
+                std::this_thread::sleep_for(std::chrono::duration<size_t, std::nano>(500));
                 continue;
             }
             auto &f = datq.front();
             auto fs = f.start(), fe = f.stop();
+#ifndef NDEBUG
+            if(loopint) {
+                std::fprintf(stderr, "Writing data from queue of size %zu after the loopint is terminated. This means all computation is done and we are just formatting and emitting data.\n", datq.size());
+            }
+#endif
             if(opts.output_format_ == HUMAN_READABLE) {
-                auto datp = f.data();
+                auto &of = ofopt.value();
+                const float *datp = f.data();
                 for(size_t i = fs; i < fe; ++i) {
                     auto &seqn = result.names_[i];
                     std::string fn(seqn);
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
-                    std::fwrite(fn.data(), 1, fn.size(), ofp);
+                    of.print("{}", fn);
                     const size_t jend = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - i - 1;
-                    if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS && print_tabs(i + 1, ofp) < 0) {
-                        THROW_EXCEPTION(std::runtime_error("Failed to write tabs to for rows starting with "s + std::to_string(datq.front().start())));
-                    }
-                    for(const auto dat8end = datp + ((jend / 8) * 8);datp < dat8end; datp += 8)
-                        std::fprintf(ofp, "\t%0.8g\t%0.8g\t%0.8g\t%0.8g\t%0.8g\t%0.8g\t%0.8g\t%0.8g", datp[0], datp[1], datp[2], datp[3], datp[4], datp[5], datp[6], datp[7]);
-                    for(;datp < datp + jend;std::fprintf(ofp, "\t%0.8g", *datp++));
-                    std::fputc('\n', ofp);
+                    if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS) print_tabs(i + 1, of);
+                    batched_write(datp, of, jend);
                 }
-            } else if(opts.output_format_ == MACHINE_READABLE) {
+            } else {
+                assert(opts.output_format_ == MACHINE_READABLE);
                 const size_t nwritten = datq.front().nwritten();
                 if(std::fwrite(datq.front().data(), sizeof(float), nwritten, ofp) != nwritten)
                     THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(datq.front().start()) + "-" + std::to_string(datq.front().stop()) + " to disk"));
@@ -122,6 +197,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
         if(batch_size <= 1) {
             for(size_t i = 0; i < nf; ++i) {
                 std::unique_ptr<float[]> dat(new float[nq]);
+#ifndef NDEBUG
+                std::fill_n(dat.get(), nq, EMPTY);
+#endif
                 OMP_PFOR_DYN
                 for(size_t j = 0; j < nq; ++j) {
                     dat[j] = compare(opts, result, i, j + nf);
@@ -137,6 +215,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 const size_t nrow = erow - firstrow;
                 const size_t nwritten = nq * nrow;
                 std::unique_ptr<float[]> dat(new float[nwritten]);
+#ifndef NDEBUG
+                std::fill_n(dat.get(), nwritten, EMPTY);
+#endif
                 OMP_PFOR_DYN
                 for(size_t i = 0; i < nrow; ++i) {
                     for(size_t j = 0; j < nq; ++j)
@@ -155,6 +236,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 const size_t diff = erow - firstrow;
                 const size_t nwritten = ns * diff;
                 std::unique_ptr<float[]> dat(new float[nwritten]);
+#ifndef NDEBUG
+                std::fill_n(dat.get(), nwritten, EMPTY);
+#endif
                 OMP_PFOR_DYN
                 for(size_t fs = firstrow; fs < erow; ++fs) {
                     auto datp = &dat[(fs - firstrow) * ns];
@@ -169,6 +253,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 for(size_t i = 0; i < ns; ++i) {
                     size_t nelem = asym ? ns: ns - i - 1;
                     std::unique_ptr<float[]> dat(new float[nelem]);
+#ifndef NDEBUG
+                    std::fill_n(dat.get(), nelem, EMPTY);
+#endif
                     const auto datp = dat.get() - (asym ? size_t(0): i + 1);
                     OMP_PFOR_DYN
                     for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
@@ -191,7 +278,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                     const size_t nwritten = offsets.back();
                     assert(nwritten == sum);
                     auto dat = std::make_unique<float[]>(nwritten);
-                    DBG_ONLY(std::fill_n(dat.get(), nwritten, -137);)
+                    DBG_ONLY(std::fill_n(dat.get(), nwritten, EMPTY);)
                     std::atomic<size_t> totalused(0);
                     OMP_PFOR_DYN
                     for(size_t fs = firstrow; fs < erow; ++fs) {
@@ -217,8 +304,50 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     }
     loopint = 1;
     if(sub.joinable()) sub.join();
+    if(const size_t dqs = datq.size(); dqs) {
+        if(opts.output_format_ == HUMAN_READABLE) {
+            auto &of = ofopt.value();
+            of.flush();
+            std::vector<fmt::memory_buffer> bufs(dqs);
+            // Format in parallel, then write in sequence
+            OMP_PFOR_DYN
+            for(size_t di = 0; di < dqs; ++di) {
+                auto &f = datq[di];
+                auto biof = std::back_inserter(bufs[di]);
+                const auto fs = f.start(), fe = f.stop();
+                const float *datp = f.data();
+                for(size_t i = fs; i < fe; ++i) {
+                    std::string fn(result.names_[i]);
+                    if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
+                    format_to(biof, fn);
+                    const size_t jend = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - i - 1;
+                    if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS) print_tabs(i + 1, biof);
+                    batched_write(datp, biof, jend);
+                }
+            }
+            datq.clear();
+            of.close(); // Flush and close, and then open a posix file
+            auto off = fmt::file(outp, fmt::file::WRONLY | fmt::file::APPEND);
+            for(const auto &buf: bufs) {
+                const size_t nblocks = (buf.size() + 131071) / 131072;
+                // Chunk the writing according to blocksize
+                for(size_t i = 0; i < nblocks; ++i) {
+                    const size_t n_in_block = (i == nblocks - 1) ? buf.size() & size_t(131071): size_t(131072);
+                    off.write(buf.data() + i * 131072, n_in_block);
+                }
+            }
+        } else {
+            while(!datq.empty()) {
+                const auto &pair = datq.front();
+                const size_t nwritten = pair.nwritten();
+                if(std::fwrite(pair.data(), sizeof(float), nwritten, ofp) != nwritten)
+                   THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(pair.start()) + "-" + std::to_string(pair.stop()) + " to disk"));
+                datq.pop_front();
+            }
+        }
+    }
     assert(datq.empty());
-    if(ofp != stdout) std::fclose(ofp);
+    if(ofp && ofp != stdout) std::fclose(ofp);
 }
 
 

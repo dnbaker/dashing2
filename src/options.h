@@ -98,8 +98,10 @@ enum OptArg {
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
-    LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_FLAG("phylip", OPTARG_PHYLIP, ok, OutputKind::PHYLIP)\
+    LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
+    LO_FLAG("asymmetric", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
+    LO_FLAG("square", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_ARG("regbytes", OPTARG_REGBYTES)\
     /*LO_ARG("set", 'H')*/\
     {"save-kmers", no_argument, 0, 's'},\
@@ -136,7 +138,7 @@ enum OptArg {
     {"entmin", no_argument, 0, OPTARG_ENTROPYMIN},\
     {"by-chrom", no_argument, (int *)&by_chrom, 1},\
     {"sketch-size-l2", required_argument, 0, 'L'},\
-    {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT}
+    {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT}\
 
 
 
@@ -334,7 +336,8 @@ static constexpr const char *siglen =
         "1. PHYLIP Upper Triangular distance matrix, enabled by --phylip.\n"\
         "2. Square distance matrix, enabled by --asymmetric-all-pairs\n"\
         "--asymmetric-all-pairs: emit square distance matrix\n"\
-        "Emits a full square distance matrix rather than upper-triangular.\n"\
+        "  Emits a full square distance matrix rather than upper-triangular.\n"\
+        "  Aliases: --asymmetric, --square\n"\
         "3. Rectangular matrix, enabled by -Q/-qfile\n"\
         "Use this if you want to compare a set of queries to a set of references rather than complete all-pairs. Note: -F must be provided, or reference files should be added as positional arguments\n"\
         "positional arguments and -F paths are treated as a reference set;\n"\

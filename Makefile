@@ -5,31 +5,31 @@ CXX?=g++
 CACHE_SIZE?=4194304
 CACHE_SIZE_FLAG:=-DD2_CACHE_SIZE=${CACHE_SIZE}
 
-LIB=-lz
-INC=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc
+LIB=-lz # -lfmt
+INC=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc -Ifmt/include
 OPT+= -O3 -march=native -fopenmp -pipe $(CACHE_SIZE_FLAG)
 OPTMV:=$(OPT)
 OPT+= -std=c++17
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic # -Wno-shift-count-overflow
-EXTRA+=-DNOCURL
+EXTRA+=-DNOCURL -DFMT_HEADER_ONLY
 CXXFLAGS+= -std=c++17
 CFLAGS+= -std=c11
 
 D2SRC=$(wildcard src/*.cpp)
 OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp)) $(patsubst %.c,%.o, $(wildcard src/*.c))
-OBJ=$(OFS)
-OBJLD=$(patsubst %.o,%.ldo,$(OFS))
-OBJF=$(patsubst %.o,%.fo,$(OFS))
-OBJF64=$(patsubst %.o,%.f64o,$(OFS))
-OBJLD64=$(patsubst %.o,%.ld64o,$(OFS))
-OBJ64=$(patsubst %.o,%.64o,$(OFS))
-OBJDBG=$(patsubst %.o,%.do,$(OFS))
-OBJADD=$(patsubst %.o,%.sano,$(OFS))
-OBJLTO=$(patsubst %.o,%.lto,$(OFS))
-OBJ0=$(patsubst %.o,%.0,$(OFS))
-OBJV=$(patsubst %.o,%.vo,$(OFS))
-OBJG=$(patsubst %.o,%.gobj,$(OFS))
-OBJW=$(patsubst %.o,%.wo,$(OFS))
+OBJ=$(OFS) src/osfmt.o
+OBJLD=$(patsubst %.o,%.ldo,$(OFS)) src/osfmt.o
+OBJF=$(patsubst %.o,%.fo,$(OFS)) src/osfmt.o
+OBJF64=$(patsubst %.o,%.f64o,$(OFS)) src/osfmt.o
+OBJLD64=$(patsubst %.o,%.ld64o,$(OFS)) src/osfmt.o
+OBJ64=$(patsubst %.o,%.64o,$(OFS)) src/osfmt.o
+OBJDBG=$(patsubst %.o,%.do,$(OFS)) src/osfmt.o
+OBJADD=$(patsubst %.o,%.sano,$(OFS)) src/osfmt.o
+OBJLTO=$(patsubst %.o,%.lto,$(OFS)) src/osfmt.o
+OBJ0=$(patsubst %.o,%.0,$(OFS)) src/osfmt.o
+OBJV=$(patsubst %.o,%.vo,$(OFS)) src/osfmt.o
+OBJG=$(patsubst %.o,%.gobj,$(OFS)) src/osfmt.o
+OBJW=$(patsubst %.o,%.wo,$(OFS)) src/osfmt.o
 
 all: dashing2 dashing2-64
 unit: readfx readbw readbed
@@ -42,14 +42,14 @@ ifeq ($(shell uname -s ),Darwin)
 endif
 
 OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp src/bwreduce.cpp
-LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))
-LIB0=$(patsubst %.cpp,%.0,$(OBJFS))
-LIBV=$(patsubst %.cpp,%.vo,$(OBJFS))
-DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS))
-GLIBOBJ=$(patsubst %.cpp,%.gobj,$(OBJFS))
-FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS))
-LONGLIBOBJ=$(patsubst %.cpp,%.64o,$(OBJFS))
-LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS))
+LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))  src/osfmt.o
+LIB0=$(patsubst %.cpp,%.0,$(OBJFS)) src/osfmt.o
+LIBV=$(patsubst %.cpp,%.vo,$(OBJFS)) src/osfmt.o
+DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS)) src/osfmt.o
+GLIBOBJ=$(patsubst %.cpp,%.gobj,$(OBJFS)) src/osfmt.o
+FLIBOBJ=$(patsubst %.cpp,%.fo,$(OBJFS)) src/osfmt.o
+LONGLIBOBJ=$(patsubst %.cpp,%.64o,$(OBJFS)) src/osfmt.o
+LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS)) src/osfmt.o
 
 dashing2: dashing2-tmp
 	cp $< $@
@@ -130,6 +130,8 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 %.f64o: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
+src/osfmt.o: fmt/src/os.cc
+	$(CXX) -I fmt/include $(OPT) $(WARNING) $< -c -o $@ $(EXTRA)
 
 mmtest: test/mmtest.cpp src/mmvec.h
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -o $@ $(LIB) $(EXTRA)
