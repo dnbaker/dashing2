@@ -1,7 +1,8 @@
 #include "d2.h"
 #include <mio.hpp>
-#include "robin_hood.h"
+#include "hash.h"
 #include "bonsai/encoder.h"
+#include "fmt/format.h"
 
 namespace dashing2 {
 template<typename Key, typename V, typename Hash>
@@ -147,22 +148,20 @@ int contain_main(int argc, char **argv) {
         std::fwrite(coverage_mat.data(), sizeof(float), coverage_mat.size(), ofp);
         std::fwrite(coverage_stats.data(), sizeof(float), coverage_mat.size(), ofp);
     } else {
-        std::fprintf(ofp, "#Dashing2 contain - a list of coverage %%s for the set of references, + mean coverage levels.\n");
-        std::fprintf(stderr, "#Each matrix entry consists of <coverage%%:mean depth of coverage>\n");
-        std::fprintf(ofp, "##References:");
-        for(size_t i = 0; i < nitems; ++i) {
-            std::fputc('\t', ofp);
-            std::fwrite(names[i].data(), 1, names[i].size(), ofp);
-        }
-        std::fputc('\n', ofp);
+        fmt::print(ofp, "#Dashing2 contain - a list of coverage %%s for the set of references, + mean coverage levels.\n"
+                        "#Each matrix entry consists of <coverage%%:mean depth of coverage>\n"
+                        "##References:");
+        for(size_t i = 0; i < nitems; ++i)
+            fmt::print(ofp, "\t{}", names[i]);
+        fmt::print(ofp, "\n");
         for(size_t i = 0; i < nq; ++i) {
-            std::fwrite(streamfiles[i].data(), 1, streamfiles[i].size(), ofp);
+            fmt::print(ofp, streamfiles[i]);
             const float *cmatptr = &coverage_mat[nitems * i];
             const float *cstatsptr = &coverage_stats[nitems * i];
             for(size_t j = 0; j < nitems; ++j) {
                 assert(cmatptr + j < &*coverage_mat.end());
                 assert(cstatsptr + j < &*coverage_stats.end());
-                std::fprintf(ofp, "\t%0.8g%%:%0.4g", 100. * cmatptr[j], cstatsptr[j]);
+                fmt::print(ofp, "\t{:0.8g}%:{}", 100.f * cmatptr[j], cstatsptr[j]);
             }
             std::fputc('\n', ofp);
         }

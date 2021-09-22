@@ -1,6 +1,7 @@
 #include "cmp_main.h"
 #include "src/ssi.h"
 #include "minispan.h"
+#include "fmt/format.h"
 #ifdef _OPENMP
 #include "omp.h"
 #endif
@@ -318,14 +319,15 @@ void dedup_emit(const std::vector<LSHIDType> &ids, const std::vector<std::vector
     DBG_ONLY(const double medsz = medsize(constituents);)
     DBG_ONLY(std::fprintf(stderr, "#%zu clusters of average size %0.4g (median size %0.4g), separated by minimum similarity %g\n", ids.size(), avgsize, medsz, opts.min_similarity_);)
     if(opts.output_format_ == HUMAN_READABLE) {
-        std::fprintf(ofp, "#%zu clusters of average size %0.4g, separated by minimum similarity %g\n", ids.size(), avgsize, opts.min_similarity_);
+        fmt::print(ofp, "#{} clusters of average size {}, separated by minimum similarity {}\n", ids.size(), avgsize, opts.min_similarity_);
         for(size_t cid = 0;cid < ids.size(); ++cid) {
-            std::fprintf(ofp, "Cluster-%zu\t%s:%zu", cid, result.names_[ids[cid]].data(), size_t(ids[cid]));
+            auto repid = ids[cid];
+            fmt::print(ofp, "Cluster-{}\t{}:{}", cid, result.names_[repid], repid);
             for(const auto child: constituents[cid]) {
                 const size_t childid = child; // ids.at(child);
-                std::fprintf(ofp, "\t%s:%zu", result.names_[childid].data(), childid);
+                fmt::print(ofp, "\t{}:{}", result.names_[childid], childid);
             }
-            std::fputc('\n', ofp);
+            fmt::print(ofp, "\n");
         }
     } else {
         std::vector<uint64_t> indptr(nclusters + 1);
