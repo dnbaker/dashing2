@@ -27,6 +27,105 @@ static INLINE uint64_t reg2sig(RegT x) {
     return seed;
 }
 
+namespace detail{
+INLINE void setnthbit(uint64_t *ptr, size_t index, bool val) {
+    ptr[index / 64] |= uint64_t(val) << (index % 64);
+}
+template<typename T> INLINE void setnthbit(T *ptr, size_t index, bool val) {
+    return setnthbit(reinterpret_cast<uint64_t *>(ptr), index, val);
+}
+
+static INLINE uint64_t getnthbit(const uint64_t *ptr, size_t index) {
+    return (ptr[index / 64] >> (index % 64)) & 1u;
+}
+
+template<typename T> INLINE T getnthbit(const T *ptr, size_t index) {
+    return T(getnthbit(reinterpret_cast<const uint8_t *>(ptr), index));
+}
+INLINE uint64_t getnthbit(uint64_t val, size_t index) {
+    return getnthbit(&val, index);
+}
+
+
+#if __SSE2__
+
+INLINE bool is_all_zeros(__m128i x) {
+#if __SSE4_1__
+    return _mm_test_all_zeros(x, x);
+#else
+    return _mm_movemask_epi8(_mm_cmpeq_epi32(x,_mm_setzero_si128())) == 0xFFFF;
+#endif
+}
+
+INLINE uint64_t matching_bits(const __m128i *s1, const __m128i *s2, uint16_t b) {
+    --b;
+    __m128i match = ~(*s1++ ^ *s2++);
+    while(b >= 4) {
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
+        s1 += 4;
+        s2 += 4;
+        b -= 4;
+        if(is_all_zeros(match)) return 0;
+    }
+    while(b-- && !is_all_zeros(match)) match &= ~(*s1++ ^ *s2++);
+    return popcount(common::vatpos(match, 0)) + popcount(common::vatpos(match, 1));
+}
+#endif
+
+#if __AVX2__
+INLINE bool is_all_zeros(__m256i x) {return _mm256_testz_si256(x, x);}
+INLINE auto matching_bits(const __m256i *s1, const __m256i *s2, uint16_t b) {
+    // Only do popcnt if match is nonzero
+    --b;
+    __m256i match = ~(*s1++ ^ *s2++);
+    while(b >= 4) {
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
+        b -= 4;
+        s1 += 4;
+        s2 += 4;
+        if(is_all_zeros(match)) return match;
+    }
+    switch(b) {
+        case 3: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 2: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 1: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 0: default: ;
+    }
+    return is_all_zeros(match) ? match: popcnt256(match);
+}
+#endif
+
+
+#if HAS_AVX_512
+INLINE bool is_all_zeros(__m512i x) {
+    return _mm512_test_epi64_mask(x, x) == 0;
+}
+INLINE auto sbit_accum(const __m512i *s1, const __m512i *s2, uint16_t b) {
+    __m512i match = ~(*s1++ ^ *s2++);
+    while(--b)
+        match &= ~(*s1++ ^ *s2++);
+    return match;
+}
+INLINE auto matching_bits(const __m512i *s1, const __m512i *s2, uint16_t b) {
+    // Only do popcnt if match is nonzero
+    --b;
+    __m512i match = ~(*s1++ ^ *s2++);
+    for(--b;b >= 4;b -= 4, s1 += 4, s2 += 4) {
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
+        if(is_all_zeros(match)) return match;
+    }
+    switch(b) {
+        case 3: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 2: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 1: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 0: default: ;
+    }
+    return is_all_zeros(match) ? match: popcnt512(match);
+}
+#endif
+
+} // namespace detail
+
 #ifdef _OPENMP
 #define OMP_STATIC_SCHED32 _Pragma("omp parallel for schedule(static, 32)")
 #else

@@ -337,11 +337,32 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 }
             }
         } else {
+#define MANUAL_BUFFER 1
+#if MANUAL_BUFFER
+            const int fd = ::fileno(ofp);
+            std::fflush(ofp);
+#endif
             while(!datq.empty()) {
                 const auto &pair = datq.front();
                 const size_t nwritten = pair.nwritten();
+#if !MANUAL_BUFFER
                 if(std::fwrite(pair.data(), sizeof(float), nwritten, ofp) != nwritten)
                    THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(pair.start()) + "-" + std::to_string(pair.stop()) + " to disk"));
+#else
+                const size_t nbytes = sizeof(float) * nwritten;
+                static constexpr size_t nfloats_per_block = 131072 / sizeof(float);
+                const ssize_t nblocks = (nbytes + 131071) >> 17;
+                for(ssize_t i = 0; i < nblocks - 1; ++i) {
+                    const ssize_t wrc = ::write(fd, pair.data() + i * nfloats_per_block, 131072ul);
+                    if(unlikely(wrc < ssize_t(131072)))
+                        throw std::runtime_error("Failed to POSIX write. Wrote "s + std::to_string(wrc) + " instead of 131072");
+                }
+                const auto lon = nwritten & 32767ul;
+                const ssize_t wrc = ::write(fd, pair.data() + (nblocks - 1) * nfloats_per_block, lon);
+                if(wrc != static_cast<ssize_t>(lon * sizeof(float))) {
+                   THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(pair.start()) + "-" + std::to_string(pair.stop()) + " to disk"));
+                }
+#endif
                 datq.pop_front();
             }
         }
