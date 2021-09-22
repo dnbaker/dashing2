@@ -143,31 +143,32 @@ bwf:
 
 libgomp.a:
 	ln -sf $(shell $(CXX) --print-file-name=libgomp.a)
-dashing2_s128: $(D2SRC) $(wildcard src/*.h) libgomp.a $(BWF)
+dashing2_s128: $(D2SRC) $(wildcard src/*.h) libgomp.a $(BWF) src/osfmt.o
 	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mno-avx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
-    libgomp.a $(BWF) \
+    src/osfmt.o libgomp.a $(BWF) \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -O0
 
-dashing2_savx: $(D2SRC) $(wildcard src/*.h) libgomp.a $(BWF)
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
-    libgomp.a $(BWF) \
+dashing2_savx: $(D2SRC) $(wildcard src/*.h) src/osfmt.o libgomp.a $(BWF) src/osfmt.o
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-src/osfmt.o libgcc -flto \
+    src/osfmt.o libgomp.a $(BWF) \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
-dashing2_savx2: $(D2SRC) $(wildcard src/*.h) libgomp.a $(BWF)
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
-    libgomp.a $(BWF) \
+dashing2_savx2: $(D2SRC) $(wildcard src/*.h) src/osfmt.o libgomp.a $(BWF) src/osfmt.o
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-src/osfmt.o libgcc -flto \
+    src/osfmt.o libgomp.a $(BWF) \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
-dashing2_s512: $(D2SRC) $(wildcard src/*.h) libgomp.a $(BWF)
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
-    libgomp.a $(BWF) \
+dashing2_s512: $(D2SRC) $(wildcard src/*.h) src/osfmt.o libgomp.a $(BWF) src/osfmt.o
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-src/osfmt.o libgcc -flto \
+    src/osfmt.o libgomp.a $(BWF) \
 		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
 
-dashing2_s512bw: $(D2SRC) $(wildcard src/*.h) libgomp.a $(BWF)
-	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
-    libgomp.a $(BWF) -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -O0
+dashing2_s512bw: $(D2SRC) $(wildcard src/*.h) src/osfmt.o libgomp.a $(BWF) src/osfmt.o
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-src/osfmt.o libgcc -flto \
+    src/osfmt.o libgomp.a $(BWF) -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -O0
 
 dashing2_static: dashing2_s128 dashing2_savx dashing2_savx2 dashing2_s512 dashing2_s512bw
+static: dashing2_static
 
 libBigWig/%.o: libBigWig/%.c libBigWig.a
 	cd libBigWig && make $(shell basename $@)
