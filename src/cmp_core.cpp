@@ -16,18 +16,115 @@ void dedup_emit(const std::vector<LSHIDType> &, const std::vector<std::vector<LS
 //using sketch::lsh::SetSketchIndex;
 static INLINE uint64_t reg2sig(RegT x) {
     uint64_t seed = 0;
-    CONST_IF(sizeof(RegT) <= 8) {
+    static_assert(sizeof(RegT) <= 8 || sizeof(RegT) == 16, "Must be <= 8 or 16");
+    if constexpr(sizeof(RegT) <= 8) {
         std::memcpy(&seed, &x, sizeof(x));
-        seed ^= static_cast<uint64_t>(0xa3407fb23cd20ef);
-        seed = wy::wyhash64_stateless(&seed);
+        seed = sketch::hash::WangHash::hash(seed ^ 0xa3407fb23cd20eful);
     } else {
-        std::memcpy(&seed, &x, std::min(sizeof(x), sizeof(seed)));
-        uint64_t nextseed = wy::wyhash64_stateless(&seed);
-        nextseed ^= ((uint64_t *)&x)[1];
-        seed = wy::wyhash64_stateless(&nextseed);
+        const uint64_t *arr = (const uint64_t *)&x;
+        seed = sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(arr[0] ^ 0xa3407fb23cd20eful) ^ arr[1]);
     }
     return seed;
 }
+
+namespace detail{
+INLINE void setnthbit(uint64_t *ptr, size_t index, bool val) {
+    ptr[index / 64] |= uint64_t(val) << (index % 64);
+}
+template<typename T> INLINE void setnthbit(T *ptr, size_t index, bool val) {
+    return setnthbit(reinterpret_cast<uint64_t *>(ptr), index, val);
+}
+
+static INLINE uint64_t getnthbit(const uint64_t *ptr, size_t index) {
+    return (ptr[index / 64] >> (index % 64)) & 1u;
+}
+
+template<typename T> INLINE T getnthbit(const T *ptr, size_t index) {
+    return T(getnthbit(reinterpret_cast<const uint8_t *>(ptr), index));
+}
+INLINE uint64_t getnthbit(uint64_t val, size_t index) {
+    return getnthbit(&val, index);
+}
+
+
+#if __SSE2__
+
+INLINE bool is_all_zeros(__m128i x) {
+#if __SSE4_1__
+    return _mm_test_all_zeros(x, x);
+#else
+    return _mm_movemask_epi8(_mm_cmpeq_epi32(x,_mm_setzero_si128())) == 0xFFFF;
+#endif
+}
+
+INLINE uint64_t matching_bits(const __m128i *s1, const __m128i *s2, uint16_t b) {
+    --b;
+    __m128i match = ~(*s1++ ^ *s2++);
+    while(b >= 4) {
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
+        s1 += 4;
+        s2 += 4;
+        b -= 4;
+        if(is_all_zeros(match)) return 0;
+    }
+    while(b-- && !is_all_zeros(match)) match &= ~(*s1++ ^ *s2++);
+    return popcount(common::vatpos(match, 0)) + popcount(common::vatpos(match, 1));
+}
+#endif
+
+#if __AVX2__
+INLINE bool is_all_zeros(__m256i x) {return _mm256_testz_si256(x, x);}
+INLINE auto matching_bits(const __m256i *s1, const __m256i *s2, uint16_t b) {
+    // Only do popcnt if match is nonzero
+    --b;
+    __m256i match = ~(*s1++ ^ *s2++);
+    while(b >= 4) {
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
+        b -= 4;
+        s1 += 4;
+        s2 += 4;
+        if(is_all_zeros(match)) return match;
+    }
+    switch(b) {
+        case 3: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 2: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 1: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 0: default: ;
+    }
+    return is_all_zeros(match) ? match: popcnt256(match);
+}
+#endif
+
+
+#if HAS_AVX_512
+INLINE bool is_all_zeros(__m512i x) {
+    return _mm512_test_epi64_mask(x, x) == 0;
+}
+INLINE auto sbit_accum(const __m512i *s1, const __m512i *s2, uint16_t b) {
+    __m512i match = ~(*s1++ ^ *s2++);
+    while(--b)
+        match &= ~(*s1++ ^ *s2++);
+    return match;
+}
+INLINE auto matching_bits(const __m512i *s1, const __m512i *s2, uint16_t b) {
+    // Only do popcnt if match is nonzero
+    --b;
+    __m512i match = ~(*s1++ ^ *s2++);
+    for(--b;b >= 4;b -= 4, s1 += 4, s2 += 4) {
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
+        if(is_all_zeros(match)) return match;
+    }
+    switch(b) {
+        case 3: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 2: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 1: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 0: default: ;
+    }
+    return is_all_zeros(match) ? match: popcnt512(match);
+}
+#endif
+
+} // namespace detail
 
 #ifdef _OPENMP
 #define OMP_STATIC_SCHED32 _Pragma("omp parallel for schedule(static, 32)")
@@ -75,7 +172,7 @@ INLINE void *ptr_roundup(void *ptr) {
 }
 
 void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance) {
-    sketch::hash::CEHasher revhasher;
+    sketch::hash::WangHash wanghasher;
     if(fd >= sizeof(RegT)) return;
     ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
@@ -139,7 +236,6 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
                     ((uint64_t *)compressed_reps)[i] = std::min(uint64_t(q + 1), uint64_t(sub));
                 } else {
                     const int64_t isub = std::max(int64_t(0), std::min(int64_t(q + 1), static_cast<int64_t>(sub)));
-                    //if(sub < 0.) std::fprintf(stderr, "Mapping %g to %zd with sub = %Lg\n", double(sigs[i]), isub, sub);
                     if(fd == 4)      ((uint32_t *)compressed_reps)[i] = isub;
                     else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
                     else             ((uint8_t *)compressed_reps)[i] = isub;
@@ -148,9 +244,8 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
         }
     } else {
         //bbit:
-        std::fprintf(stderr, "Performing %d-bit compression. If k-mers are saved and b-bit signatures are used, the actual kmers are emitted.\n", int(fd * 8.));
-        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&revhasher](auto x) {
-            return kne ? revhasher(kmers[x]): reg2sig(sigs[x]);
+        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&wanghasher](auto x) {
+            return kne ? wanghasher(kmers[x]): reg2sig(sigs[x]);
         };
         if(fd == 0.5) {
             uint8_t *ptr = (uint8_t *)compressed_reps;
@@ -408,17 +503,24 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                 if(endswith(fn, ".xz")) ft = 2;
                 else if(endswith(fn, ".gz")) ft = 1;
                 else ft = 0;
-                cmd = std::string(ft == 0 ? "": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
+                cmd = std::string(ft == 0 ? "": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
                 if(cmd.empty()) {
-                    ifp = bfopen(fn.data(), "rb");
+                    struct stat st;
+                    if(::stat(fn.data(), &st)) {
+                        perror((std::string("Failed to stat ") + fn).data());
+                        std::exit(1);
+                    }
+                    result.cardinalities_[i] = st.st_size / sizeof(uint64_t);
+                    assert(st.st_size % sizeof(uint64_t) == 0);
                 } else {
+                    cmd = cmd + " " + fn;
                     ifp = ::popen(cmd.data(), "r");
+                    if(!ifp)
+                        THROW_EXCEPTION(std::runtime_error("Failed to read from '"s + cmd + "' for file " + fn));
+                    size_t c = 0;
+                    for(uint64_t x;std::fread(&x, sizeof(x), 1, ifp) == 1u;++c)
+                    result.cardinalities_[i] = c;
                 }
-                if(!ifp)
-                    THROW_EXCEPTION(std::runtime_error("Failed to read from '"s + cmd + "' for file " + fn));
-                size_t c = 0;
-                for(uint64_t x;std::fread(&x, sizeof(x), 1, ifp) == 1u;++c)
-                result.cardinalities_[i] = c;
             } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 if(!check_compressed(result.kmercountfiles_[i], ft)) throw std::runtime_error("Missing kmercountfile");
                 if(endswith(result.kmercountfiles_[i], ".xz")) ft = 2;

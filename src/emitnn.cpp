@@ -1,4 +1,5 @@
 #include "emitnn.h"
+#include "fmt/format.h"
 namespace dashing2 {
 
 // Choose to emit KNN graph in CSR-format
@@ -12,20 +13,19 @@ void emit_neighbors(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
     auto emitstart = std::chrono::high_resolution_clock::now();
     const std::string &outname = opts.outfile_path_;
     std::FILE *ofp = stdout;
-    if(outname.size() && (ofp = bfopen(outname.data(), "wb")) == nullptr)
+    if(outname.size() && outname != "-" && (ofp = bfopen(outname.data(), "wb")) == nullptr)
         throw std::runtime_error(std::string("Failed to open file ") + outname + " for writing");
+    if(ofp == stdout) buffer_to_blksize(ofp);
     if(opts.output_format_ == HUMAN_READABLE) {
-        std::fprintf(ofp, "#Collection\tNeighbor lists -- name:distance, separated by tabs\n");
+        fmt::print(ofp, "#Collection\tNeighbor lists -- name:distance, separated by tabs\n");
         for(size_t i = 0; i < lists.size(); ++i) {
             auto &l = lists[i];
-            std::fprintf(ofp, "%s", result.names_[i].data());
+            fmt::print(ofp, result.names_[i]);
             for(size_t j = 0; j < l.size(); ++j) {
                 const auto [msr, rhid] = l[j];
-                std::fputc('\t', ofp);
-                std::fwrite(result.names_[rhid].data(), 1, result.names_[rhid].size(), ofp);
-                std::fprintf(ofp, ":%0.8g", msr);
+                fmt::print(ofp, "\t{}:{:0.8g}", result.names_[rhid], msr);
             }
-            std::fputc('\n', ofp);
+            fmt::print(ofp, "\n");
         }
     } else {
         std::vector<uint64_t> indptr(lists.size() + 1);

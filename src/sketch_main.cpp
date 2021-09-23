@@ -44,7 +44,7 @@ int sketch_main(int argc, char **argv) {
     bool parse_by_seq = false;
     int by_chrom = false;
     double downsample_frac = 1.;
-    uint64_t seedseed = 13;
+    uint64_t seedseed = 0;
     size_t batch_size = 0;
     int nLSH = 2;
     Measure measure = SIMILARITY;
@@ -121,7 +121,7 @@ int sketch_main(int argc, char **argv) {
     }
     SketchingResult result;
     sketch_core(result, opts, paths, outfile);
-    result.nqueries(nq); // TODO: use nqueries to perform asymmetric comparisons
+    result.nqueries(nq);
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
         distopts.measure_ = measure;

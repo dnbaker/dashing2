@@ -1,9 +1,9 @@
 #pragma once
 #include "btree/map.h"
 #include "enums.h"
-#include "sketch/hash.h"
 #include "sketch/div.h"
 #include "sketch/common.h"
+#include "hash.h"
 
 namespace dashing2 {
 
@@ -33,7 +33,11 @@ struct CEIAdd {
 };
 using sketch::hash::CEIXOR;
 using sketch::hash::CEIMul;
+#if USE_SIMPLE_REVHASH
 using BHasher = sketch::hash::CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>>;
+#else
+using BHasher = sketch::hash::WangHash;
+#endif
 struct DHasher {
     BHasher bh;
     uint64_t seed_;
