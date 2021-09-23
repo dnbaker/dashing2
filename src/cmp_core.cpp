@@ -28,6 +28,7 @@ static INLINE uint64_t reg2sig(RegT x) {
 }
 
 namespace detail{
+#if 0
 INLINE void setnthbit(uint64_t *ptr, size_t index, bool val) {
     ptr[index / 64] |= uint64_t(val) << (index % 64);
 }
@@ -107,13 +108,27 @@ INLINE auto sbit_accum(const __m512i *s1, const __m512i *s2, uint16_t b) {
     return match;
 }
 INLINE auto matching_bits(const __m512i *s1, const __m512i *s2, uint16_t b) {
+#define ONE_ITER do {\
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3])); \
+        if(is_all_zeros(match)) return match;\
+        b -= 4; s1 += 4; s2 += 4;\
+        } while(0)
     // Only do popcnt if match is nonzero
     --b;
     __m512i match = ~(*s1++ ^ *s2++);
-    for(--b;b >= 4;b -= 4, s1 += 4, s2 += 4) {
-        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
-        if(is_all_zeros(match)) return match;
+    while(b >= 4) {
+        switch(b >> 2) {
+            case 8: ONE_ITER;[[fallthrough]];
+            case 7: ONE_ITER;[[fallthrough]];
+            case 6: ONE_ITER;[[fallthrough]];
+            case 5: ONE_ITER;[[fallthrough]];
+            case 4: ONE_ITER;[[fallthrough]];
+            case 3: ONE_ITER;[[fallthrough]];
+            case 2: ONE_ITER;[[fallthrough]];
+            case 1: ONE_ITER;
+        }
     }
+#undef ONE_ITER
     switch(b) {
         case 3: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
         case 2: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
@@ -122,6 +137,7 @@ INLINE auto matching_bits(const __m512i *s1, const __m512i *s2, uint16_t b) {
     }
     return is_all_zeros(match) ? match: popcnt512(match);
 }
+#endif
 #endif
 
 } // namespace detail
