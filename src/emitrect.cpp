@@ -357,9 +357,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                     if(unlikely(wrc < ssize_t(131072)))
                         throw std::runtime_error("Failed to POSIX write. Wrote "s + std::to_string(wrc) + " instead of 131072");
                 }
-                const auto lon = nwritten & 32767ul;
+                const ssize_t lon = (nwritten & 32767ul) * sizeof(float);
                 const ssize_t wrc = ::write(fd, pair.data() + (nblocks - 1) * nfloats_per_block, lon);
-                if(wrc != static_cast<ssize_t>(lon * sizeof(float))) {
+                if(wrc != lon) {
                    THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(pair.start()) + "-" + std::to_string(pair.stop()) + " to disk"));
                 }
 #endif
