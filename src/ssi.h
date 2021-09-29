@@ -250,6 +250,34 @@ public:
         }
     }
     template<typename Sketch>
+    size_t update_mt(const Sketch &item) {
+        if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
+        const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
+        if(is_bottomk_only_) {
+            insert_bottomk(item, my_id);
+            return my_id;
+        }
+        const size_t n_subtable_lists = regs_per_reg_.size();
+        //std::fprintf(stderr, "Starting update\n");
+        for(size_t i = 0; i < n_subtable_lists; ++i) {
+            //std::fprintf(stderr, "Accessing subtable %zu/%zu. mutexes size: %zu\n", i, n_subtable_lists, mutexes_.size());
+            auto &subtab = packed_maps_[i];
+            std::vector<std::mutex> *mptr = nullptr;
+            if(mutexes_.size() > i) mptr = &mutexes_[i];
+            const size_t nsubs = subtab.size();
+            OMP_PFOR
+            for(size_t j = 0; j < nsubs; ++j) {
+                KeyT myhash = hash_index(item, i, j);
+                auto subsub = subtab[j];
+                std::optional<std::lock_guard<std::mutex>> lock(mptr ? std::optional<std::lock_guard<std::mutex>>((*mptr)[j]): std::optional<std::lock_guard<std::mutex>>());
+                auto it = subsub.find(myhash);
+                if(it == subsub.end()) subsub.emplace(myhash, std::vector<IdT>{static_cast<IdT>(my_id)});
+                else it->second.push_back(my_id);
+            }
+        }
+        return my_id;
+    }
+    template<typename Sketch>
     size_t update(const Sketch &item) {
         if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
         const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));

@@ -9,7 +9,7 @@
 
 namespace dashing2 {
 
-static constexpr size_t MINCAND = 5;
+static constexpr size_t MINCAND = 8;
 #ifndef EARLYSTOP
 #define EARLYSTOP 1
 #endif
@@ -82,31 +82,34 @@ void par_reduce(T *x, size_t n) {
 
 
 
-void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
-                sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result,
-                bool earlystop=EARLYSTOP, size_t mincand=MINCAND)
+void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
+                   sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result,
+                   bool earlystop=EARLYSTOP, size_t mincand=MINCAND)
 {
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     assert(opts.sketchsize_ * oid < result.signatures_.size());
     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
     auto [hits, counts, nper] = idx.query_candidates(span, mincand, size_t(-1), earlystop);
+    const size_t nh = hits.size();
     std::vector<LSHDistType> vals(hits.size());
-    auto vp = vals.data();
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
-    for(const auto id: hits) {
+    OMP_PFOR_DYN
+    for(size_t i = 0; i < nh; ++i) {
+        const auto id = hits[i];
         assert(id < ids.size());
-        *vp++ = mult * compare(opts, result, oid, ids[id]);
+        vals[i] = mult * compare(opts, result, oid, ids[id]);
     }
-    auto mv = std::min_element(vals.data(), vp);
-    if(hits.empty() || (mv != vp && mult * *mv < simt)) {
+    auto mv = std::min_element(vals.begin(), vals.end());
+    if(hits.empty() || (mv != vals.end() && mult * *mv < simt)) {
+        //DBG_ONLY(if(mv != vals.end()) std::fprintf(stderr, "mult* mv: %g. simt: %g\n", mult * *mv, simt);)
         ids.push_back(oid);
         constituents.emplace_back();
         const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
         //DBG_ONLY(size_t myid = )
-        idx.update(mp);
-        //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), nids, ids.size() * 100. / result.names_.size());)
+        idx.update_mt(mp);
+        //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu  hits, %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), hits.size(), ids.size(), ids.size() * 100. / (myid + 1));)
     } else {
-        auto pos = mv - vals.data();
+        auto pos = mv - vals.begin();
         assert(size_t(pos) < hits.size());
         auto cluster_id = hits[pos];
         assert(ids.size() == constituents.size());
@@ -116,6 +119,48 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
         auto &rep = ids[cluster_id];
         cv.push_back(oid);
         //DBG_ONLY(std::fprintf(stderr, "Cluster with rep %s is adding new item named %s\n", result.names_[ids[cluster_id]].data(), result.names_[oid].data());)
+        if(result.cardinalities_[cv.back()] > result.cardinalities_[rep]) {
+            // In case the items are unsorted with respect to cardinality due to the parallelism, swap it out.
+            // That way, we'll keep the highest-cardinality set as the representative
+            std::swap(cv.back(), rep);
+        }
+    }
+}
+
+void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
+                sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result,
+                bool earlystop=EARLYSTOP, size_t mincand=MINCAND)
+{
+    const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
+    assert(opts.sketchsize_ * oid < result.signatures_.size());
+    const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+    auto [hits, counts, nper] = idx.query_candidates(span, mincand, size_t(-1), earlystop);
+    std::vector<LSHDistType> vals(hits.size());
+    auto vp = vals.begin();
+    const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
+    for(const auto id: hits) {
+        assert(id < ids.size());
+        *vp++ = mult * compare(opts, result, oid, ids[id]);
+    }
+    auto mv = std::min_element(vals.begin(), vals.end());
+    if(hits.empty() || (mv != vals.end() && mult * *mv < simt)) {
+        ids.push_back(oid);
+        constituents.emplace_back();
+        const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+        //DBG_ONLY(size_t myid = )
+        idx.update(mp);
+        //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu  hits, %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), hits.size(), ids.size(), ids.size() * 100. / result.names_.size());)
+    } else {
+        auto pos = mv - vals.begin();
+        assert(size_t(pos) < hits.size());
+        auto cluster_id = hits[pos];
+        assert(ids.size() == constituents.size());
+        assert(cluster_id < constituents.size());
+        assert(cluster_id < ids.size());
+        auto &cv = constituents[cluster_id];
+        auto &rep = ids[cluster_id];
+        cv.push_back(oid);
+        DBG_ONLY(std::fprintf(stderr, "Cluster with rep %s is adding new item named %s\n", result.names_[ids[cluster_id]].data(), result.names_[oid].data());)
         if(result.cardinalities_[cv.back()] > result.cardinalities_[rep]) {
             // In case the items are unsorted with respect to cardinality due to the parallelism, swap it out.
             // That way, we'll keep the highest-cardinality set as the representative
@@ -264,11 +309,23 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             /* exhaustive loading*/
         }
     } else {
+#if 1
+            auto &ids = ret.first;
+            auto &constituents = ret.second;
+            auto &idx = retidx;
+            auto do_update = [&,st=nt<=1](auto id) __attribute__((always_inline)) {
+                st ? update_res(id, ids, constituents, idx, opts, result)
+                   : update_res_mt(id, ids, constituents, idx, opts, result);
+            };
+            for(size_t i = 0; i < nelem;do_update(order[i++]));
+#else
         if(nt <= 1) {
             auto &ids = ret.first;
             auto &constituents = ret.second;
             auto &idx = retidx;
-            for(size_t i = 0; i < nelem; update_res(order[i++], ids, constituents, idx, opts, result));
+            for(size_t i = 0; i < nelem;) {
+                 update_res(order[i++], ids, constituents, idx, opts, result);
+            }
         } else {
             std::vector<GreedyClustering> subs;
             retidx.unlock();
@@ -286,8 +343,9 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             par_reduce(subs.data(), subs.size());
             retidx = std::move(subs.front().idx_);
             ret = std::make_pair(std::move(subs.front().ids_), std::move(subs.front().constituents_));
+            cleanup(ret, retidx, opts, result, true);
         }
-        cleanup(ret, retidx, opts, result, true);
+#endif
     }
     return ret;
 }
@@ -317,9 +375,9 @@ void dedup_emit(const std::vector<LSHIDType> &ids, const std::vector<std::vector
     const size_t nitems = result.names_.size();
     const double avgsize = double(nitems) / nclusters;
     DBG_ONLY(const double medsz = medsize(constituents);)
-    DBG_ONLY(std::fprintf(stderr, "#%zu clusters of average size %0.4g (median size %0.4g), separated by minimum similarity %g\n", ids.size(), avgsize, medsz, opts.min_similarity_);)
+    DBG_ONLY(std::fprintf(stderr, "#Clustering %zu items yielded %zu clusters of average size %0.4g (median size %0.4g), separated by minimum similarity %g\n", nitems, ids.size(), avgsize, medsz, opts.min_similarity_);)
     if(opts.output_format_ == HUMAN_READABLE) {
-        fmt::print(ofp, "#{} clusters of average size {}, separated by minimum similarity {}\n", ids.size(), avgsize, opts.min_similarity_);
+        fmt::print(ofp, "#Clustering {} items yielded {} clusters of average size {}, separated by minimum similarity {}\n", nitems, ids.size(), avgsize, opts.min_similarity_);
         for(size_t cid = 0;cid < ids.size(); ++cid) {
             auto repid = ids[cid];
             fmt::print(ofp, "Cluster-{}\t{}:{}", cid, result.names_[repid], repid);
