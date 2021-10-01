@@ -315,7 +315,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                     if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass()) func(x);
                 };
                 auto lfunc2 = [&func](auto x) __attribute__((always_inline)) {func(maskfn(x));};
-                auto seqp = kseqs.kseqs_ + tid;
+                const auto seqp = kseqs.kseqs_ + tid;
 #define FUNC_FE(f) \
 do {\
     if(!opts.fs_ && opts.kmer_downsample_frac_ == 1.) {\
