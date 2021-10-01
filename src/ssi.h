@@ -158,7 +158,6 @@ public:
         if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
         if(starting_idx == size_t(-1) || starting_idx > regs_per_reg_.size()) starting_idx = regs_per_reg_.size();
         const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
-        //std::fprintf(stderr, "Inserting id = %zu\n", my_id);
         const size_t n_subtable_lists = regs_per_reg_.size();
         ska::flat_hash_map<IdT, uint32_t> rset;
         std::vector<IdT> passing_ids;
@@ -258,9 +257,7 @@ public:
             return my_id;
         }
         const size_t n_subtable_lists = regs_per_reg_.size();
-        //std::fprintf(stderr, "Starting update\n");
         for(size_t i = 0; i < n_subtable_lists; ++i) {
-            //std::fprintf(stderr, "Accessing subtable %zu/%zu. mutexes size: %zu\n", i, n_subtable_lists, mutexes_.size());
             auto &subtab = packed_maps_[i];
             std::vector<std::mutex> *mptr = nullptr;
             if(mutexes_.size() > i) mptr = &mutexes_[i];
@@ -268,7 +265,7 @@ public:
             OMP_PFOR
             for(size_t j = 0; j < nsubs; ++j) {
                 KeyT myhash = hash_index(item, i, j);
-                auto subsub = subtab[j];
+                auto &subsub = subtab[j];
                 std::optional<std::lock_guard<std::mutex>> lock(mptr ? std::optional<std::lock_guard<std::mutex>>((*mptr)[j]): std::optional<std::lock_guard<std::mutex>>());
                 auto it = subsub.find(myhash);
                 if(it == subsub.end()) subsub.emplace(myhash, std::vector<IdT>{static_cast<IdT>(my_id)});
@@ -286,9 +283,7 @@ public:
             return my_id;
         }
         const size_t n_subtable_lists = regs_per_reg_.size();
-        //std::fprintf(stderr, "Starting update\n");
         for(size_t i = 0; i < n_subtable_lists; ++i) {
-            //std::fprintf(stderr, "Accessing subtable %zu/%zu. mutexes size: %zu\n", i, n_subtable_lists, mutexes_.size());
             auto &subtab = packed_maps_[i];
             std::vector<std::mutex> *mptr = nullptr;
             if(mutexes_.size() > i) mptr = &mutexes_[i];
@@ -408,12 +403,10 @@ public:
             items_per_row.push_back(passing_ids.size());
         } else {
             for(std::ptrdiff_t i = starting_idx;--i >= 0 && rset.size() < maxcand;) {
-                //std::fprintf(stderr, "Getting maps at %zu\n", i);
                 auto &m = packed_maps_[i];
                 const size_t nsubs = m.size();
                 const size_t items_before = passing_ids.size();
                 for(size_t j = 0; j < nsubs; ++j) {
-                    //std::fprintf(stderr, "%zu/%zu\n", j, nsubs);
                     KeyT myhash = hash_index(item, i, j);
                     auto it = m[j].find(myhash);
                     if(it != m[j].end()) {

@@ -160,7 +160,7 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
         auto &cv = constituents[cluster_id];
         auto &rep = ids[cluster_id];
         cv.push_back(oid);
-        DBG_ONLY(std::fprintf(stderr, "Cluster with rep %s is adding new item named %s\n", result.names_[ids[cluster_id]].data(), result.names_[oid].data());)
+        //DBG_ONLY(std::fprintf(stderr, "Cluster with rep %s is adding new item named %s\n", result.names_[ids[cluster_id]].data(), result.names_[oid].data());)
         if(result.cardinalities_[cv.back()] > result.cardinalities_[rep]) {
             // In case the items are unsorted with respect to cardinality due to the parallelism, swap it out.
             // That way, we'll keep the highest-cardinality set as the representative
