@@ -12,7 +12,7 @@ INC=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibo
 OPT+= -O3 -march=native -fopenmp -pipe $(CACHE_SIZE_FLAG)
 OPTMV:=$(OPT)
 OPT+= -std=c++17
-WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic # -Wno-shift-count-overflow
+WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic -Wno-array-bounds # -Wno-shift-count-overflow
 EXTRA+=-DNOCURL -DDASHING2_VERSION=\"$(GIT_VERSION)\" -DFMT_HEADER_ONLY
 CXXFLAGS+= -std=c++17
 CFLAGS+= -std=c11
