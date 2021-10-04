@@ -58,6 +58,7 @@ enum CountingType {
 
 void buffer_to_blksize(std::FILE *fp);
 std::FILE *bfopen(const char *path, const char *fmt);
+std::FILE *bfreopen(const char *path, const char *fmt, std::FILE *fp);
 
 
 enum KmerSketchResultType {

@@ -59,6 +59,7 @@ enum OptArg {
     LO_ARG("distout", OPTARG_CMPOUT)\
     LO_ARG("cmp-outfile", OPTARG_CMPOUT)\
     LO_ARG("outprefix", OPTARG_OUTPREF)\
+    LO_ARG("prefix", OPTARG_OUTPREF)\
     LO_ARG("topk", 'K')\
     LO_ARG("similarity-threshold", 'T')\
     LO_ARG("fastcmp", OPTARG_FASTCMP)\
@@ -69,6 +70,8 @@ enum OptArg {
     LO_ARG("count-threshold", 'm')\
     LO_ARG("threshold", 'm')\
     LO_FLAG("binary-output", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
+    LO_FLAG("emit-binary", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
+    LO_FLAG("binary", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
     LO_FLAG("bagminhash", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("prob", 'P', sketch_space, SPACE_PSET)\
     LO_FLAG("probs", 'P', sketch_space, SPACE_PSET)\
@@ -123,6 +126,7 @@ enum OptArg {
     {"protein14", no_argument, 0, OPTARG_PROTEIN14},\
     {"downsample", required_argument, 0, OPTARG_DOWNSAMPLE_FRACTION},\
     {"cache", no_argument, 0, 'W'},\
+    {"cache-sketches", no_argument, 0, 'W'},\
     {"no-canon", no_argument, 0, 'C'},\
     {"set", no_argument, 0, OPTARG_SET},\
     {"exact-kmer-dist", no_argument, 0, OPTARG_EXACT_KMER_DIST},\
@@ -153,7 +157,7 @@ enum OptArg {
             }\
             break;\
             }
-#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN20; canon = false; std::fprintf(stderr, "Parsing 20-character amino acod sequences\n"); break;} \
+#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN20; canon = false; std::fprintf(stderr, "Parsing 20-character amino acid sequences\n"); break;} \
     case OPTARG_PROTEIN6: {rht = bns::PROTEIN_6; canon = false; std::fprintf(stderr, "Parsing amino acid sequences with 6-letter compressed alphabet.\n"); break;}\
     case OPTARG_PROTEIN14: {rht = bns::PROTEIN14; canon = false; std::fprintf(stderr, "Parsing amino acid sequences with 14-letter compressed alphabet.\n"); break;}\
     case OPTARG_PROTEIN8: {rht = bns::PROTEIN8; canon = false; std::fprintf(stderr, "Using 3-bit protein encoding\n"); break;}
@@ -285,6 +289,11 @@ static constexpr const char *siglen =
         "e.g. - instead of -S12 in Dashing, you would specify -S 4096\n"\
         "For convenience, we offer another argument to specify the size in log2.\n"\
         "-L/--sketch-size-l2: Set sketchsize to 2^<arg>. Must be > 0 and < 64\n"\
+        "--cache/--cache-sketches: Save sketches to disk instead of re-computing each time.\n"\
+        "\tDependent option:\n"\
+        "\t                 --outprefix: specifies directory in which to save sketches instead of adjacent to the input files.\n"\
+        "\t                 aliases: --prefix.\n"\
+        "\t                 Note: You must have permission to write in the specified folder.\n"\
         "\nSketching modes\n\n"\
         "When sketching, there are several sketch options.\n"\
         "We use the SetSketch as the default sketch structure; This ignores multiplicities, except for filtering \n"\
@@ -390,8 +399,8 @@ static constexpr const char *siglen =
         "For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
         "<arg> may be 8 (64 bits), 4 (32 bits), 2 (16 bits), 1 (8 bits), or .5 (4 bits)\n"\
         "Results may even be somewhat stabilized by the use of smaller registers.\n"\
-        "      Dependent Option:\n"\
-        "          --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
+        "\tDependent Option:\n"\
+        "\t                 --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
         "For minhash sketches (setsketch, probminhash, and bagminhash), this uses full registers instead of compressed.\n"\
         "--refine-exact\tThis causes the candidate KNN graph to be refined to a final KNN graph using full distances.\tIf using sketches, then full hash registers are used.\nOtherwise, exact k-mer comparison functions are used.\n"\
         "\n\nDistance specifications\n"\

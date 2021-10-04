@@ -21,7 +21,7 @@ int contain_usage() {
     return EXIT_FAILURE;
 }
 
-std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::vector<std::string> input_files, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids) {
+std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::vector<std::string> input_files, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer) {
     std::vector<flat_hash_map<uint64_t, uint64_t>> res(input_files.size());
     //KSeqHolder kseqs(nthreads);
     OMP_PFOR_DYN
@@ -29,12 +29,9 @@ std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::sco
         auto &myres = res[i];
         auto func = [&](auto kmer) {
             kmer = maskfn(kmer);
+            if(kmer < minkmer || kmer > maxkmer) return;
             auto kmeridit = kmer2ids.find(kmer);
-            if(kmeridit == kmer2ids.end()) {
-                //std::fprintf(stderr, "Not in map, ignoring k-mer\n");
-                // We don't have to process any k-mers not in this set!
-                return;
-            }
+            if(kmeridit == kmer2ids.end()) return;
             auto it = myres.find(kmer);
             if(it == myres.end()) it = myres.emplace(kmer, 1).first;
             else ++it->second;
@@ -111,8 +108,11 @@ int contain_main(int argc, char **argv) {
     for(size_t i = 0; i < nitems; ++i) {
         uint64_t *ptr = ((uint64_t *)dbptr + 3 + sketchsize * i);
         assert((const char *)ptr < &db.data()[db.size()]);
+#if _OPENMP >= 201307L
+        #pragma omp simd
+#endif
         for(size_t j = 0; j < sketchsize; ++j) {
-            const auto v = ptr[j];
+            const uint64_t v = ptr[j];
             kmer2ids[v].push_back(i);
             auto it = fhs.find(v);
             if(it == fhs.end()) fhs.emplace(v, 1u);
@@ -120,7 +120,17 @@ int contain_main(int argc, char **argv) {
         }
         fhs.clear();
     }
-    std::vector<flat_hash_map<uint64_t, uint64_t>> res = get_results(e64, rh64, streamfiles, kmer2ids);
+    // We can quickly filter out k-mers by using min/max k-mers
+    // to eliminate anything > or <
+    // These only take a comparison instruction and a jump, which means there's no cache miss.
+    // We also compute the minimum over the set of keys, so it's on the order of the number of unique sampled k-mers
+    // instead of the total number of sampled k-mers (num_samples * sample_size).
+    uint64_t maxkmer = 0, minkmer = std::numeric_limits<uint64_t>::max();
+    for(const auto &pair: kmer2ids) {
+        maxkmer = std::max(maxkmer, pair.first);
+        minkmer = std::min(minkmer, pair.first);
+    }
+    std::vector<flat_hash_map<uint64_t, uint64_t>> res = get_results(e64, rh64, streamfiles, kmer2ids, maxkmer, minkmer);
     std::vector<float> coverage_mat(nitems * streamfiles.size());
     std::vector<float> coverage_stats(nitems * streamfiles.size());
     OMP_PFOR_DYN

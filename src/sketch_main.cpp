@@ -1,7 +1,6 @@
 #include "sketch_core.h"
 #include "options.h"
 #include "cmp_main.h"
-#include <filesystem>
 
 
 
@@ -64,10 +63,6 @@ int sketch_main(int argc, char **argv) {
         //std::fprintf(stderr, "After getopt argument %d, of is %s\n",c , to_string(of).data());
     }
     if(k < 0) k = nregperitem(rht, use128);
-    const std::string ex(std::filesystem::absolute(std::filesystem::path(argv[-1])));
-    std::string cmd(ex);
-    for(char **s = argv; *s; cmd += std::string(" ") + *s++);
-    std::fprintf(stderr, "#Invocation: %s\n", cmd.data());
     if(nt < 0) {
         char *s = std::getenv("OMP_NUM_THREADS");
         if(s) nt = std::max(std::atoi(s), 1);
@@ -105,7 +100,7 @@ int sketch_main(int argc, char **argv) {
         .save_kmercounts(save_kmercounts)
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
-        .cmd(cmd).count_threshold(count_threshold)
+        .count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress)
         .seedseed(seedseed);
     opts.by_chrom_ = by_chrom;

@@ -112,6 +112,12 @@ std::FILE *bfopen(const char *s, const char *fmt) {
     if(ifp) buffer_to_blksize(ifp);
     return ifp;
 }
+std::FILE *bfreopen(const char *s, const char *fmt, std::FILE *fp) {
+    if((fp = std::freopen(s, fmt, fp)))
+        buffer_to_blksize(fp);
+    return fp;
+}
+
 
 uint64_t XORMASK = 0x724526e320f9967dull;
 u128_t XORMASK2 = (u128_t(12499408336417088522ull) << 64) | XORMASK;

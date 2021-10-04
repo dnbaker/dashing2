@@ -2,7 +2,6 @@
 #include "sketch_core.h"
 #include "options.h"
 #include "refine.h"
-#include <filesystem>
 #include <type_traits>
 
 namespace dashing2 {
@@ -179,9 +178,6 @@ int cmp_main(int argc, char **argv) {
     if(k < 0) k = nregperitem(rht, use128);
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
-    std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[-1])));
-    for(char **s = argv; *s; cmd += std::string(" ") + *s++);
-    std::fprintf(stderr, "#Invocation: %s\n", cmd.data());
     if(nt < 0) {
         char *s = std::getenv("OMP_NUM_THREADS");
         if(s) nt = std::max(std::atoi(s), 1);
@@ -212,7 +208,7 @@ int cmp_main(int argc, char **argv) {
         .save_kmercounts(save_kmercounts)
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
-        .cmd(cmd).count_threshold(count_threshold)
+        .count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress)
         .seedseed(seedseed);
     opts.by_chrom_ = by_chrom;

@@ -40,6 +40,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
         std::fwrite(&ns, sizeof(ns), 1, of);
         ns = opts.sketchsize_;
         std::fwrite(&ns, sizeof(ns), 1, of);
+        std::fclose(of);
         result.signatures_.assign(outfile);
         result.signatures_.resize(res.registers().size());
         std::copy(res.registers().begin(), res.registers().end(), result.signatures_.begin());
