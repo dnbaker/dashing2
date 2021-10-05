@@ -28,7 +28,9 @@ static INLINE uint64_t reg2sig(double x) {
     return sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
 }
 static INLINE uint64_t reg2sig(float x) {
-    return sketch::hash::WangHash::hash(*(const uint32_t *)&x ^ 0xa3407fb23cd20eful);
+    uint32_t v;
+    std::memcpy(&v, &x, 4);
+    return sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
 }
 
 template<typename T>
