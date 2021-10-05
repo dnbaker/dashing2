@@ -48,7 +48,7 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
     T *const origptr = ptr;
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
         gzFile fp = gzopen(path.data(), "rb");
-        if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
+        if(!fp) return 0; //THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
         gzread(fp, cardinality, sizeof(*cardinality));
         for(int nr;
             !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
@@ -58,6 +58,7 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
     } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
         auto cmd = std::string("xz -dc ") + path;
         std::FILE *fp = ::popen(cmd.data(), "r");
+        if(fp == 0) return 0;
         std::fread(cardinality, sizeof(*cardinality), 1, fp);
         for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
         ::pclose(fp);
@@ -71,7 +72,10 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
     if(!::isatty(fd)) {
         struct stat st;
         if(::fstat(fd, &st)) THROW_EXCEPTION(std::runtime_error(std::string("Failed to fstat") + path));
-        if(!st.st_size) std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+        if(!st.st_size) {
+            std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+            return 0;
+        }
         size_t expected_bytes = st.st_size - 8;
         size_t nb = std::fread(ptr, 1, expected_bytes, fp);
         if(nb != expected_bytes) {
@@ -285,7 +289,10 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         {
             if(opts.kmer_result_ < FULL_MMER_SET) {
                 if(ret.signatures_.size()) {
-                    load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]);
+                    if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
+                        std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
+                        goto perform_sketch;
+                    }
                     //ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
                     DBG_ONLY(std::fprintf(stderr, "Sketch was loaded from %s and has card %g\n", destination.data(), ret.cardinalities_[myind]);)
                 }
@@ -307,6 +314,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
             std::fprintf(stderr, "kc save %d, kmer result %s, dkcif %d\n", opts.save_kmercounts_, to_string(opts.kmer_result_).data(), dkcif);
 #endif
         }
+        perform_sketch:
         __RESET(tid);
         auto perf_for_substrs = [&](const auto &func) __attribute__((always_inline)) {
             for_each_substr([&](const std::string &subpath) {

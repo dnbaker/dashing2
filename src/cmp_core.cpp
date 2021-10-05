@@ -13,18 +13,30 @@
 namespace dashing2 {
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result);
 void dedup_emit(const std::vector<LSHIDType> &, const std::vector<std::vector<LSHIDType>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result);
-//using sketch::lsh::SetSketchIndex;
-static INLINE uint64_t reg2sig(RegT x) {
-    uint64_t seed = 0;
-    static_assert(sizeof(RegT) <= 8 || sizeof(RegT) == 16, "Must be <= 8 or 16");
-    if constexpr(sizeof(RegT) <= 8) {
-        std::memcpy(&seed, &x, sizeof(x));
-        seed = sketch::hash::WangHash::hash(seed ^ 0xa3407fb23cd20eful);
-    } else {
-        const uint64_t *arr = (const uint64_t *)&x;
-        seed = sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(arr[0] ^ 0xa3407fb23cd20eful) ^ arr[1]);
+
+static INLINE uint64_t reg2sig(__float128 x) {
+    const uint64_t *const p = (const uint64_t *)&x;
+    return sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(p[0] ^ 0xa3407fb23cd20eful) ^ p[1]);
+}
+static INLINE uint64_t reg2sig(long double x) {
+    const uint64_t *const p = (const uint64_t *)&x;
+    return sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(p[0] ^ 0xa3407fb23cd20eful) ^ p[1]);
+}
+static INLINE uint64_t reg2sig(double x) {
+    return sketch::hash::WangHash::hash(*(const uint64_t *)&x ^ 0xa3407fb23cd20eful);
+}
+static INLINE uint64_t reg2sig(float x) {
+    return sketch::hash::WangHash::hash(*(const uint32_t *)&x ^ 0xa3407fb23cd20eful);
+}
+
+template<typename T>
+size_t simdcount(const T *ptr, size_t n, const T v=static_cast<T>(0)) {
+    size_t ret = 0;
+    #pragma omp simd reduction(+:ret)
+    for(size_t i = 0; i < n; ++i) {
+        ret += ptr[i] == v;
     }
-    return seed;
+    return ret;
 }
 
 namespace detail{
@@ -188,7 +200,6 @@ INLINE void *ptr_roundup(void *ptr) {
 }
 
 void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance) {
-    sketch::hash::WangHash wanghasher;
     if(fd >= sizeof(RegT)) return;
     ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
@@ -260,8 +271,8 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
         }
     } else {
         //bbit:
-        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&wanghasher](auto x) {
-            return kne ? wanghasher(kmers[x]): reg2sig(sigs[x]);
+        auto getsig = [kne=!kmers.empty(),&sigs,&kmers](auto x) -> uint64_t {
+            return kne ? sketch::hash::WangHash::hash(kmers[x]): reg2sig(sigs[x]);
         };
         if(fd == 0.5) {
             uint8_t *ptr = (uint8_t *)compressed_reps;
@@ -276,9 +287,10 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
             static_assert(shift[2] == 48, "Shift 2 must be 48");
             static_assert(shift[4] == 32, "Shift 4 must be 32");
             static_assert(shift[8] == 0, "Shift 8 must be 0");
+            const int myshift = shift[int(fd)];
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs; ++i) {
-                const uint64_t sig = getsig(i) >> shift[int(fd)];
+                const uint64_t sig = getsig(i) >> myshift;
                 if(fd == 8) ((uint64_t *)compressed_reps)[i] = sig;
                 else if(fd == 4) ((uint32_t *)compressed_reps)[i] = sig;
                 else if(fd == 2) ((uint16_t *)compressed_reps)[i] = sig;
@@ -479,10 +491,10 @@ case v: {\
     return ret;
 }
 
-template<typename MHT, typename KMT>
-inline size_t densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
+template<typename MHT>
+inline size_t densify(MHT *minhashes, uint64_t *const kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
 {
-    const long long unsigned int ne = std::count(minhashes, minhashes + sketchsize, empty);
+    const long long unsigned int ne = simdcount(minhashes, sketchsize, empty);
     if(ne == sketchsize  || ne == 0) return ne;
     for(size_t i = 0; i < sketchsize; ++i) {
         if(minhashes[i] != empty) continue;
@@ -496,7 +508,7 @@ inline size_t densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const
         minhashes[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
     }
-    assert(std::count(minhashes, minhashes + sketchsize, empty) == 0);
+    assert(std::find(minhashes, minhashes + sketchsize, empty) == minhashes + sketchsize);
     return ne;
 }
 
@@ -565,14 +577,15 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
     if(opts.kmer_result_ == ONE_PERM) {
         const schism::Schismatic<uint64_t> sd(opts.sketchsize_);
         const size_t n = result.cardinalities_.size();
-        uint64_t *const kp= result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
+        uint64_t *const kp = result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
         size_t totaldens = 0;
 #ifdef _OPENMP
         #pragma omp parallel for schedule(dynamic, 32) reduction(+:totaldens)
 #endif
         for(size_t i = 0; i < n;++i) {
-            auto lp = &result.signatures_[opts.sketchsize_ * i];
-            totaldens += densify(lp, kp ? &kp[opts.sketchsize_ * i]: kp, opts.sketchsize_, sd);
+            totaldens += densify(&result.signatures_[opts.sketchsize_ * i],
+                                 kp ? &kp[opts.sketchsize_ * i]: kp,
+                                 opts.sketchsize_, sd);
         }
         if(totaldens > 0) std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);
     }
