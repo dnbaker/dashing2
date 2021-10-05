@@ -106,7 +106,6 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
         constituents.emplace_back();
         const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
         idx.update_mt(mp);
-        idx.update_mt(mp);
     } else {
         auto pos = mv - vals.begin();
         assert(size_t(pos) < hits.size());
