@@ -105,9 +105,8 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
         ids.push_back(oid);
         constituents.emplace_back();
         const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-        //DBG_ONLY(size_t myid = )
         idx.update_mt(mp);
-        //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu  hits, %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), hits.size(), ids.size(), ids.size() * 100. / (myid + 1));)
+        idx.update_mt(mp);
     } else {
         auto pos = mv - vals.begin();
         assert(size_t(pos) < hits.size());
@@ -147,7 +146,6 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
         ids.push_back(oid);
         constituents.emplace_back();
         const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-        //DBG_ONLY(size_t myid = )
         idx.update(mp);
         //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu  hits, %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), hits.size(), ids.size(), ids.size() * 100. / result.names_.size());)
     } else {
@@ -264,7 +262,8 @@ void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType
 }
 
 
-std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result) {
+std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result)
+{
     std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> ret;
     const size_t nelem = result.names_.size();
     std::unique_ptr<LSHIDType[]> order(new LSHIDType[nelem]);
@@ -287,6 +286,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
     if(char *s = std::getenv("EXHAUSITVE_DEDUP"))
         if(std::atoi(s) >= 0)
             exhaustive = true;
+    const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     if(exhaustive) {
         const LSHDistType mult = distance(opts.measure_)  ? 1.: -1.;
         auto &ids = ret.first;
@@ -309,7 +309,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             /* exhaustive loading*/
         }
     } else {
-#if 1
+#ifndef USE_NEW_PARALLEL_DEDUP
             auto &ids = ret.first;
             auto &constituents = ret.second;
             auto &idx = retidx;
@@ -319,14 +319,57 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             };
             for(size_t i = 0; i < nelem;do_update(order[i++]));
 #else
+        auto &idx = retidx;
+        auto &ids = ret.first;
+        auto &constituents = ret.second;
         if(nt <= 1) {
-            auto &ids = ret.first;
-            auto &constituents = ret.second;
-            auto &idx = retidx;
             for(size_t i = 0; i < nelem;) {
                  update_res(order[i++], ids, constituents, idx, opts, result);
             }
         } else {
+#if 1
+            using RetT = std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>>;
+            std::vector<RetT> batched_hits(nt);
+            const size_t nbatches = (nelem + nt - 1) / nt;
+            const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
+            std::deque<std::mutex> locks;
+            for(size_t i = 0; i < nbatches; ++i) {
+                const size_t start = nt * i, end = std::min(start + nt, nelem);
+                #pragma omp parallel for
+                for(size_t j = start; j < end; ++j) {
+                    const auto oid = order[j];
+                    const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+                    auto &rettup = batched_hits[j - start];
+                    rettup = idx.query_candidates(span, MINCAND, size_t(-1), EARLYSTOP);
+                    auto &[hits, counts, nper] = rettup;
+                    std::vector<LSHDistType> vals;
+                    typename std::vector<LSHDistType>::iterator mv;
+                    if(!hits.empty()) {
+                        vals.resize(hits.size());
+                        for(size_t i = 0, e = hits.size(); i < e; ++i) {
+                            const auto id = hits[i];
+                            vals[i] = mult * compare(opts, result, oid, ids[id]);
+                        }
+                        mv = std::min_element(vals.begin(), vals.end());
+                        if(mult * *mv < simt) {
+                            auto pos = mv - vals.begin();
+                            auto cluster_id = hits[pos];
+                            auto &cv = constituents[cluster_id];
+                            std::lock_guard<std::mutex> lock(locks[cluster_id]);
+                            cv.push_back(oid);
+                        }
+                        continue;
+                    }
+                    OMP_CRITICAL {
+                        ids.push_back(oid);
+                        constituents.emplace_back();
+                        locks.emplace_back();
+                        const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+                        idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
+                    }
+                }
+            }
+#else
             std::vector<GreedyClustering> subs;
             retidx.unlock();
             subs.reserve(nt);
@@ -344,6 +387,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             retidx = std::move(subs.front().idx_);
             ret = std::make_pair(std::move(subs.front().ids_), std::move(subs.front().constituents_));
             cleanup(ret, retidx, opts, result, true);
+#endif
         }
 #endif
     }
