@@ -23,7 +23,9 @@ static INLINE uint64_t reg2sig(long double x) {
     return sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(p[0] ^ 0xa3407fb23cd20eful) ^ p[1]);
 }
 static INLINE uint64_t reg2sig(double x) {
-    return sketch::hash::WangHash::hash(*(const uint64_t *)&x ^ 0xa3407fb23cd20eful);
+    uint64_t v;
+    std::memcpy(&v, &x, 8);
+    return sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
 }
 static INLINE uint64_t reg2sig(float x) {
     return sketch::hash::WangHash::hash(*(const uint32_t *)&x ^ 0xa3407fb23cd20eful);

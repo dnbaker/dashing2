@@ -286,7 +286,6 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
     if(char *s = std::getenv("EXHAUSITVE_DEDUP"))
         if(std::atoi(s) >= 0)
             exhaustive = true;
-    const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     if(exhaustive) {
         const LSHDistType mult = distance(opts.measure_)  ? 1.: -1.;
         auto &ids = ret.first;
@@ -328,6 +327,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             }
         } else {
 #if 1
+            const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
             using RetT = std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>>;
             std::vector<RetT> batched_hits(nt);
             const size_t nbatches = (nelem + nt - 1) / nt;
