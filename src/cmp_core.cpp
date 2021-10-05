@@ -627,8 +627,17 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
 
     // Step 2: Build nearest-neighbor candidate table
     if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {
-        std::vector<pqueue> neighbor_lists = build_index(idx, opts, result);
-        refine_results(neighbor_lists, opts, result);
+        const bool exact_knn = std::getenv("EXACT_KNN");
+        std::vector<pqueue> neighbor_lists = exact_knn ? build_index(idx, opts, result): build_exact_graph(idx, opts, result);
+        if(!exact_knn) {
+            refine_results(neighbor_lists, opts, result);
+        } else if(!distance(opts.measure_)) {
+            OMP_PFOR
+            for(size_t i = 0; i < neighbor_lists.size(); ++i) {
+                auto beg = neighbor_lists[i].begin(), e = neighbor_lists[i].end();
+                std::transform(beg, e, beg, [&](PairT x) {return PairT{-x.first, x.second};});
+            }
+        }
         emit_neighbors(neighbor_lists, opts, result);
     } else if(opts.output_kind_ == DEDUP) {
         // The ID corresponds to the representative of a cluster;

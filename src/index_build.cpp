@@ -129,5 +129,48 @@ VERBOSE_ONLY(
     std::fprintf(stderr, "Index building took %Lgs. KNN Generation took %Lgs\n", std::chrono::duration<long double, std::ratio<1, 1>>(idxstop - idxstart).count(), std::chrono::duration<long double, std::ratio<1, 1>>(knnstop - idxstop).count());
     return neighbor_lists;
 }
+std::vector<pqueue> build_exact_graph(SetSketchIndex<LSHIDType, LSHIDType> &, const Dashing2DistOptions &opts, const SketchingResult &result, const bool) {
+    // Builds the LSH index and populates nearest-neighbor lists in parallel
+    const size_t ns = result.names_.size();
+    //const int topk = opts.min_similarity_ > 0. ? -1: opts.num_neighbors_ > 0 ? 1: 0;
+    // Make the similarities negative so that the smallest items are the ones with the highest similarities
+    std::vector<pqueue> neighbor_lists(ns);
+    if(opts.output_kind_ == KNN_GRAPH && opts.num_neighbors_ > 0)
+        for(auto &n: neighbor_lists)
+            n.reserve(opts.num_neighbors_);
+    std::vector<flat_hash_set<LSHIDType>> neighbor_sets(ns);
+    std::unique_ptr<std::mutex[]> mutexes(new std::mutex[ns]);
+    auto idxstart = std::chrono::high_resolution_clock::now();
+    auto idxstop = std::chrono::high_resolution_clock::now();
+    // Build neighbor lists
+    // Currently parallelizing the outer loop,
+    // but the inner might be worth trying
+
+    const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
+    const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9;
+    OMP_PFOR_DYN
+    for(size_t id = 0; id < ns; ++id) {
+        auto &nl = neighbor_lists[id];
+        for(size_t rhid = 0; rhid < ns; ++rhid) {
+            if(rhid == id) continue;
+            auto sim = mult * compare(opts, result, id, rhid);
+            if(opts.output_kind_ == KNN_GRAPH) {
+                if(nl.empty() || sim < nl.top().first) {
+                    nl.push({sim, rhid});
+                }
+                if(nl.size() > size_t(opts.num_neighbors_)) nl.pop();
+            } else if(sim < mult * simt) {
+                nl.push({sim, rhid});
+            }
+        }
+    }
+    OMP_PFOR_DYN
+    for(size_t i = 0; i < ns; ++i)
+        neighbor_lists[i].sort();
+    auto knnstop = std::chrono::high_resolution_clock::now();
+
+    std::fprintf(stderr, "Index building took %Lgs. KNN Generation took %Lgs\n", std::chrono::duration<long double, std::ratio<1, 1>>(idxstop - idxstart).count(), std::chrono::duration<long double, std::ratio<1, 1>>(knnstop - idxstop).count());
+    return neighbor_lists;
+}
 
 }
