@@ -1,6 +1,9 @@
 import scipy.sparse as sp
 import numpy as np
+from collections import namedtuple
 
+ParsedSignatureMatrix = namedtuple("ParsedSignatureMatrix", 'nseqs, cardinalities, signatures')
+ParsedKmerMatrix = namedtuple("ParsedKmerMatrix", 'k,w,canon,alphabet,sketchsize,seed')
 
 def parse_knn(path, idsize=4, dstsize=4):
     '''
@@ -36,4 +39,75 @@ def parse_knn(path, idsize=4, dstsize=4):
     data = np.frombuffer(fp.read(dstsize * nnz), dtype=ft)
     return sp.csr_matrix((data, indices, indptr), shape=(nids, nids))
 
-__all__ = ["parse_knn"]
+
+
+def parse_binary_signatures(path):
+    '''
+    If -o is specified for dashing2, this file has signatures and metadata saved to disk.
+    Parsing this with `parse_binary_signatures` will yield a ParsedSignatureMatrix tuple
+    consisting of (nseqs, cardinalities, signatures).
+    '''
+    dat = np.memmap(path, np.uint8) # Map whole file
+    nseqs, sketchsize = map(int, dat[:16].view(np.uint64))
+    cardinalities = dat[16:16 + (8 * nseqs)].view(np.float64)
+    signatures = dat[16 + (8 * nseqs):].view(np.float64).reshape(-1, sketchsize)
+    return ParsedSignatureMatrix(nseqs, cardinalities, signatures)
+
+
+def parse_binary_kmers(path):
+    '''
+    If --save-kmers is specified for dashing2, this file has kmers and metadata saved to disk.
+    Parsing this with `parse_binary_kmers` will yield a ParsedKmerMatrix tuple
+    consisting of (k, w, canon, alphabet, sketchsize, signatures).
+    (nseqs is implicit in the matrix because sketchsize is specified.)
+    '''
+    dat = np.memmap(path, np.uint8)
+    d, s, k, w  = map(int, dat[:16].view(np.uint32))
+    canon = bool((d >> 8) & 1)
+    alph = alphabetcvt[d & 0xff]
+    seed = int(dat[16:24].view(np.uint64))
+    kmers = dat[24:].view(np.uint64).reshape(-1, s)
+    return ParsedKmerMatrix(k, w, canon, alph, s, seed)
+
+
+def alphabetcvt(x):
+    itd = {"DNA": 0, "BYTES": 1, "PROTEIN20": 2, "PROTEIN14": 3, "PROTEIN6": 4, "DNA2": 5, "DNAC": 6}
+    itl = ["DNA", "BYTES", "PROTEIN20", "PROTEIN14", "PROTEIN6", "DNA2", "DNAC"]
+    if isinstance(x, str):
+        return itd[x.upper()]
+    if isinstance(x, int):
+        return itl[x]
+    raise InvalidArgument("alphabetcvt only accepts strings (which are decoded to integers to match Bonsai's alphabets) or integers (which returns a string describing the alphabet.")
+
+
+def pairwise_equality_compare(input_matrix, nthreads=1):
+    '''
+    This performs pairwise equality comparisons along a signature matrix.
+    Inputs:
+        input_matrix - 2D Numpy Matrix of dimensions (nrec, nsigs)
+        nthreads = 1: number of threads to use. This is only used if sketch (https://github.com/dnbaker/sketch) has been installed.
+
+    If `sketch` is not installed, computation will be performed serially via NumPy rather than using parallelized and SIMD-accelerated comparisons.
+    Return a distance matrix of size nrec-choose-2 (nrec * (nrec - 1) // 2).
+    This can be converted into a complete distance matrix using scipy.spatial.distance.squareform.
+    '''
+    assert isinstance(input_matrix, np.ndarray), "Expected a numpy array for this function."
+    assert input_matrix.ndim == 2, "Expected a 2d array"
+    nthreads = max(nthreads, 1)
+    try:
+        import sketch
+        return sketch.pcmp(input_matrix, nthreads=nthreads)
+    except ImportError:
+        print("sketch python library not installed (see https://github.com/dnbaker/sketch). Falling back to numpy computation.", file=sys.stderr)
+        nr, nc = input_matrix.shape
+        dt = np.uint8 if nr <= 0xFF else (np.uint16 if nr <= 0xFFFF else (np.uint32 if nr <= 0xFFFFFFFF else np.uint64))
+        shape = nr * (nr - 1) // 2
+        ret = np.zeros(shape)
+        idx = 0
+        for i in range(nr):
+            lc = nr - i - 1
+            ret[idx:idx + lc] = np.sum(input_matrix[i] == input_matrix[i + 1, nr], axis=1)
+            idx += lc
+        return ret
+
+__all__ = ["parse_knn", "parse_binary_signatures", "ParsedSignatureMatrix", "parse_binary_kmers", "ParsedKmerMatrix", "alphabetcvt", "pairwise_equality_compare"]
