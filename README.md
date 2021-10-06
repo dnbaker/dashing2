@@ -271,3 +271,9 @@ export D2_CACHE_SIZE=67108864
 ```
 
 As an aside, these sketches are stored contiguously to reduce fragmentation compared to Dashing1.
+
+
+## Parsing code
+
+For parsing binary output (--binary-output/--emit-binary), we provide [Python code](https://github.com/dnbaker/dashing2/blob/main/python/parse.py) for parsing into NumPy/SciPy matrices.
+This can save on processing time, and it avoids differences due to formatting/parsing loss.
