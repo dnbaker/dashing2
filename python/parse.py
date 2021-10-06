@@ -110,4 +110,19 @@ def pairwise_equality_compare(input_matrix, nthreads=1):
             idx += lc
         return ret
 
-__all__ = ["parse_knn", "parse_binary_signatures", "ParsedSignatureMatrix", "parse_binary_kmers", "ParsedKmerMatrix", "alphabetcvt", "pairwise_equality_compare"]
+
+def parse_binary_clustering(path, d64=False):
+    '''
+    Parses binary output for dashing2 --greedy computation.
+    Yields a list of numpy arrays of integers specifying which entities belong in which clusters, one for each cluster.
+    These clusters are fully distinct.
+    '''
+    data = np.memmap(fpath, np.uint8)
+    nclusters, nsets = map(int, data[:16].view(np.uint64))
+    endp = 16 + 8 * nclusters
+    indptr = data[16:endp].view(np.uint64)
+    indices = data[endp:].view(np.uint64 if d64 else np.uint32)
+    return [indices[start:end] for start, end in zip(indptr[:-1], indptr[1:])]
+
+
+__all__ = ["parse_knn", "parse_binary_signatures", "ParsedSignatureMatrix", "parse_binary_kmers", "ParsedKmerMatrix", "alphabetcvt", "pairwise_equality_compare", "parse_binary_clustering"]

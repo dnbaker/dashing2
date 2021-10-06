@@ -201,6 +201,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         DBG_ONLY(std::fprintf(stderr, "old sig size %zu, cap %zu, new %zu\n", ret.signatures_.size(), ret.signatures_.capacity(), newsz * opts.sketchsize_);)
         assert(oldsz * opts.sketchsize_ <= ret.signatures_.capacity());
         ret.signatures_.resize(oldsz * opts.sketchsize_);
+        DBG_ONLY(std::fprintf(stderr, "ret signature size: %zu\n", ret.signatures_.size());)
     }
     DBG_ONLY(std::fprintf(stderr, "mmer matrix size %zu. save kmers %d\n", ret.kmers_.size(), opts.save_kmers_);)
     DBG_ONLY(std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");)

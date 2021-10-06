@@ -5,11 +5,14 @@
 #ifdef _OPENMP
 #include "omp.h"
 #endif
+#include "dedup_core.h"
 
 
 namespace dashing2 {
 
-static constexpr size_t MINCAND = 8;
+static constexpr size_t MINCAND = 12;
+int exhaustive_dedup = 0;
+
 #ifndef EARLYSTOP
 #define EARLYSTOP 1
 #endif
@@ -104,8 +107,7 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
         //DBG_ONLY(if(mv != vals.end()) std::fprintf(stderr, "mult* mv: %g. simt: %g\n", mult * *mv, simt);)
         ids.push_back(oid);
         constituents.emplace_back();
-        const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-        idx.update_mt(mp);
+        idx.update_mt(const minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
     } else {
         auto pos = mv - vals.begin();
         assert(size_t(pos) < hits.size());
@@ -281,11 +283,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
     // General strategy:
     // Use a given similarity threshold to then group items into the cluster
     // to which they are most similar if they are > than
-    bool exhaustive = false;
-    if(char *s = std::getenv("EXHAUSITVE_DEDUP"))
-        if(std::atoi(s) >= 0)
-            exhaustive = true;
-    if(exhaustive) {
+    if(exhaustive_dedup) {
         const LSHDistType mult = distance(opts.measure_)  ? 1.: -1.;
         auto &ids = ret.first;
         auto &constituents = ret.second;
@@ -293,7 +291,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             std::pair<LSHDistType, LSHIDType> bestc = {std::numeric_limits<LSHDistType>::max(), -1};
 #ifdef _OPENMP
 #pragma omp declare reduction(min: std::pair<LSHDistType, LSHIDType>: omp_out = std::min(omp_in, omp_out))
-            #pragma omp parallel for schedule(dynamic, 32) reduction(min:bestc)
+            #pragma omp parallel for schedule(dynamic) reduction(min:bestc)
 #endif
             for(size_t j = 0; j < ids.size(); ++j) {
                 bestc = std::min(bestc, std::pair<LSHDistType, LSHIDType>{compare(opts, result, i, ids[j]) * mult, j});
@@ -307,7 +305,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             /* exhaustive loading*/
         }
     } else {
-#ifndef USE_NEW_PARALLEL_DEDUP
+#if 1
             auto &ids = ret.first;
             auto &constituents = ret.second;
             auto &idx = retidx;
@@ -331,41 +329,55 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             std::vector<RetT> batched_hits(nt);
             const size_t nbatches = (nelem + nt - 1) / nt;
             const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
-            std::deque<std::mutex> locks;
+            //std::deque<std::mutex> locks;
+            std::mutex global_lock;
             for(size_t i = 0; i < nbatches; ++i) {
                 const size_t start = nt * i, end = std::min(start + nt, nelem);
                 #pragma omp parallel for
                 for(size_t j = start; j < end; ++j) {
                     const auto oid = order[j];
                     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-                    auto &rettup = batched_hits[j - start];
+                    const auto bhidx = j - start;
+                    //std::fprintf(stderr, "bh9dx: %zu\n", bhidx);
+                    auto &rettup = batched_hits.at(bhidx);
                     rettup = idx.query_candidates(span, MINCAND, size_t(-1), EARLYSTOP);
                     auto &[hits, counts, nper] = rettup;
                     std::vector<LSHDistType> vals;
                     typename std::vector<LSHDistType>::iterator mv;
                     if(!hits.empty()) {
+                        //DBG_ONLY(std::fprintf(stderr, "Non-empty hits.\n");)
                         vals.resize(hits.size());
                         for(size_t i = 0, e = hits.size(); i < e; ++i) {
-                            const auto id = hits[i];
-                            vals[i] = mult * compare(opts, result, oid, ids[id]);
+                            if(ids.size() < hits[i]) {
+                                std::fprintf(stderr, "ids of size %zu yielded a hit index %zu at %zu. Skipping, but this shouldn't happen...\n", ids.size(), size_t(hits[i]), i);
+                                continue;
+                            }
+                            vals[i] = mult * compare(opts, result, oid, ids.at(hits[i]));
                         }
                         mv = std::min_element(vals.begin(), vals.end());
                         if(mult * *mv < simt) {
-                            auto pos = mv - vals.begin();
-                            auto cluster_id = hits[pos];
-                            auto &cv = constituents[cluster_id];
-                            std::lock_guard<std::mutex> lock(locks[cluster_id]);
+                            auto cluster_id = hits.at(mv - vals.begin());
+                            std::lock_guard<std::mutex> global(global_lock);
+                            if(cluster_id >= constituents.size()) std::fprintf(stderr, "constit %zu hitting cluster_id %zu\n", constituents.size(), cluster_id);
+                            auto &cv = constituents.at(cluster_id);
+                            //std::lock_guard<std::mutex> lock(locks.at(cluster_id));
                             cv.push_back(oid);
+                            auto &brep = cv.back();
+                            auto &orep = ids[cluster_id];
+                            if(result.cardinalities_[orep] < result.cardinalities_[brep]) {
+                                DBG_ONLY(std::fprintf(stderr, "Swapping longer entity to be the representative. %g vs %g\n", result.cardinalities_[orep], result.cardinalities_[brep]);)
+                                std::swap(orep, brep);
+                            }
+                            continue;
                         }
-                        continue;
                     }
-                    OMP_CRITICAL {
-                        ids.push_back(oid);
-                        constituents.emplace_back();
-                        locks.emplace_back();
-                        const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-                        idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
-                    }
+                    std::lock_guard<std::mutex> global(global_lock);
+                    ids.push_back(oid);
+                    constituents.emplace_back();
+                    //locks.emplace_back();
+                    idx.update(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
+                    assert(idx.size() == constituents.size());
+                    assert(idx.size() == ids.size());
                 }
             }
 #else
