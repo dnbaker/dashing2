@@ -3,7 +3,7 @@ import numpy as np
 from collections import namedtuple
 
 ParsedSignatureMatrix = namedtuple("ParsedSignatureMatrix", 'nseqs, cardinalities, signatures')
-ParsedKmerMatrix = namedtuple("ParsedKmerMatrix", 'k,w,canon,alphabet,sketchsize,seed')
+ParsedKmerMatrix = namedtuple("ParsedKmerMatrix", 'k,w,canon,alphabet,sketchsize,seed,kmers')
 
 def parse_knn(path, idsize=4, dstsize=4):
     '''
@@ -67,7 +67,7 @@ def parse_binary_kmers(path):
     alph = alphabetcvt[d & 0xff]
     seed = int(dat[16:24].view(np.uint64))
     kmers = dat[24:].view(np.uint64).reshape(-1, s)
-    return ParsedKmerMatrix(k, w, canon, alph, s, seed)
+    return ParsedKmerMatrix(k, w, canon, alph, s, seed, kmers)
 
 
 def alphabetcvt(x):
@@ -102,7 +102,7 @@ def pairwise_equality_compare(input_matrix, nthreads=1):
         nr, nc = input_matrix.shape
         dt = np.uint8 if nr <= 0xFF else (np.uint16 if nr <= 0xFFFF else (np.uint32 if nr <= 0xFFFFFFFF else np.uint64))
         shape = nr * (nr - 1) // 2
-        ret = np.zeros(shape)
+        ret = np.zeros(shape, dtype=dt)
         idx = 0
         for i in range(nr):
             lc = nr - i - 1
