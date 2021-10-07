@@ -3,6 +3,7 @@
 #include <vector>
 #include <mutex>
 #include "index_build.h"
+#include "dedup_core.h"
 
 namespace dashing2 {
 
