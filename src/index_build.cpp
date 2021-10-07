@@ -55,9 +55,10 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
     // Builds the LSH index and populates nearest-neighbor lists in parallel
     const size_t ns = result.names_.size();
     const int topk = opts.min_similarity_ > 0. ? -1: opts.num_neighbors_ > 0 ? 1: 0;
-    const LSHDistType INFLATE_FACTOR = 3.5;
+    static constexpr const LSHDistType INFLATE_FACTOR = 3.5;
     // Make the similarities negative so that the smallest items are the ones with the highest similarities
-    size_t ntoquery = opts.num_neighbors_ <= 0 ? ns - 1: std::min(ns - 1, size_t(opts.num_neighbors_ * INFLATE_FACTOR));
+    size_t ntoquery = opts.num_neighbors_ <= 0 ? (maxcand_global <= 0 ? ns - 1: size_t(maxcand_global))
+                                               : std::min(ns - 1, size_t(opts.num_neighbors_ * INFLATE_FACTOR));
     std::vector<pqueue> neighbor_lists(ns);
     if(opts.output_kind_ == KNN_GRAPH && opts.num_neighbors_ > 0)
         for(auto &n: neighbor_lists)
