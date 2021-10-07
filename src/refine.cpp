@@ -24,21 +24,26 @@ void refine_results(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
         auto beg = l.begin(), e = l.end();
         const size_t lsz = l.size();
         DBG_ONLY(std::fprintf(stderr, "Processing seqset %zu/%s\n", i, result.names_[i].data());)
-        if(opts.num_neighbors_ > 0 && size_t(opts.num_neighbors_) < lsz) {
+        if(opts.num_neighbors_ > 0) {
             // -- as above, for the KNN-format
-#ifndef NDEBUG
-            std::fprintf(stderr, "lsz: %zu. nn: %u\n", lsz, opts.num_neighbors_);
-            std::fprintf(stderr, "Filtering for top-%d neighbors\n", opts.num_neighbors_);
-#endif
             for(size_t j = 0; j < lsz; ++j) {
                 auto &[dist, id] = l[j];
                 dist = mult * compare(opts, result, lhid, id);
             }
             std::sort(beg, e);
-            if(size_t(opts.num_neighbors_) < l.size() - 1)
-                l.resize(opts.num_neighbors_);
+            if(!distance(opts.measure_)) {
+                //Trimming all neighbors with 0 similarity.
+                l.erase(std::find_if(beg, e, [](const auto &x) {return x.first == 0.;}), e);
+                beg = l.begin(), e = l.end();
+            }
+            if(size_t(opts.num_neighbors_) < l.size()) {
+                const auto fit = std::find_if(beg + opts.num_neighbors_, e, [bs=l[opts.num_neighbors_ - 1].first](const auto &x) {return x.first > bs;});
+                const auto olsz = l.size();
+                l.erase(fit, e);
+            }
+
         } else if(opts.min_similarity_ > 0.) {
-            static constexpr size_t EARLY_FAILURE_EXIT_THRESHOLD = 25u;
+            static constexpr size_t EARLY_FAILURE_EXIT_THRESHOLD = 20u;
             // -- as above, for the NN_GRAPH_THRESHOLD format
             // This stopping after `EARLY_FAILURE_EXIT_THRESHOLD` consecutive beyond-threshold points is purely heuristic
             // and may change.
@@ -62,11 +67,6 @@ void refine_results(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
                 return x.first == MDIST || (dist ? x.first > ms: -x.first < ms);
             }), l.end());
             std::sort(l.begin(), l.end());
-#ifndef NDEBUG
-            if(!l.empty()) {
-                std::fprintf(stderr, "Smallest comparison: %g. threshold: %g\n", l.back().first, opts.min_similarity_);
-            }
-#endif
         } else {
             std::transform(beg, e, beg, [&](PairT x) -> PairT {return {mult * compare(opts, result, lhid, x.second), x.second};});
             std::sort(beg, e);
@@ -74,7 +74,6 @@ void refine_results(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
         // Now that we've selected the top-k/bottom-k (similarity/distance), multiply
         if(!distance(opts.measure_)) {
             std::transform(beg, e, beg, [&](PairT x) {return PairT{-x.first, x.second};});
-            //std::reverse(beg, e);
         }
     }
     auto refinstop = std::chrono::high_resolution_clock::now();

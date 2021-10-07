@@ -120,7 +120,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
     }, path);
     if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
         if(!bns::isfile(outpath)) {
-            std::fprintf(stderr, "Creating outpath '%s'\n", outpath.data());
+            DBG_ONLY(std::fprintf(stderr, "Creating outpath '%s'\n", outpath.data());)
             std::FILE *fp = std::fopen(outpath.data(), "wb");
             if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open path "s + outpath + " for writing"));
             std::fclose(fp);

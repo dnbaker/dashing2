@@ -52,7 +52,7 @@ enum CountingType {
 
 #define THROW_EXCEPTION(...) do {\
         auto exception__ = __VA_ARGS__;\
-        std::cerr << "Exception " << exception__.what() << " from " << std::this_thread::get_id() << '\n';\
+        std::cerr << "Exception " << exception__.what() << " from thread " << std::this_thread::get_id() << '\n';\
         throw exception__;\
     } while(0)
 
