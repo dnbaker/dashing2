@@ -37,9 +37,8 @@ void refine_results(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
                 beg = l.begin(), e = l.end();
             }
             if(size_t(opts.num_neighbors_) < l.size()) {
-                const auto fit = std::find_if(beg + opts.num_neighbors_, e, [bs=l[opts.num_neighbors_ - 1].first](const auto &x) {return x.first > bs;});
-                const auto olsz = l.size();
-                l.erase(fit, e);
+                l.erase(std::find_if(beg + opts.num_neighbors_, e, [bs=l[opts.num_neighbors_ - 1].first](const auto &x) {return x.first > bs;}),
+                        e);
             }
 
         } else if(opts.min_similarity_ > 0.) {
