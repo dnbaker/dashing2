@@ -269,6 +269,9 @@ void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType
 
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result)
 {
+    if(opts.fasta_dedup_  && !opts.parse_by_seq_) {
+        THROW_EXCEPTION(std::invalid_argument("Fasta deduplication requires --parse-by-seq to be provided."));
+    }
     std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> ret;
     const size_t nelem = result.names_.size();
     std::unique_ptr<LSHIDType[]> order(new LSHIDType[nelem]);
@@ -436,7 +439,19 @@ void dedup_emit(const std::vector<LSHIDType> &ids, const std::vector<std::vector
     const double avgsize = double(nitems) / nclusters;
     DBG_ONLY(const double medsz = medsize(constituents);)
     DBG_ONLY(std::fprintf(stderr, "#Clustering %zu items yielded %zu clusters of average size %0.4g (median size %0.4g), separated by minimum similarity %g\n", nitems, ids.size(), avgsize, medsz, opts.min_similarity_);)
-    if(opts.output_format_ == HUMAN_READABLE) {
+    if(opts.fasta_dedup_) {
+        for(size_t cid = 0;cid < ids.size(); ++cid) {
+            auto repid = ids[cid];
+            fmt::print(ofp, ">Cluster-{}_{}", cid, result.names_[repid]);
+            if(!constituents[cid].empty()) {
+                fmt::print(ofp, " ");
+                for(const size_t childid: constituents[cid]) {
+                    fmt::print(ofp, "{}:{},", result.names_[childid], childid);
+                }
+            }
+            fmt::print(ofp, "\n{}\n", result.sequences_[repid]);
+        }
+    } else if(opts.output_format_ == HUMAN_READABLE) {
         fmt::print(ofp, "#Clustering {} items yielded {} clusters of average size {}, separated by minimum similarity {}\n", nitems, ids.size(), avgsize, opts.min_similarity_);
         for(size_t cid = 0;cid < ids.size(); ++cid) {
             auto repid = ids[cid];
