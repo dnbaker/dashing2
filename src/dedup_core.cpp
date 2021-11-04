@@ -10,28 +10,34 @@
 
 namespace dashing2 {
 
-static constexpr size_t MINCAND = 12;
 int exhaustive_dedup = 0;
+int maxcand_global = -1;
 
-#ifndef EARLYSTOP
-#define EARLYSTOP 1
-#endif
+size_t default_candidates(const size_t nitems) {
+    if(maxcand_global > 0) return maxcand_global;
+    if(nitems <= 10000u)
+        return std::max(std::max(nitems / 50, size_t(std::ceil(std::sqrt(nitems)))), size_t(3));
+    if(nitems <= 1000000u)
+        return std::ceil(std::cbrt(nitems));
+    return std::ceil(std::pow(std::log(nitems), 3.));
+}
+
 
 struct GreedyClustering {
     std::vector<LSHIDType> ids_;
     std::vector<std::vector<LSHIDType>> constituents_;
     sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> idx_;
-    double simt, mult;
-    bool earlystop;
-    size_t mincand;
+    const double simt, mult;
+    const size_t maxcand_;
     const SketchingResult &result;
     const Dashing2DistOptions &opts;
-    GreedyClustering(const SketchingResult &rs, const Dashing2DistOptions &opts, const sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, bool earlystop=EARLYSTOP, size_t mincand=MINCAND)
-        : idx_(idx.clone()),
-        earlystop(earlystop), mincand(mincand), result(rs), opts(opts)
+    GreedyClustering(const SketchingResult &rs, const Dashing2DistOptions &opts, const sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx)
+        : idx_(idx.clone())
+          , simt(opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9)
+          , mult(distance(opts.measure_)  ? 1.: -1.)
+          , maxcand_(default_candidates(rs.cardinalities_.size()))
+          , result(rs), opts(opts)
     {
-        simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
-        mult = distance(opts.measure_)  ? 1.: -1.;
     }
     GreedyClustering &operator +=(const GreedyClustering &o) {
         const size_t osz = o.ids_.size();
@@ -39,7 +45,7 @@ struct GreedyClustering {
             auto &orep = o.ids_[i];
             auto &ocon = o.constituents_[i];
             const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * orep], opts.sketchsize_);
-            auto [hits, counts, nper] = idx_.query_candidates(span, mincand, size_t(-1), earlystop);
+            auto [hits, counts, nper] = idx_.query_candidates(span, maxcand_, size_t(-1), earlystop);
             std::vector<LSHDistType> vals(hits.size());
             auto vp = vals.data();
             const auto vps = vp;
@@ -86,13 +92,12 @@ void par_reduce(T *x, size_t n) {
 
 
 void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
-                   sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result,
-                   bool earlystop=EARLYSTOP, size_t mincand=MINCAND)
+                   sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result, const size_t maxcands)
 {
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     assert(opts.sketchsize_ * oid < result.signatures_.size());
     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-    auto [hits, counts, nper] = idx.query_candidates(span, mincand, size_t(-1), earlystop);
+    auto [hits, counts, nper] = idx.query_candidates(span, maxcands, size_t(-1), earlystop);
     const size_t nh = hits.size();
     std::vector<LSHDistType> vals(hits.size());
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
@@ -107,7 +112,7 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
         //DBG_ONLY(if(mv != vals.end()) std::fprintf(stderr, "mult* mv: %g. simt: %g\n", mult * *mv, simt);)
         ids.push_back(oid);
         constituents.emplace_back();
-        idx.update_mt(const minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
+        idx.update_mt(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
     } else {
         auto pos = mv - vals.begin();
         assert(size_t(pos) < hits.size());
@@ -128,13 +133,12 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
 }
 
 void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
-                sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result,
-                bool earlystop=EARLYSTOP, size_t mincand=MINCAND)
+                sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result, const size_t maxcands)
 {
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     assert(opts.sketchsize_ * oid < result.signatures_.size());
     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-    auto [hits, counts, nper] = idx.query_candidates(span, mincand, size_t(-1), earlystop);
+    auto [hits, counts, nper] = idx.query_candidates(span, maxcands, size_t(-1), earlystop);
     std::vector<LSHDistType> vals(hits.size());
     auto vp = vals.begin();
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
@@ -168,7 +172,7 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
     }
 }
 
-void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> &ret, sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result, bool earlystop) {
+void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> &ret, sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result) {
     DBG_ONLY(std::fprintf(stderr, "%zu clusters before\n", ret.first.size());)
     DBG_ONLY(auto ts = std::chrono::high_resolution_clock::now();)
     std::vector<size_t> indicestorm;
@@ -265,6 +269,9 @@ void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType
 
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result)
 {
+    if(opts.fasta_dedup_  && !opts.parse_by_seq_) {
+        THROW_EXCEPTION(std::invalid_argument("Fasta deduplication requires --parse-by-seq to be provided."));
+    }
     std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> ret;
     const size_t nelem = result.names_.size();
     std::unique_ptr<LSHIDType[]> order(new LSHIDType[nelem]);
@@ -283,6 +290,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
     // General strategy:
     // Use a given similarity threshold to then group items into the cluster
     // to which they are most similar if they are > than
+    const size_t maxcands = default_candidates(nelem);
     if(exhaustive_dedup) {
         const LSHDistType mult = distance(opts.measure_)  ? 1.: -1.;
         auto &ids = ret.first;
@@ -310,8 +318,8 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             auto &constituents = ret.second;
             auto &idx = retidx;
             auto do_update = [&,st=nt<=1](auto id) __attribute__((always_inline)) {
-                st ? update_res(id, ids, constituents, idx, opts, result)
-                   : update_res_mt(id, ids, constituents, idx, opts, result);
+                st ? update_res(id, ids, constituents, idx, opts, result, maxcands)
+                   : update_res_mt(id, ids, constituents, idx, opts, result, maxcands);
             };
             for(size_t i = 0; i < nelem;do_update(order[i++]));
 #else
@@ -320,7 +328,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         auto &constituents = ret.second;
         if(nt <= 1) {
             for(size_t i = 0; i < nelem;) {
-                 update_res(order[i++], ids, constituents, idx, opts, result);
+                 update_res(order[i++], ids, constituents, idx, opts, result, maxcands);
             }
         } else {
 #if 1
@@ -340,7 +348,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
                     const auto bhidx = j - start;
                     //std::fprintf(stderr, "bh9dx: %zu\n", bhidx);
                     auto &rettup = batched_hits.at(bhidx);
-                    rettup = idx.query_candidates(span, MINCAND, size_t(-1), EARLYSTOP);
+                    rettup = idx.query_candidates(span, MINCAND, size_t(-1), earlystop);
                     auto &[hits, counts, nper] = rettup;
                     std::vector<LSHDistType> vals;
                     typename std::vector<LSHDistType>::iterator mv;
@@ -385,14 +393,14 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             retidx.unlock();
             subs.reserve(nt);
             while(subs.size() < unsigned(nt))
-                subs.emplace_back(result, opts, retidx, true, MINCAND);
+                subs.emplace_back(result, opts, retidx);
 #ifdef _OPENMP
             #pragma omp parallel for schedule(dynamic, 32)
 #endif
             for(size_t i = 0; i < nelem; ++i) {
                 const int tid = OMP_ELSE(omp_get_thread_num(), 0);
                 auto &lres = subs[tid];
-                update_res(order[i], lres.ids_, lres.constituents_, lres.idx_, opts, result);
+                update_res(order[i], lres.ids_, lres.constituents_, lres.idx_, opts, result, maxcands);
             }
             par_reduce(subs.data(), subs.size());
             retidx = std::move(subs.front().idx_);
@@ -431,7 +439,19 @@ void dedup_emit(const std::vector<LSHIDType> &ids, const std::vector<std::vector
     const double avgsize = double(nitems) / nclusters;
     DBG_ONLY(const double medsz = medsize(constituents);)
     DBG_ONLY(std::fprintf(stderr, "#Clustering %zu items yielded %zu clusters of average size %0.4g (median size %0.4g), separated by minimum similarity %g\n", nitems, ids.size(), avgsize, medsz, opts.min_similarity_);)
-    if(opts.output_format_ == HUMAN_READABLE) {
+    if(opts.fasta_dedup_) {
+        for(size_t cid = 0;cid < ids.size(); ++cid) {
+            auto repid = ids[cid];
+            fmt::print(ofp, ">Cluster-{}_{}", cid, result.names_[repid]);
+            if(!constituents[cid].empty()) {
+                fmt::print(ofp, " ");
+                for(const size_t childid: constituents[cid]) {
+                    fmt::print(ofp, "{}:{},", result.names_[childid], childid);
+                }
+            }
+            fmt::print(ofp, "\n{}\n", result.sequences_[repid]);
+        }
+    } else if(opts.output_format_ == HUMAN_READABLE) {
         fmt::print(ofp, "#Clustering {} items yielded {} clusters of average size {}, separated by minimum similarity {}\n", nitems, ids.size(), avgsize, opts.min_similarity_);
         for(size_t cid = 0;cid < ids.size(); ++cid) {
             auto repid = ids[cid];

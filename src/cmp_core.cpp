@@ -491,7 +491,7 @@ case v: {\
 #undef CORRECT_RES
         // Compare exact representations, not compressed shrunk
     }
-    if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<double>::max();
+    if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<decltype(ret)>::max();
     return ret;
 }
 
@@ -651,7 +651,8 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         } else if(!distance(opts.measure_)) {
             OMP_PFOR
             for(size_t i = 0; i < neighbor_lists.size(); ++i) {
-                auto beg = neighbor_lists[i].begin(), e = neighbor_lists[i].end();
+                auto &nl = neighbor_lists[i];
+                auto beg = nl.begin(), e = nl.end();
                 std::transform(beg, e, beg, [&](PairT x) {return PairT{-x.first, x.second};});
             }
         }

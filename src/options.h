@@ -48,6 +48,7 @@ enum OptArg {
     OPTARG_NLSH,
     OPTARG_ENTROPYMIN,
     OPTARG_SIGRAMLIMIT,
+    OPTARG_MAXCAND,
     OPTARG_DUMMY
 };
 
@@ -143,7 +144,8 @@ enum OptArg {
     {"entmin", no_argument, 0, OPTARG_ENTROPYMIN},\
     {"by-chrom", no_argument, (int *)&by_chrom, 1},\
     {"sketch-size-l2", required_argument, 0, 'L'},\
-    {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT}\
+    {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT},\
+    {"maxcand", required_argument, 0, OPTARG_MAXCAND}
 
 
 
@@ -152,7 +154,10 @@ enum OptArg {
 #define GREEDY_FIELD case OPTARG_GREEDY: {\
     char *eptr;\
     ok = OutputKind::DEDUP; similarity_threshold = std::strtod(optarg, &eptr);\
-    if((*eptr | 32) == 'e') {exhaustive_dedup = true; std::fprintf(stderr, "Using exhaustive_dedup.\n");}\
+    for(;*eptr;++eptr) {\
+        if((*eptr | 32) == 'e') {exhaustive_dedup = true;}\
+        if((*eptr | 32) == 'f') {fasta_dedup = true;}\
+    }\
     break;\
 }
 
@@ -230,6 +235,10 @@ enum OptArg {
         }\
         case OPTARG_SIGRAMLIMIT: {\
             MEMSIGTHRESH = std::strtoull(optarg, nullptr, 10);\
+        } break;\
+        case OPTARG_MAXCAND: {\
+            maxcand_global = std::atoi(optarg);\
+            if(maxcand_global < 0) {std::fprintf(stderr, "Warning: maxcand_global < 0. This defaults to heuristics for selecting the number of candidates. This may be in error.\n");}\
         } break;
 
 
@@ -385,7 +394,12 @@ static constexpr const char *siglen =
         "Greedy HIT Clustering\n"\
         "This is enabled by a single parameter, --greedy <float (0-1]>, which determines the similarity threshold below which a new cluster is formed.\n"\
         "--greedy <float (0-1]> For greedy clustering by a given similarity threshold; this selects representative sequences or sequence sets.\n"\
-        "This uses an LSH index by default. To compare all points to all clusters, add E to the end of the flag. (e.g., '--greedy 0.8E')"\
+        "This uses an LSH index by default. \n"\
+        "    To compare all points to all clusters, add E to the end of the flag. (e.g., '--greedy 0.8E')"\
+        "    By default, this emits the names of the entities (sequence names, if --parse-by-seq, and filenames otherwise).\n"\
+        "    You may want to emit fasta-formatted output. You can do this by adding F to the end of the --greedy argument.\n"\
+        "    Example: '--greedy 0.8F' or '--greedy 0.8FE'.\n"\
+        "    This is only allowed for --parse-by-seq.\n"\
         "  As this number approaches 1, the number and uniformity of clusters grows.\n"\
         "  For human-readable, this emits one line per cluster listing its constituents, ordered by similarity\n"\
         "  For machine-readable, this file consists of 2 64-bit integers (nclusters, nsets), followed by (nclusters + 1) 64-bit integers, followed by nsets 64-bit integers, identifying which sets belonged to which clusters.\n"\
@@ -420,6 +434,14 @@ static constexpr const char *siglen =
         "Increase this number to pay more memory/time for higher accuracy.\n"\
         "Decrease this number for higher speed and lower accuracy.\n"\
         "This is ignored for exact sketching (--countdict or --set), where a single permutation is generated and a single hash table is used.\n"\
+        "--maxcand <int>\t Set the maximum number of candidates to fetch from the LSH index before evaluating distances against them.\n"\
+        "                  This is always used in --greedy mode.\n"\
+        "                  By default, this number is heuristically selected by the number of items in the index.\n"\
+        "                  If N <= 100000, uses max(N / 50, max(cbrt(N), 3)). Otherwise, uses (log(N)^3).\n"\
+        "                  Note: this is a maximum; if fewer items have matches, fewer will be reported.\n"\
+        "                  This option is ignored in --topk mode, as the number of samples is ceil(3.5 * <topk>).\n"\
+        "                  If set in --similarity-threshold mode, the number of items compared will be truncated to <maxcand> even if further samples are above the similarity threshold.\n"\
+        "                  This can prevent quadratic complexity for the (rare) case that all items are within threshold distaance of each other.\n"\
         "\nMetadata Options\n"\
         "If sketching, you can also choose to save k-mers (the IDs corresponding to the k-mer selected), or\n"\
         " and optionally save the counts for these k-mers\n"\

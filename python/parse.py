@@ -106,7 +106,7 @@ def pairwise_equality_compare(input_matrix, nthreads=1):
         idx = 0
         for i in range(nr):
             lc = nr - i - 1
-            ret[idx:idx + lc] = np.sum(input_matrix[i] == input_matrix[i + 1, nr], axis=1)
+            ret[idx:idx + lc] = np.sum(input_matrix[i] == input_matrix[i + 1:nr], axis=1)
             idx += lc
         return ret
 
@@ -125,4 +125,22 @@ def parse_binary_clustering(path, d64=False):
     return [indices[start:end] for start, end in zip(indptr[:-1], indptr[1:])]
 
 
-__all__ = ["parse_knn", "parse_binary_signatures", "ParsedSignatureMatrix", "parse_binary_kmers", "ParsedKmerMatrix", "alphabetcvt", "pairwise_equality_compare", "parse_binary_clustering"]
+def parse_binary_distmat(path):
+    '''
+    Parse all-pairs distances from binary distance matrix at <path>.
+    '''
+    return np.memmap(path, np.float32)
+
+
+def parse_binary_rectmat(path, fpath, qpath):
+    '''
+    Parse distance matrix from path using <fpath> and <qpath> as reference/query pairs.
+    fpath must have been provided to Dashing2 with -F/--ffile
+    qpath must have been provided to Dashing2 with -Q/--qfile
+    '''
+    ffiles, qfiles = map(lambda x: list(map(str.strip, open(x))), (fpath, qpath))
+    nref, nquery = map(len, (ffiles, qfiles))
+    return np.memmap(path, np.float32).reshape(nref, nquery)
+
+
+__all__ = ["parse_knn", "parse_binary_signatures", "ParsedSignatureMatrix", "parse_binary_kmers", "ParsedKmerMatrix", "alphabetcvt", "pairwise_equality_compare", "parse_binary_clustering", "parse_binary_distmat", "parse_binary_rectmat"]
