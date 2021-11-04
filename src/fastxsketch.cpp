@@ -136,6 +136,10 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     return m / s;
 }
 
+struct hello {
+    hello() = delete;
+};
+
 
 
 FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &opts, const std::vector<std::string> &paths, std::string outpath) {
@@ -225,8 +229,13 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         }
         std::fclose(fp);
     }
+    size_t sigvecsize64 = ss * nitems;
+    if(opts.sketch_compressed()) {
+        const size_t regsper64 = sizeof(uint64_t) / opts.fd_level_;
+        sigvecsize64 = (sigvecsize64 + regsper64 - 1) / regsper64;
+    }
     // File size before signatures:
-    ret.signatures_.resize(ss * nitems);
+    ret.signatures_.resize(sigvecsize64);
     if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));
     }
@@ -288,6 +297,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         )
         {
             if(opts.kmer_result_ < FULL_MMER_SET) {
+                struct hello; // You must modify this to handle the many possibilities. Maybe this isn't necessary.
                 if(ret.signatures_.size()) {
                     if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
                         std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
@@ -389,8 +399,7 @@ do {\
                 //std::fprintf(stderr, "If we gathered full k-mers, and we asked for signatures, let's store bottom-k hashes in the signature space\n");
                 if(ret.signatures_.size()) {
                     std::vector<BKRegT> keys(ss);
-                    auto kvcp = kmerveccounts.data();
-                    if(kmerveccounts.empty()) kvcp = nullptr;
+                    double *const kvcp = kmerveccounts.empty() ? static_cast<double *>(nullptr): kmerveccounts.data();
                     if(kmervec128.size()) bottomk(kmervec128, keys, opts.count_threshold_, kvcp);
                     else bottomk(kmervec64, keys, opts.count_threshold_, kvcp);
                     std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[mss]);

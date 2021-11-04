@@ -28,6 +28,7 @@ int sketch_main(int argc, char **argv) {
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true;
     bool exact_kmer_dist = false, hpcompress = false;
     bool refine_exact = false;
+    long double compressed_a = -1.L, compressed_b = -1.L;
     double similarity_threshold = -1.;
     unsigned int count_threshold = 0.;
     size_t cssize = 0, sketchsize = 1024;
@@ -105,6 +106,8 @@ int sketch_main(int argc, char **argv) {
         .seedseed(seedseed);
     opts.by_chrom_ = by_chrom;
     opts.downsample(downsample_frac);
+    opts.compressed_a_ = compressed_a;
+    opts.compressed_b_ = compressed_b;
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }

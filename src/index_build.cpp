@@ -52,14 +52,16 @@ void update(pqueue &x, flat_hash_set<LSHIDType> &xset, const PairT &item, const 
                CASE_N(1, uint8_t);\
                 default: __builtin_unreachable();
 
-std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result, const bool index_compressed) {
+std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result) {
+    const bool index_compressed = opts.sketch_compressed_set;
     // Builds the LSH index and populates nearest-neighbor lists in parallel
     const size_t ns = result.names_.size();
     const int topk = opts.min_similarity_ > 0. ? -1: opts.num_neighbors_ > 0 ? 1: 0;
     static constexpr const LSHDistType INFLATE_FACTOR = 3.5;
     // Make the similarities negative so that the smallest items are the ones with the highest similarities
-    size_t ntoquery = opts.num_neighbors_ <= 0 ? (maxcand_global <= 0 ? ns - 1: size_t(maxcand_global))
-                                               : std::min(ns - 1, size_t(opts.num_neighbors_ * INFLATE_FACTOR));
+    const size_t ntoquery =
+        opts.num_neighbors_ <= 0 ? (maxcand_global <= 0 ? ns - 1: size_t(maxcand_global))
+                                 : std::min(ns - 1, size_t(opts.num_neighbors_ * INFLATE_FACTOR));
     std::vector<pqueue> neighbor_lists(ns);
     if(opts.output_kind_ == KNN_GRAPH && opts.num_neighbors_ > 0)
         for(auto &n: neighbor_lists)

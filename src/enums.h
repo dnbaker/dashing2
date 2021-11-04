@@ -38,6 +38,7 @@ enum SketchSpace {
 enum CountingType {
     EXACT_COUNTING,
     COUNTSKETCH_COUNTING,
+    COUNTMIN_COUNTING, // Default
     // Add or substract each item to its assigned bucket using a random variable seeded by the key
     // Usually estimates higher-hitter featuers well
     // Pseudocode:
@@ -46,7 +47,6 @@ enum CountingType {
     // This reduces the sample space at some inexactness, but the biggest elements will remain the biggest
 
     //Not implemented, but we may expand this:
-    COUNTMIN_COUNTING,
     CQF_COUNTING // Not implemen
 };
 
