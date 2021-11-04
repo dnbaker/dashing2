@@ -1,7 +1,6 @@
 #include "sketch_core.h"
 #include "options.h"
 #include "cmp_main.h"
-#include <filesystem>
 
 
 
@@ -29,6 +28,7 @@ int sketch_main(int argc, char **argv) {
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true;
     bool exact_kmer_dist = false, hpcompress = false;
     bool refine_exact = false;
+    bool fasta_dedup = false;
     double similarity_threshold = -1.;
     unsigned int count_threshold = 0.;
     size_t cssize = 0, sketchsize = 1024;
@@ -45,7 +45,7 @@ int sketch_main(int argc, char **argv) {
     bool parse_by_seq = false;
     int by_chrom = false;
     double downsample_frac = 1.;
-    uint64_t seedseed = 13;
+    uint64_t seedseed = 0;
     size_t batch_size = 0;
     int nLSH = 2;
     Measure measure = SIMILARITY;
@@ -64,10 +64,6 @@ int sketch_main(int argc, char **argv) {
         //std::fprintf(stderr, "After getopt argument %d, of is %s\n",c , to_string(of).data());
     }
     if(k < 0) k = nregperitem(rht, use128);
-    const std::string ex(std::filesystem::absolute(std::filesystem::path(argv[-1])));
-    std::string cmd(ex);
-    for(char **s = argv; *s; cmd += std::string(" ") + *s++);
-    std::fprintf(stderr, "#Invocation: %s\n", cmd.data());
     if(nt < 0) {
         char *s = std::getenv("OMP_NUM_THREADS");
         if(s) nt = std::max(std::atoi(s), 1);
@@ -105,9 +101,10 @@ int sketch_main(int argc, char **argv) {
         .save_kmercounts(save_kmercounts)
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
-        .cmd(cmd).count_threshold(count_threshold)
+        .count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress)
-        .seedseed(seedseed);
+        .seedseed(seedseed)
+        .fasta_dedup(fasta_dedup);
     opts.by_chrom_ = by_chrom;
     opts.downsample(downsample_frac);
     if(hpcompress) {
@@ -126,7 +123,7 @@ int sketch_main(int argc, char **argv) {
     }
     SketchingResult result;
     sketch_core(result, opts, paths, outfile);
-    result.nqueries(nq); // TODO: use nqueries to perform asymmetric comparisons
+    result.nqueries(nq);
     if(cmpout.size()) {
         Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
         distopts.measure_ = measure;

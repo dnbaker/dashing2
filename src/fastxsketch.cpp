@@ -48,7 +48,7 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
     T *const origptr = ptr;
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
         gzFile fp = gzopen(path.data(), "rb");
-        if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
+        if(!fp) return 0; //THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
         gzread(fp, cardinality, sizeof(*cardinality));
         for(int nr;
             !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
@@ -58,6 +58,7 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
     } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
         auto cmd = std::string("xz -dc ") + path;
         std::FILE *fp = ::popen(cmd.data(), "r");
+        if(fp == 0) return 0;
         std::fread(cardinality, sizeof(*cardinality), 1, fp);
         for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
         ::pclose(fp);
@@ -71,7 +72,10 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
     if(!::isatty(fd)) {
         struct stat st;
         if(::fstat(fd, &st)) THROW_EXCEPTION(std::runtime_error(std::string("Failed to fstat") + path));
-        if(!st.st_size) std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+        if(!st.st_size) {
+            std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+            return 0;
+        }
         size_t expected_bytes = st.st_size - 8;
         size_t nb = std::fread(ptr, 1, expected_bytes, fp);
         if(nb != expected_bytes) {
@@ -211,11 +215,10 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         checked_fwrite(fp, &k, sizeof(k));
         checked_fwrite(fp, &w, sizeof(w));
         checked_fwrite(fp, &opts.seedseed_, sizeof(opts.seedseed_));
-        std::fclose(fp);
+        if((fp = bfreopen(kmernamesoutpath.data(), "wb", fp)) == 0) THROW_EXCEPTION(std::runtime_error("Failed to open "s + kmernamesoutpath + " for writing."));
         if(bns::filesize(kmeroutpath.data()) != 24) THROW_EXCEPTION(std::runtime_error("kmer out path is the wrong size (expected 16, got "s + std::to_string(bns::filesize(kmeroutpath.data()))));
         static_assert(sizeof(uint32_t) * 4 + sizeof(uint64_t) == 24, "Sanity check");
         ret.kmers_.assign(kmeroutpath, 24);
-        if((fp = bfopen(kmernamesoutpath.data(), "wb")) == 0) THROW_EXCEPTION(std::runtime_error("Failed to open "s + kmernamesoutpath + " for writing."));
         for(const auto &n: paths) {
             std::fwrite(n.data(), 1, n.size(), fp);
             std::fputc('\n', fp);
@@ -286,7 +289,10 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         {
             if(opts.kmer_result_ < FULL_MMER_SET) {
                 if(ret.signatures_.size()) {
-                    load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]);
+                    if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
+                        std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
+                        goto perform_sketch;
+                    }
                     //ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
                     DBG_ONLY(std::fprintf(stderr, "Sketch was loaded from %s and has card %g\n", destination.data(), ret.cardinalities_[myind]);)
                 }
@@ -308,6 +314,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
             std::fprintf(stderr, "kc save %d, kmer result %s, dkcif %d\n", opts.save_kmercounts_, to_string(opts.kmer_result_).data(), dkcif);
 #endif
         }
+        perform_sketch:
         __RESET(tid);
         auto perf_for_substrs = [&](const auto &func) __attribute__((always_inline)) {
             for_each_substr([&](const std::string &subpath) {
@@ -316,7 +323,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                     if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass()) func(x);
                 };
                 auto lfunc2 = [&func](auto x) __attribute__((always_inline)) {func(maskfn(x));};
-                auto seqp = kseqs.kseqs_ + tid;
+                const auto seqp = kseqs.kseqs_ + tid;
 #define FUNC_FE(f) \
 do {\
     if(!opts.fs_ && opts.kmer_downsample_frac_ == 1.) {\
@@ -413,7 +420,6 @@ do {\
             if(srcptr && ret.signatures_.size())
                 std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
             checked_fwrite(ofp, buf, nb);
-            std::fclose(ofp);
             if(opts.save_kmers_ && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
                 assert(ret.kmerfiles_.size());
                 ret.kmerfiles_[myind] = destkmer;
@@ -424,20 +430,19 @@ do {\
                                       static_cast<uint64_t *>(nullptr);
                 if(!ptr) THROW_EXCEPTION(std::runtime_error("This shouldn't happen"));
                 DBG_ONLY(std::fprintf(stderr, "Opening destkmer %s\n", destkmer.data());)
-                if((ofp = bfopen(destkmer.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
+                if((ofp = bfreopen(destkmer.data(), "wb", ofp)) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
                 //std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 
                 checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
                 DBG_ONLY(std::fprintf(stderr, "About to copy to kmers of size %zu\n", ret.kmers_.size());)
                 if(ret.kmers_.size())
                     std::copy(ptr, ptr + ss, &ret.kmers_[mss]);
-                if(ofp) std::fclose(ofp);
             }
             if(opts.save_kmercounts_ || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 //std::fprintf(stderr, "About to save kmer counts manually\n");
                 assert(ret.kmercountfiles_.size());
                 ret.kmercountfiles_.at(i) = destkmercounts;
-                if((ofp = bfopen(destkmercounts.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
+                if((ofp = bfreopen(destkmercounts.data(), "wb", ofp)) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
                 std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
                 if(opts.kmer_result_ == FULL_MMER_COUNTDICT || (opts.kmer_result_ == FULL_MMER_SET && opts.save_kmercounts_)) {
@@ -447,12 +452,12 @@ do {\
 #undef DO_IF
                 const size_t nb = tmp.size() * sizeof(double);
                 checked_fwrite(ofp, tmp.data(), nb);
-                std::fclose(ofp);
                 if(ret.kmercounts_.size()) {
                     std::fprintf(stderr, "Copying range of size %zu from tmp to ret.kmercounts of size %zu\n", tmp.size(), ret.kmercounts_.size());
                     std::copy(tmp.begin(), tmp.begin() + ss, &ret.kmercounts_[mss]);
                 }
             }
+            std::fclose(ofp);
         } else if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
             ret.kmers_.clear();
             //std::fprintf(stderr, "Full mmer sequence\n");

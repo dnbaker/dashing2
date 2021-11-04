@@ -327,9 +327,8 @@ int wsketch_main(int argc, char **argv) {
                 THROW_EXCEPTION(std::runtime_error("Failed to write MH registers to disk."));
             }
         }
-        std::fclose(fp);
         of = outpref + ".sampled.hashes.stacked." + std::to_string(nsketches) + "." + std::to_string(sketchsize) + ".i64";
-        fp = bfopen(of.data(), "wb");
+        fp = bfreopen(of.data(), "wb", fp);
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         for(size_t i = 0; i < nsketches; ++i) {
             auto &regs = std::get<1>(mhrs[i]);
@@ -339,8 +338,7 @@ int wsketch_main(int argc, char **argv) {
                 THROW_EXCEPTION(std::runtime_error("Failed to write MH registers to disk."));
             }
         }
-        std::fclose(fp);
-        fp = bfopen((outpref + ".sampled.info.txt").data(), "wb");
+        fp = bfreopen((outpref + ".sampled.info.txt").data(), "wb", fp);
         if(fp == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open " + of));
         static constexpr const char *fmtstr = nlfmt<std::decay_t<decltype(mhrs.front().total_weight())>>;
         for(size_t i = 0; i < nsketches; std::fprintf(fp, fmtstr, mhrs[i++].total_weight()));

@@ -58,11 +58,17 @@ std::string to_string(OutputFormat of) {
     return "MachineReadable";
 }
 std::string to_string(OutputKind ok) {
-    if(ok == SYMMETRIC_ALL_PAIRS) return "UpperTriangularSymmetricAllPairs";
-    if(ok == ASYMMETRIC_ALL_PAIRS) return "AllPairs";
-    if(ok == KNN_GRAPH) return "KNNGraph";
-    if(ok == NN_GRAPH_THRESHOLD) return "ThresholdedNNGraph";
-    return "Deduplication (not supported yet)";
+    switch(ok) {
+        case PHYLIP: return "PHYLIP";
+        case SYMMETRIC_ALL_PAIRS: return "UpperTriangularSymmetricAllPairs";
+        case ASYMMETRIC_ALL_PAIRS: return "FullAllPairs";
+        case KNN_GRAPH: return "KNNGraph";
+        case NN_GRAPH_THRESHOLD: return "ThresholdedNNGraph";
+        case DEDUP: return "Deduplication";
+        case PANEL: return "Panel (Reference/Query)";
+    }
+    throw std::runtime_error("Unexpected OutputKind ok");
+    return "Unknown";
 }
 
 void checked_fwrite(std::FILE *const fp, const void *const ptr, const size_t nb) {
@@ -106,6 +112,12 @@ std::FILE *bfopen(const char *s, const char *fmt) {
     if(ifp) buffer_to_blksize(ifp);
     return ifp;
 }
+std::FILE *bfreopen(const char *s, const char *fmt, std::FILE *fp) {
+    if((fp = std::freopen(s, fmt, fp)))
+        buffer_to_blksize(fp);
+    return fp;
+}
+
 
 uint64_t XORMASK = 0x724526e320f9967dull;
 u128_t XORMASK2 = (u128_t(12499408336417088522ull) << 64) | XORMASK;

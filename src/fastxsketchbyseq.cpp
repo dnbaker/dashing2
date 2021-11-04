@@ -118,9 +118,19 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
         kseq_destroy(ks);
         gzclose(fp);
     }, path);
-    if(::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs))
-        THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq"));
-    if(outpath.size()) ret.signatures_.assign(outpath);
+    if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
+        if(!bns::isfile(outpath)) {
+            DBG_ONLY(std::fprintf(stderr, "Creating outpath '%s'\n", outpath.data());)
+            std::FILE *fp = std::fopen(outpath.data(), "wb");
+            if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open path "s + outpath + " for writing"));
+            std::fclose(fp);
+        }
+        if(int rc = ::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs); rc) {
+            std::fprintf(stderr, "is outpath %s a file? %d\n", outpath.data(), bns::isfile(outpath));
+            THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq. rc: "s + std::to_string(rc)));
+        }
+        ret.signatures_.assign(outpath);
+    }
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
         ret.signatures_.reserve(total_nseqs * opts.sketchsize_);
     }
@@ -154,7 +164,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
         gzbuffer(ifp, 1u << 17);
         kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
-            DBG_ONLY(std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);)
+            //DBG_ONLY(std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);)
             ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);
             const int off = (myseq->name.s[0] == '>');
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
@@ -191,6 +201,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         DBG_ONLY(std::fprintf(stderr, "old sig size %zu, cap %zu, new %zu\n", ret.signatures_.size(), ret.signatures_.capacity(), newsz * opts.sketchsize_);)
         assert(oldsz * opts.sketchsize_ <= ret.signatures_.capacity());
         ret.signatures_.resize(oldsz * opts.sketchsize_);
+        DBG_ONLY(std::fprintf(stderr, "ret signature size: %zu\n", ret.signatures_.size());)
     }
     DBG_ONLY(std::fprintf(stderr, "mmer matrix size %zu. save kmers %d\n", ret.kmers_.size(), opts.save_kmers_);)
     DBG_ONLY(std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");)
@@ -201,7 +212,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-        DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)
+        //DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)
         auto &sketchers(sketchvec[tid]);
         sketchers.reset();
         const auto seqp = ret.sequences_[i].data();

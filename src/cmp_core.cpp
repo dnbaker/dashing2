@@ -13,21 +13,150 @@
 namespace dashing2 {
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result);
 void dedup_emit(const std::vector<LSHIDType> &, const std::vector<std::vector<LSHIDType>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result);
-//using sketch::lsh::SetSketchIndex;
-static INLINE uint64_t reg2sig(RegT x) {
-    uint64_t seed = 0;
-    CONST_IF(sizeof(RegT) <= 8) {
-        std::memcpy(&seed, &x, sizeof(x));
-        seed ^= static_cast<uint64_t>(0xa3407fb23cd20ef);
-        seed = wy::wyhash64_stateless(&seed);
-    } else {
-        std::memcpy(&seed, &x, std::min(sizeof(x), sizeof(seed)));
-        uint64_t nextseed = wy::wyhash64_stateless(&seed);
-        nextseed ^= ((uint64_t *)&x)[1];
-        seed = wy::wyhash64_stateless(&nextseed);
-    }
-    return seed;
+
+static INLINE uint64_t reg2sig(__float128 x) {
+    const uint64_t *const p = (const uint64_t *)&x;
+    return sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(p[0] ^ 0xa3407fb23cd20eful) ^ p[1]);
 }
+static INLINE uint64_t reg2sig(long double x) {
+    const uint64_t *const p = (const uint64_t *)&x;
+    return sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(p[0] ^ 0xa3407fb23cd20eful) ^ p[1]);
+}
+static INLINE uint64_t reg2sig(double x) {
+    uint64_t v;
+    std::memcpy(&v, &x, 8);
+    return sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
+}
+static INLINE uint64_t reg2sig(float x) {
+    uint32_t v;
+    std::memcpy(&v, &x, 4);
+    return sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
+}
+
+template<typename T>
+size_t simdcount(const T *ptr, size_t n, const T v=static_cast<T>(0)) {
+    size_t ret = 0;
+    #pragma omp simd reduction(+:ret)
+    for(size_t i = 0; i < n; ++i) {
+        ret += ptr[i] == v;
+    }
+    return ret;
+}
+
+namespace detail{
+#if 0
+INLINE void setnthbit(uint64_t *ptr, size_t index, bool val) {
+    ptr[index / 64] |= uint64_t(val) << (index % 64);
+}
+template<typename T> INLINE void setnthbit(T *ptr, size_t index, bool val) {
+    return setnthbit(reinterpret_cast<uint64_t *>(ptr), index, val);
+}
+
+static INLINE uint64_t getnthbit(const uint64_t *ptr, size_t index) {
+    return (ptr[index / 64] >> (index % 64)) & 1u;
+}
+
+template<typename T> INLINE T getnthbit(const T *ptr, size_t index) {
+    return T(getnthbit(reinterpret_cast<const uint8_t *>(ptr), index));
+}
+INLINE uint64_t getnthbit(uint64_t val, size_t index) {
+    return getnthbit(&val, index);
+}
+
+
+#if __SSE2__
+
+INLINE bool is_all_zeros(__m128i x) {
+#if __SSE4_1__
+    return _mm_test_all_zeros(x, x);
+#else
+    return _mm_movemask_epi8(_mm_cmpeq_epi32(x,_mm_setzero_si128())) == 0xFFFF;
+#endif
+}
+
+INLINE uint64_t matching_bits(const __m128i *s1, const __m128i *s2, uint16_t b) {
+    --b;
+    __m128i match = ~(*s1++ ^ *s2++);
+    while(b >= 4) {
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
+        s1 += 4;
+        s2 += 4;
+        b -= 4;
+        if(is_all_zeros(match)) return 0;
+    }
+    while(b-- && !is_all_zeros(match)) match &= ~(*s1++ ^ *s2++);
+    return popcount(common::vatpos(match, 0)) + popcount(common::vatpos(match, 1));
+}
+#endif
+
+#if __AVX2__
+INLINE bool is_all_zeros(__m256i x) {return _mm256_testz_si256(x, x);}
+INLINE auto matching_bits(const __m256i *s1, const __m256i *s2, uint16_t b) {
+    // Only do popcnt if match is nonzero
+    --b;
+    __m256i match = ~(*s1++ ^ *s2++);
+    while(b >= 4) {
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3]));
+        b -= 4;
+        s1 += 4;
+        s2 += 4;
+        if(is_all_zeros(match)) return match;
+    }
+    switch(b) {
+        case 3: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 2: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 1: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 0: default: ;
+    }
+    return is_all_zeros(match) ? match: popcnt256(match);
+}
+#endif
+
+
+#if HAS_AVX_512
+INLINE bool is_all_zeros(__m512i x) {
+    return _mm512_test_epi64_mask(x, x) == 0;
+}
+INLINE auto sbit_accum(const __m512i *s1, const __m512i *s2, uint16_t b) {
+    __m512i match = ~(*s1++ ^ *s2++);
+    while(--b)
+        match &= ~(*s1++ ^ *s2++);
+    return match;
+}
+INLINE auto matching_bits(const __m512i *s1, const __m512i *s2, uint16_t b) {
+#define ONE_ITER do {\
+        match &= (~(*s1 ^ *s2)) & (~(s1[1] ^ s2[1])) & (~(s1[2] ^ s2[2])) & (~(s1[3] ^ s2[3])); \
+        if(is_all_zeros(match)) return match;\
+        b -= 4; s1 += 4; s2 += 4;\
+        } while(0)
+    // Only do popcnt if match is nonzero
+    --b;
+    __m512i match = ~(*s1++ ^ *s2++);
+    while(b >= 4) {
+        switch(b >> 2) {
+            case 8: ONE_ITER;[[fallthrough]];
+            case 7: ONE_ITER;[[fallthrough]];
+            case 6: ONE_ITER;[[fallthrough]];
+            case 5: ONE_ITER;[[fallthrough]];
+            case 4: ONE_ITER;[[fallthrough]];
+            case 3: ONE_ITER;[[fallthrough]];
+            case 2: ONE_ITER;[[fallthrough]];
+            case 1: ONE_ITER;
+        }
+    }
+#undef ONE_ITER
+    switch(b) {
+        case 3: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 2: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 1: match &= ~(*s1++ ^ *s2++); [[fallthrough]];
+        case 0: default: ;
+    }
+    return is_all_zeros(match) ? match: popcnt512(match);
+}
+#endif
+#endif
+
+} // namespace detail
 
 #ifdef _OPENMP
 #define OMP_STATIC_SCHED32 _Pragma("omp parallel for schedule(static, 32)")
@@ -75,7 +204,6 @@ INLINE void *ptr_roundup(void *ptr) {
 }
 
 void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance) {
-    sketch::hash::CEHasher revhasher;
     if(fd >= sizeof(RegT)) return;
     ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
@@ -139,7 +267,6 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
                     ((uint64_t *)compressed_reps)[i] = std::min(uint64_t(q + 1), uint64_t(sub));
                 } else {
                     const int64_t isub = std::max(int64_t(0), std::min(int64_t(q + 1), static_cast<int64_t>(sub)));
-                    //if(sub < 0.) std::fprintf(stderr, "Mapping %g to %zd with sub = %Lg\n", double(sigs[i]), isub, sub);
                     if(fd == 4)      ((uint32_t *)compressed_reps)[i] = isub;
                     else if(fd == 2) ((uint16_t *)compressed_reps)[i] = isub;
                     else             ((uint8_t *)compressed_reps)[i] = isub;
@@ -148,9 +275,8 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
         }
     } else {
         //bbit:
-        std::fprintf(stderr, "Performing %d-bit compression. If k-mers are saved and b-bit signatures are used, the actual kmers are emitted.\n", int(fd * 8.));
-        auto getsig = [kne=!kmers.empty(),&sigs,&kmers,&revhasher](auto x) {
-            return kne ? revhasher(kmers[x]): reg2sig(sigs[x]);
+        auto getsig = [kne=!kmers.empty(),&sigs,&kmers](auto x) -> uint64_t {
+            return kne ? sketch::hash::WangHash::hash(kmers[x]): reg2sig(sigs[x]);
         };
         if(fd == 0.5) {
             uint8_t *ptr = (uint8_t *)compressed_reps;
@@ -165,9 +291,10 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
             static_assert(shift[2] == 48, "Shift 2 must be 48");
             static_assert(shift[4] == 32, "Shift 4 must be 32");
             static_assert(shift[8] == 0, "Shift 8 must be 0");
+            const int myshift = shift[int(fd)];
             OMP_STATIC_SCHED32
             for(size_t i = 0; i < nsigs; ++i) {
-                const uint64_t sig = getsig(i) >> shift[int(fd)];
+                const uint64_t sig = getsig(i) >> myshift;
                 if(fd == 8) ((uint64_t *)compressed_reps)[i] = sig;
                 else if(fd == 4) ((uint32_t *)compressed_reps)[i] = sig;
                 else if(fd == 2) ((uint16_t *)compressed_reps)[i] = sig;
@@ -364,14 +491,14 @@ case v: {\
 #undef CORRECT_RES
         // Compare exact representations, not compressed shrunk
     }
-    if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<double>::max();
+    if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<decltype(ret)>::max();
     return ret;
 }
 
-template<typename MHT, typename KMT>
-inline size_t densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
+template<typename MHT>
+inline size_t densify(MHT *minhashes, uint64_t *const kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
 {
-    const long long unsigned int ne = std::count(minhashes, minhashes + sketchsize, empty);
+    const long long unsigned int ne = simdcount(minhashes, sketchsize, empty);
     if(ne == sketchsize  || ne == 0) return ne;
     for(size_t i = 0; i < sketchsize; ++i) {
         if(minhashes[i] != empty) continue;
@@ -385,7 +512,7 @@ inline size_t densify(MHT *minhashes, KMT *kmers, const size_t sketchsize, const
         minhashes[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
     }
-    assert(std::count(minhashes, minhashes + sketchsize, empty) == 0);
+    assert(std::find(minhashes, minhashes + sketchsize, empty) == minhashes + sketchsize);
     return ne;
 }
 
@@ -408,17 +535,24 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                 if(endswith(fn, ".xz")) ft = 2;
                 else if(endswith(fn, ".gz")) ft = 1;
                 else ft = 0;
-                cmd = std::string(ft == 0 ? "": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand") + fn;
+                cmd = std::string(ft == 0 ? "": ft == 1 ? "gzip -dc ": ft == 2 ? "xz -dc " : "unknowncommand");
                 if(cmd.empty()) {
-                    ifp = bfopen(fn.data(), "rb");
+                    struct stat st;
+                    if(::stat(fn.data(), &st)) {
+                        perror((std::string("Failed to stat ") + fn).data());
+                        std::exit(1);
+                    }
+                    result.cardinalities_[i] = st.st_size / sizeof(uint64_t);
+                    assert(st.st_size % sizeof(uint64_t) == 0);
                 } else {
+                    cmd = cmd + " " + fn;
                     ifp = ::popen(cmd.data(), "r");
+                    if(!ifp)
+                        THROW_EXCEPTION(std::runtime_error("Failed to read from '"s + cmd + "' for file " + fn));
+                    size_t c = 0;
+                    for(uint64_t x;std::fread(&x, sizeof(x), 1, ifp) == 1u;++c)
+                    result.cardinalities_[i] = c;
                 }
-                if(!ifp)
-                    THROW_EXCEPTION(std::runtime_error("Failed to read from '"s + cmd + "' for file " + fn));
-                size_t c = 0;
-                for(uint64_t x;std::fread(&x, sizeof(x), 1, ifp) == 1u;++c)
-                result.cardinalities_[i] = c;
             } else if(opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 if(!check_compressed(result.kmercountfiles_[i], ft)) throw std::runtime_error("Missing kmercountfile");
                 if(endswith(result.kmercountfiles_[i], ".xz")) ft = 2;
@@ -447,14 +581,15 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
     if(opts.kmer_result_ == ONE_PERM) {
         const schism::Schismatic<uint64_t> sd(opts.sketchsize_);
         const size_t n = result.cardinalities_.size();
-        uint64_t *const kp= result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
+        uint64_t *const kp = result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
         size_t totaldens = 0;
 #ifdef _OPENMP
         #pragma omp parallel for schedule(dynamic, 32) reduction(+:totaldens)
 #endif
         for(size_t i = 0; i < n;++i) {
-            auto lp = &result.signatures_[opts.sketchsize_ * i];
-            totaldens += densify(lp, kp ? &kp[opts.sketchsize_ * i]: kp, opts.sketchsize_, sd);
+            totaldens += densify(&result.signatures_[opts.sketchsize_ * i],
+                                 kp ? &kp[opts.sketchsize_ * i]: kp,
+                                 opts.sketchsize_, sd);
         }
         if(totaldens > 0) std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);
     }
@@ -509,8 +644,18 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
 
     // Step 2: Build nearest-neighbor candidate table
     if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {
-        std::vector<pqueue> neighbor_lists = build_index(idx, opts, result);
-        refine_results(neighbor_lists, opts, result);
+        const bool exact_knn = std::getenv("EXACT_KNN");
+        std::vector<pqueue> neighbor_lists = exact_knn ? build_exact_graph(idx, opts, result): build_index(idx, opts, result);
+        if(!exact_knn) {
+            refine_results(neighbor_lists, opts, result);
+        } else if(!distance(opts.measure_)) {
+            OMP_PFOR
+            for(size_t i = 0; i < neighbor_lists.size(); ++i) {
+                auto &nl = neighbor_lists[i];
+                auto beg = nl.begin(), e = nl.end();
+                std::transform(beg, e, beg, [&](PairT x) {return PairT{-x.first, x.second};});
+            }
+        }
         emit_neighbors(neighbor_lists, opts, result);
     } else if(opts.output_kind_ == DEDUP) {
         // The ID corresponds to the representative of a cluster;

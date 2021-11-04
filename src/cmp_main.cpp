@@ -2,7 +2,6 @@
 #include "sketch_core.h"
 #include "options.h"
 #include "refine.h"
-#include <filesystem>
 #include <type_traits>
 
 namespace dashing2 {
@@ -63,8 +62,6 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             for(size_t i = 0; i < l; ++i)
                 result.names_[i] = std::to_string(i);
         }
-        // TODO:
-        // Instead of loading signatures, load the compressed form directly.
         assert(result.cardinalities_.empty() || result.cardinalities_.size() == l);
         result.cardinalities_.resize(l);
         // l * sizeof(double) for the cardinalitiy
@@ -168,8 +165,9 @@ int cmp_main(int argc, char **argv) {
     bool hpcompress = false;
     std::string fsarg;
     Measure measure = SIMILARITY;
-    uint64_t seedseed = 13;
+    uint64_t seedseed = 0;
     size_t batch_size = 0;
+    bool fasta_dedup = false;
     std::string spacing;
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
@@ -181,9 +179,6 @@ int cmp_main(int argc, char **argv) {
     if(k < 0) k = nregperitem(rht, use128);
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::unique_ptr<std::vector<std::string>> qup;
-    std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[-1])));
-    for(char **s = argv; *s; cmd += std::string(" ") + *s++);
-    std::fprintf(stderr, "#Invocation: %s\n", cmd.data());
     if(nt < 0) {
         char *s = std::getenv("OMP_NUM_THREADS");
         if(s) nt = std::max(std::atoi(s), 1);
@@ -214,9 +209,10 @@ int cmp_main(int argc, char **argv) {
         .save_kmercounts(save_kmercounts)
         .save_kmers(save_kmers)
         .parse_by_seq(parse_by_seq)
-        .cmd(cmd).count_threshold(count_threshold)
+        .count_threshold(count_threshold)
         .homopolymer_compress_minimizers(hpcompress)
-        .seedseed(seedseed);
+        .seedseed(seedseed)
+        .fasta_dedup(fasta_dedup);
     opts.by_chrom_ = by_chrom;
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
