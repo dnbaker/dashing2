@@ -157,7 +157,10 @@ enum OptArg {
 #define GREEDY_FIELD case OPTARG_GREEDY: {\
     char *eptr;\
     ok = OutputKind::DEDUP; similarity_threshold = std::strtod(optarg, &eptr);\
-    if((*eptr | 32) == 'e') {exhaustive_dedup = true; std::fprintf(stderr, "Using exhaustive_dedup.\n");}\
+    for(;*eptr;++eptr) {\
+        if((*eptr | 32) == 'e') {exhaustive_dedup = true;}\
+        if((*eptr | 32) == 'f') {fasta_dedup = true;}\
+    }\
     break;\
 }
 
@@ -400,7 +403,12 @@ static constexpr const char *siglen =
         "Greedy HIT Clustering\n"\
         "This is enabled by a single parameter, --greedy <float (0-1]>, which determines the similarity threshold below which a new cluster is formed.\n"\
         "--greedy <float (0-1]> For greedy clustering by a given similarity threshold; this selects representative sequences or sequence sets.\n"\
-        "This uses an LSH index by default. To compare all points to all clusters, add E to the end of the flag. (e.g., '--greedy 0.8E')"\
+        "This uses an LSH index by default. \n"\
+        "    To compare all points to all clusters, add E to the end of the flag. (e.g., '--greedy 0.8E')"\
+        "    By default, this emits the names of the entities (sequence names, if --parse-by-seq, and filenames otherwise).\n"\
+        "    You may want to emit fasta-formatted output. You can do this by adding F to the end of the --greedy argument.\n"\
+        "    Example: '--greedy 0.8F' or '--greedy 0.8FE'.\n"\
+        "    This is only allowed for --parse-by-seq.\n"\
         "  As this number approaches 1, the number and uniformity of clusters grows.\n"\
         "  For human-readable, this emits one line per cluster listing its constituents, ordered by similarity\n"\
         "  For machine-readable, this file consists of 2 64-bit integers (nclusters, nsets), followed by (nclusters + 1) 64-bit integers, followed by nsets 64-bit integers, identifying which sets belonged to which clusters.\n"\

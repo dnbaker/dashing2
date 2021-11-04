@@ -123,6 +123,7 @@ public:
     bool use128_ = false;
     unsigned nthreads_;
     mutable long double compressed_b_ = -1.L, compressed_a_ = -1.L;
+    bool fasta_dedup_ = false;
 
     std::unique_ptr<FilterSet> fs_;
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false, KmerSketchResultType kres=ONE_PERM):
@@ -157,6 +158,7 @@ public:
     D2O2(kmer_result) D2O2(use128) D2O2(cache_sketches)
     D2O2(sketchsize) D2O2(cssize) D2O2(parse_by_seq)
     D2O2(count_threshold)
+    D2O2(fasta_dedup);
 #undef D2O
 #undef D2O2
     void downsample(double f) {
