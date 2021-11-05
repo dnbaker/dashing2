@@ -47,20 +47,18 @@ static constexpr inline bool distance(Measure msr) {
 struct Dashing2DistOptions: public Dashing2Options {
     OutputKind output_kind_;
     OutputFormat output_format_;
-    double fd_level_; // Determines the number of bytes to which the minhash sketches are compressed
-    int truncation_method_ = 0;
     // If <= 0, uses setsketch to compress before distances
     // If 1 (> 0), generates b-bit signatures and truncates
     int num_neighbors_ = -1; // Only emits top-"nn" neighbors
     double min_similarity_ = -1.; // Only emit similarities which are above min_similarity_ if nonnegative
     mutable void *compressed_ptr_ = nullptr;
-    mutable long double compressed_b_ = -1.L, compressed_a_ = -1.L;
     mutable Measure measure_ = SIMILARITY;
     std::string outfile_path_;
     mutable bool exact_kmer_dist_ = false;
     bool refine_exact_ = false;
     size_t cmp_batch_size_ = 16;
     unsigned int nLSH = 2;
+    bool sketch_compressed_set;
     Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false, bool refine_exact=false, int nlshsubs=3):
         Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact), nLSH(nlshsubs)
     {
@@ -77,6 +75,7 @@ struct Dashing2DistOptions: public Dashing2Options {
             exact_kmer_dist_ = true;
         if(outfile_path_.empty() || outfile_path_ == "-") outfile_path_ = "/dev/stdout";
         if(nLSH < 1) nLSH = 1;
+        sketch_compressed_set = this->sketch_compressed();
         validate();
     }
     void validate() const {

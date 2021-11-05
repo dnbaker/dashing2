@@ -49,6 +49,7 @@ enum OptArg {
     OPTARG_ENTROPYMIN,
     OPTARG_SIGRAMLIMIT,
     OPTARG_MAXCAND,
+    OPTARG_SETSKETCH_AB,
     OPTARG_DUMMY
 };
 
@@ -89,6 +90,7 @@ enum OptArg {
     /*LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)*/\
     LO_FLAG("bbit-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
     LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
+    LO_FLAG("intersection-size", OPTARG_ISZ, measure, INTERSECTION)\
     LO_FLAG("mash-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("symmetric-containment", OPTARG_SYMCONTAIN, measure, SYMMETRIC_CONTAINMENT)\
@@ -145,7 +147,8 @@ enum OptArg {
     {"by-chrom", no_argument, (int *)&by_chrom, 1},\
     {"sketch-size-l2", required_argument, 0, 'L'},\
     {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT},\
-    {"maxcand", required_argument, 0, OPTARG_MAXCAND}
+    {"maxcand", required_argument, 0, OPTARG_MAXCAND},\
+    {"setsketch-ab", required_argument, 0, OPTARG_SETSKETCH_AB}
 
 
 
@@ -239,6 +242,12 @@ enum OptArg {
         case OPTARG_MAXCAND: {\
             maxcand_global = std::atoi(optarg);\
             if(maxcand_global < 0) {std::fprintf(stderr, "Warning: maxcand_global < 0. This defaults to heuristics for selecting the number of candidates. This may be in error.\n");}\
+        } break;\
+        case OPTARG_SETSKETCH_AB: {\
+            char *e;\
+            compressed_a = std::strtold(optarg, &e);\
+            compressed_b = std::strtold(e + 1, nullptr);\
+            if(std::min(compressed_a, compressed_b) <= 0.) THROW_EXCEPTION(std::invalid_argument("Compressed A and B parameters must be greater than 0."));\
         } break;
 
 
@@ -421,10 +430,9 @@ static constexpr const char *siglen =
         "--mash-distance/--poisson-distance\t Emit distances, as estimated by the Poisson model for k-mer distances.\n"\
         "--symmetric-containment\t Use symmetric containment as the distance. e.g., (|A & B| / min(|A|, |B|))\n"\
         "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
+        "--intersection-size/--intersection\t Emit the cardinality of the intersection between objects. IE, the number of k-mers shared between the two.\n"\
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
-        "--batch-size [16] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
-        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"\
         "LSH Options\n"\
         "There are a variety of heuristics in the LSH tables; however, the most important besides sketch size is the number of hash tables used.\n"\
         "--nLSH <int=2>\t\n"\

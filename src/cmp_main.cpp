@@ -144,6 +144,7 @@ int cmp_main(int argc, char **argv) {
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true, presketched = false;
     bool exact_kmer_dist = false;
     bool refine_exact = false; // This uses sketching for K-NN graph generation, then uses exact distances for NN refinement
+    long double compressed_a = -1.L, compressed_b = -1.L;
     unsigned int count_threshold = 0.;
     double similarity_threshold = -1.;
     size_t cssize = 0, sketchsize = 1024;
@@ -189,15 +190,12 @@ int cmp_main(int argc, char **argv) {
         static constexpr size_t bufsize = 1<<18;
         std::unique_ptr<char []> buf(new char[bufsize]);
         ifs.rdbuf()->pubsetbuf(buf.get(), bufsize);
-        for(std::string l;std::getline(ifs, l);) {
-            paths.push_back(l);
-        }
+        for(std::string l;std::getline(ifs, l);paths.push_back(l));
     }
     size_t nref = paths.size();
     if(qfile.size()) {
         std::ifstream ifs(qfile);
-        for(std::string l;std::getline(ifs, l);)
-            paths.push_back(l);
+        for(std::string l;std::getline(ifs, l);paths.push_back(l));
     }
     size_t nq = paths.size() - nref;
     Dashing2Options opts(k, w, rht, sketch_space, dt, nt, use128, spacing, canon, res);
@@ -214,6 +212,8 @@ int cmp_main(int argc, char **argv) {
         .seedseed(seedseed)
         .fasta_dedup(fasta_dedup);
     opts.by_chrom_ = by_chrom;
+    opts.compressed_a_ = compressed_a;
+    opts.compressed_b_ = compressed_b;
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }
