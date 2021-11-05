@@ -491,7 +491,7 @@ case v: {\
 #undef CORRECT_RES
         // Compare exact representations, not compressed shrunk
     }
-    if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<double>::max();
+    if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<decltype(ret)>::max();
     return ret;
 }
 
@@ -644,8 +644,18 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
 
     // Step 2: Build nearest-neighbor candidate table
     if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {
-        std::vector<pqueue> neighbor_lists = build_index(idx, opts, result);
-        refine_results(neighbor_lists, opts, result);
+        const bool exact_knn = std::getenv("EXACT_KNN");
+        std::vector<pqueue> neighbor_lists = exact_knn ? build_exact_graph(idx, opts, result): build_index(idx, opts, result);
+        if(!exact_knn) {
+            refine_results(neighbor_lists, opts, result);
+        } else if(!distance(opts.measure_)) {
+            OMP_PFOR
+            for(size_t i = 0; i < neighbor_lists.size(); ++i) {
+                auto &nl = neighbor_lists[i];
+                auto beg = nl.begin(), e = nl.end();
+                std::transform(beg, e, beg, [&](PairT x) {return PairT{-x.first, x.second};});
+            }
+        }
         emit_neighbors(neighbor_lists, opts, result);
     } else if(opts.output_kind_ == DEDUP) {
         // The ID corresponds to the representative of a cluster;
