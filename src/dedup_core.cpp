@@ -23,6 +23,15 @@ size_t default_candidates(const size_t nitems) {
 }
 
 
+#define ALL_CASE_NS\
+               CASE_N(8, uint64_t);\
+               CASE_N(4, uint32_t);\
+               CASE_N(2, uint16_t);\
+               CASE_N(1, uint8_t);\
+                default: __builtin_unreachable();
+
+
+
 struct GreedyClustering {
     std::vector<LSHIDType> ids_;
     std::vector<std::vector<LSHIDType>> constituents_;
@@ -97,7 +106,21 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     assert(opts.sketchsize_ * oid < result.signatures_.size());
     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-    auto [hits, counts, nper] = idx.query_candidates(span, maxcands, size_t(-1), earlystop);
+    std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
+    auto &[hits, counts, nper] = query_res;
+    const bool indexing_compressed = index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
+    if(indexing_compressed) {
+        switch(int(opts.fd_level_)) {
+#define CASE_N(i, TYPE) \
+    case i: {query_res = idx.query_candidates(\
+        minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * id, opts.sketchsize_),\
+        ntoquery);\
+    } break
+           ALL_CASE_NS
+#undef CASE_N
+        }
+    } else
+        query_res = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * id], opts.sketchsize_), ntoquery);
     const size_t nh = hits.size();
     std::vector<LSHDistType> vals(hits.size());
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;

@@ -90,7 +90,7 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
     for(size_t id = 0; id < ns; ++id) {
         //std::fprintf(stderr, "%zu\t%zu\n", id, ns);
         std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
-        if(index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
+        if(indexing_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
             switch(int(opts.fd_level_)) {
 #define CASE_N(i, TYPE) \
         case i: {query_res = idx.query_candidates(\
