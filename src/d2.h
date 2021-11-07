@@ -8,7 +8,7 @@
 #include <vector>
 #include "bonsai/encoder.h"
 #include "xxHash/xxh3.h"
-#include "./setsketch.h"
+#include "sketch/setsketch.h"
 #include "sketch/bmh.h"
 #include "counter.h"
 #include "oph.h"
@@ -217,6 +217,7 @@ public:
     uint64_t seedseed() const {return seedseed_;}
     Dashing2Options &seedseed(uint64_t seed) {seedseed_ = seed; seed_mask(seedseed_); return *this;}
     bool sketch_compressed() const {
+        return std::min(compressed_a_, compressed_b_) > 0.L;
         // Note: this always returns True after make_compressed (cmp_main.{h,cpp}) if --fastcmp is less than 8.
         // This is meant solely to be used during sketching
     }

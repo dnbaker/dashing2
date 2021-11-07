@@ -64,9 +64,9 @@ struct Dashing2DistOptions: public Dashing2Options {
     {
         if(nbytes_for_fastdists < 0) nbytes_for_fastdists = sizeof(RegT);
         if(std::fmod(nbytes_for_fastdists, 1.)) {
-            if(nbytes_for_fastdists != 0.5) throw std::runtime_error("Can only do 1, 2, 4, 8, or 0.5 bytes per register");
+            if(nbytes_for_fastdists != 0.5) THROW_EXCEPTION(std::runtime_error("Can only do 1, 2, 4, 8, or 0.5 bytes per register"));
         } else if(int(nbytes_for_fastdists) & (int(nbytes_for_fastdists - 1)))
-            throw std::runtime_error("Can't compress sketches to non-power of 2 register size. Should be < sizeof(RegT)");
+            THROW_EXCEPTION(std::runtime_error("Can't compress sketches to non-power of 2 register size. Should be < sizeof(RegT)"));
         fd_level_ = nbytes_for_fastdists;
         truncation_method_ = truncate_method;
         num_neighbors_ = nneighbors;
@@ -81,7 +81,7 @@ struct Dashing2DistOptions: public Dashing2Options {
     void validate() const {
         Dashing2Options::validate();
         if(num_neighbors_ > 0 && min_similarity_ > 0.) {
-            throw std::invalid_argument("invalid: nn > 0 and minsim > 0. Pick either top-k or minimum similarity. (Can't do both.)");
+            THROW_EXCEPTION(std::invalid_argument("invalid: nn > 0 and minsim > 0. Pick either top-k or minimum similarity. (Can't do both.)"));
         }
         if((sspace_ == SPACE_PSET || sspace_ == SPACE_EDIT_DISTANCE) && measure_ == INTERSECTION) {
             std::fprintf(stderr, "Can't estimate intersection sizes for ProbMinHash due to the implicit normalization. Reverting to similarity\n");
@@ -90,6 +90,14 @@ struct Dashing2DistOptions: public Dashing2Options {
         if((sspace_ == SPACE_EDIT_DISTANCE) && measure_ != SIMILARITY && measure_ != M_EDIT_DISTANCE) {
             std::fprintf(stderr, "Edit distance LSH, but measure is not similarity. Switching to edit distance so that it is well defined\n");
              measure_ = M_EDIT_DISTANCE;
+        }
+        if(sketch_compressed_set) {
+            if(this->kmer_result_ == ONE_PERM)
+                THROW_EXCEPTION(std::invalid_argument("Cannot sketch compressed with one-permutation sketches."));
+            if(fd_level_ < 1.)
+                THROW_EXCEPTION(std::invalid_argument("Cannot index nibble-sized registers currently. This may change."));
+            if(fd_level_ > 2.)
+                THROW_EXCEPTION(std::invalid_argument("Only permitting setsketch of 1 or 2 bytes per register."));
         }
     }
 };

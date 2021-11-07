@@ -1,6 +1,8 @@
 #include "fastxsketch.h"
 #include "mio.hpp"
 #include "sketch_core.h"
+#include <variant>
+
 //#include <optional>
 namespace dashing2 {
 
@@ -136,9 +138,9 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     return m / s;
 }
 
-struct hello {
-    hello() = delete;
-};
+using sketch::setsketch::ByteSetS;
+using sketch::setsketch::ShortSetS;
+using VSetSketch = std::variant<ByteSetS, ShortSetS>;
 
 
 
@@ -154,6 +156,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     std::vector<FullSetSketch> fss;
     std::vector<OrderMinHash> omhs;
     std::vector<Counter> ctrs;
+    std::vector<VSetSketch> cfss;
     static_assert(sizeof(pmhs[0].res_[0]) == sizeof(uint64_t), "Must be 64-bit");
     static_assert(sizeof(bmhs[0].track_ids_[0]) == sizeof(uint64_t), "Must be 64-bit");
     static_assert(sizeof(opss[0].ids()[0]) == sizeof(uint64_t), "Must be 64-bit");
@@ -173,9 +176,21 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
             make(opss);
             for(auto &x: opss) x.set_mincount(opts.count_threshold_);
         } else if(opts.kmer_result_ == FULL_SETSKETCH) {
-            fss.reserve(nt);
-            for(size_t i = 0; i < nt; ++i)
-                fss.emplace_back(opts.count_threshold_, ss, opts.save_kmers_, opts.save_kmercounts_);
+            if(opts.sketch_compressed()) {
+                cfss.reserve(nt);
+                for(size_t i = 0; i < nt; ++i) {
+                    if(opts.fd_level_ == 1.) {
+                        cfss.emplace_back(ByteSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                    } else {
+                        assert(opts.fd_level_ == 2.);
+
+                    }
+                }
+            } else {
+                fss.reserve(nt);
+                for(size_t i = 0; i < nt; ++i)
+                    fss.emplace_back(opts.count_threshold_, ss, opts.save_kmers_, opts.save_kmercounts_);
+            }
         }
     } else if(opts.sspace_ == SPACE_MULTISET) make_save(bmhs);
     else if(opts.sspace_ == SPACE_PSET) make(pmhs);
@@ -502,6 +517,7 @@ do {\
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
             if(opss.empty() && fss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
             const size_t opsssz = opss.size();
+            auto &cret = ret.cardinalities_[myind];
             if(opsssz) {
                 //std::fprintf(stderr, "Encode for the opset sketch, %zu is the size for tid %d\n", opss.size(), tid);
                 assert(opss.size() > unsigned(tid));
@@ -510,26 +526,48 @@ do {\
                 perf_for_substrs([p](auto hv) {p->update(hv);});
                 //std::fprintf(stderr, "Encode for the opset sketch. card now: %g, %zu updates\n", opss[tid].getcard(), opss[tid].total_updates());
                 assert(ret.cardinalities_.size() > i);
-                ret.cardinalities_[myind] = p->getcard();
+                cret = p->getcard();
             } else {
                 //std::fprintf(stderr, "Encode for the set sketch\n");
-                perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
-                ret.cardinalities_[myind] = fss[tid].getcard();
+                if(opts.sketch_compressed()) {
+                    std::visit([&](auto &x) {
+                        perf_for_substrs([&x](auto hv) {x.update(hv);});
+                    }, cfss[tid]);
+#if 0
+                    if(opts.fd_level_ == 1.) {
+                        const auto p = &std::get<ByteSetS>(cfss[tid]);
+                        perf_for_substrs([p](auto hv) {p->update(hv);});
+                        cret = p->cardinality();
+                    } else if(opts.fd_level_ == 2.) {
+                        const auto p = &std::get<ShortSetS>(cfss[tid]);
+                        perf_for_substrs([p](auto hv) {p->update(hv);});
+                        cret = p->cardinality();
+                    }
+#endif
+                } else {
+                    perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
+                    cret = fss[tid].getcard();
+                }
             }
-            checked_fwrite(ofp, &ret.cardinalities_[myind], sizeof(double));
+            checked_fwrite(ofp, &cret, sizeof(double));
             std::fflush(ofp);
             const uint64_t *ids = nullptr;
             const uint32_t *counts = nullptr;
-            const RegT *ptr = opsssz ? opss[tid].data(): fss[tid].data();
+            // Update this and VSetSketch above to filter down
+            const RegT *ptr = opsssz ? opss[tid].data(): fss.size() ? fss[tid].data(): opts.fd_level_ == 1. ? (const RegT *)(std::get<ByteSetS>(cfss[tid]).data()): opts.fd_level_ == 2. ? (const RegT *)(std::get<ShortSetS>(cfss[tid]).data());
+            const size_t regsize = opsssz  || fss.size() ? sizeof(RegT): size_t(opts.fd_level_);
+            const int sigshift = (opts.fd_level_ == 1. ? 3: opts.fd_level_ == 2. ? 2: opts.fd_level_ == 4. ? 1: opts.fd_level_ == 0.5 ? 4: opts.fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
             assert(ptr);
             if(opts.save_kmers_)
                 ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
             if(opts.save_kmercounts_)
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
-            ::write(::fileno(ofp), ptr, sizeof(RegT) * ss);
+            ::write(::fileno(ofp), ptr, regsize * ss);
             //checked_fwrite(ofp, ptr, sizeof(RegT) * ss);
             std::fclose(ofp);
-            if(ptr && ret.signatures_.size()) std::copy(ptr, ptr + ss, &ret.signatures_[mss]);
+            if(ptr && ret.signatures_.size()) {
+                std::copy(ptr, ptr + (ss >> sigshift), &ret.signatures_[mss >> sigshift]);
+            }
             if(ids && ret.kmers_.size())
                 std::copy(ids, ids + ss, &ret.kmers_[mss]);
             if(counts && ret.kmercounts_.size())

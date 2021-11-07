@@ -108,20 +108,24 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
     std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
     auto &[hits, counts, nper] = query_res;
-    const bool indexing_compressed = index_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
+    const bool indexing_compressed = opts.sketch_compressed_set && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
     if(indexing_compressed) {
+        if(opts.fd_level_ == 0.5) {
+            query_res = idx.query_candidates(minispan<uint8_t>((uint8_t *)compressed_ptr_ + opts.sketchsize_ / 2 * i, opts.sketchsize_ / 2));
+            continue;
+        }
         switch(int(opts.fd_level_)) {
 #define CASE_N(i, TYPE) \
     case i: {query_res = idx.query_candidates(\
-        minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * id, opts.sketchsize_),\
-        ntoquery);\
+        minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * oid, opts.sketchsize_),\
+        maxcands);\
     } break
            ALL_CASE_NS
 #undef CASE_N
         }
-    } else
-        query_res = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * id], opts.sketchsize_), ntoquery);
+    } else query_res = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_), maxcands);
     const size_t nh = hits.size();
+    std::fprintf(stderr, "Total number of items to compare against: %zu\n", nh);
     std::vector<LSHDistType> vals(hits.size());
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     OMP_PFOR_DYN
@@ -135,7 +139,22 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
         //DBG_ONLY(if(mv != vals.end()) std::fprintf(stderr, "mult* mv: %g. simt: %g\n", mult * *mv, simt);)
         ids.push_back(oid);
         constituents.emplace_back();
-        idx.update_mt(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_));
+        if(indexing_compressed) {
+        if(opts.fd_level_ == 0.5) {
+            idx.update_mt(minispan<uint8_t>((uint8_t *)opts.compressed_ptr_ + opts.sketchsize_ * oid / 2, opts.sketchsize_ / 2));
+            continue;
+        }
+        switch(int(opts.fd_level_)) {
+#define CASE_N(i, TYPE) \
+    case i: {idx.update_mt(minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * oid, opts.sketchsize_));} break;
+           ALL_CASE_NS
+#undef CASE_N
+        }
+        } else {
+            const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+            idx.update_mt(mp);
+        }
+        //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu  hits, %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), hits.size(), ids.size(), ids.size() * 100. / result.names_.size());)
     } else {
         auto pos = mv - vals.begin();
         assert(size_t(pos) < hits.size());
@@ -158,10 +177,23 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
 void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
                 sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result, const size_t maxcands)
 {
+    const bool indexing_compressed = opts.sketch_compressed_set && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     assert(opts.sketchsize_ * oid < result.signatures_.size());
     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-    auto [hits, counts, nper] = idx.query_candidates(span, maxcands, size_t(-1), earlystop);
+    std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
+    auto &[hits, counts, nper] = query_res;
+    if(indexing_compressed) {
+        switch(int(opts.fd_level_)) {
+#define CASE_N(i, TYPE) \
+    case i: {query_res = idx.query_candidates(\
+        minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * oid, opts.sketchsize_),\
+        maxcands);\
+    } break
+           ALL_CASE_NS
+#undef CASE_N
+        }
+    } else query_res = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_), maxcands);
     std::vector<LSHDistType> vals(hits.size());
     auto vp = vals.begin();
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
@@ -173,8 +205,17 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
     if(hits.empty() || (mv != vals.end() && mult * *mv < simt)) {
         ids.push_back(oid);
         constituents.emplace_back();
-        const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-        idx.update(mp);
+        if(indexing_compressed) {
+        switch(int(opts.fd_level_)) {
+#define CASE_N(i, TYPE) \
+    case i: {idx.update(minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * oid, opts.sketchsize_));} break;
+           ALL_CASE_NS
+#undef CASE_N
+        }
+        } else {
+            const minispan<RegT> mp(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
+            idx.update(mp);
+        }
         //DBG_ONLY(std::fprintf(stderr, "Added item %zu/%s; %zu  hits, %zu clusters so far (%%%0.4g)\n", myid, result.names_[oid].data(), hits.size(), ids.size(), ids.size() * 100. / result.names_.size());)
     } else {
         auto pos = mv - vals.begin();
@@ -251,42 +292,6 @@ void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType
         std::swap(ret.second[id], ret.second.back()), ret.second.pop_back();
     }
     DBG_ONLY(std::fprintf(stderr, "%zu clusters after %gs\n", ret.first.size(), std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - ts).count());)
-#if 0
-    ts = std::chrono::high_resolution_clock::now();
-    indicestorm.clear();
-    retidx.clear();
-    for(size_t i = 0; i < ret.first.size() - 1; ++i) {
-        const auto oid = ret.first[i];
-        const size_t mysz = ret.first.size() - i - 1;
-        std::unique_ptr<LSHDistType[]> dists(new LSHDistType[mysz]);
-        #pragma omp parallel for schedule(static, 8)
-        for(size_t j = 0; j < mysz; ++j) {
-            dists[j] = mult * compare(opts, result, oid, ret.first[j + i + 1]);
-        }
-        auto mv = std::min_element(dists.get(), &dists[mysz]);
-        auto pos = mv - dists.get();
-        auto cluster_id = pos + i + 1;
-        auto &rep = ids[cluster_id];
-        //std::fprintf(stderr, "mv %g\n", *mv);
-        if(mv != &dists[mysz] && *mv * mult > opts.min_similarity_ && result.cardinalities_[oid] < result.cardinalities_[rep]) {
-            assert(pos + i + 1 < ret.first.size());
-            auto &cv = constituents[cluster_id];
-            std::lock_guard<std::mutex> lock(locks[cluster_id]);
-            std::lock_guard<std::mutex> lock22(locks[i]);
-            cv.push_back(oid);
-            if(result.cardinalities_[cv.back()] > result.cardinalities_[rep])
-                std::swap(cv.back(), rep);
-            indicestorm.push_back(i);
-            cv.insert(cv.end(), ret.second[i].begin(), ret.second[i].end());
-            ret.second[i].clear();
-        }
-    }
-    for(const auto id: indicestorm) {
-        std::swap(ret.first[id], ret.first.back()), ret.first.pop_back();
-        std::swap(ret.second[id], ret.second.back()), ret.second.pop_back();
-    }
-    std::fprintf(stderr, "After exhaustive removal, %zu clusters after %gs\n", ret.first.size(), std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - ts).count());
-#endif
 }
 
 

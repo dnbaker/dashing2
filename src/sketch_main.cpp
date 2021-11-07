@@ -119,6 +119,7 @@ int sketch_main(int argc, char **argv) {
         opts.kmer_result_ = FULL_SETSKETCH;
     }
     opts.bed_parse_normalize_intervals_ = normalize_bed;
+    Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
     if(paths.empty()) {
         std::fprintf(stderr, "No paths provided. See usage.\n");
         sketch_usage();
@@ -128,7 +129,6 @@ int sketch_main(int argc, char **argv) {
     sketch_core(result, opts, paths, outfile);
     result.nqueries(nq);
     if(cmpout.size()) {
-        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
         distopts.measure_ = measure;
         distopts.cmp_batch_size_ = default_batchsize(batch_size, distopts);
         cmp_core(distopts, result);
