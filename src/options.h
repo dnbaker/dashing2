@@ -66,6 +66,7 @@ enum OptArg {
     LO_ARG("similarity-threshold", 'T')\
     LO_ARG("fastcmp", OPTARG_FASTCMP)\
     LO_ARG("countsketch-size", 'c')\
+    LO_ARG("countmin-size", 'c')\
     LO_ARG("window-size", 'w')\
     LO_ARG("kmer-length", 'k')\
     LO_ARG("outfile", 'o')\
@@ -271,7 +272,7 @@ static constexpr const char *siglen =
         "For example, --spacing 0,1x2,0 is equivalent to 0,1,1,0.\n"\
         "-2/--128bit/long-kmers: Use 128-bit k-mer hashes instead of 64-bit\n"\
         "-m/--threshold/--count-threshold <arg>: Set a count threshold for inclusion. Default: 0. If > 1, this will only sketch k-mers with count >= <arg>\n"\
-        "\nFastx Alphabet:\n"\
+        "\n\nFastx Alphabet:\n"\
         "Dashing2 sketches DNA be default. This can be changed with the following flags; this will disable canonicalization.\n"\
         "--enable-protein: Use 20 character amino acid alphabet.\n"\
         "--protein14: Use 14 character amino acid alphabet.\n"\
@@ -283,14 +284,14 @@ static constexpr const char *siglen =
         "        Otherwise, this changes the hash function applied to k-mers when generated sorted hash sets. This makes it easy to decode quickly, but we can still get good bottom-k estimates using these hashes\n"\
         "        the xor value for u64 kmers (unless --long-kmers is enabled) is the Wang 64-bit hash of the seed.\n"\
         "        u128 kmers (--long-kmers) have the same lower 64 bits, but the upper 64 bits are the Wang 64-bit hash of the u64 xor value.\n"\
-        "\nPathsOptions\n\n"\
+        "\n\nPathsOptions\n"\
         "By default, dashing2 reads positional arguments and sketches them. You may want to use flags instructing it\n"\
         "to read from paths in <file>. Additionally, you can put multiple files separated by spaces into a single line "\
         "to place them all into a single sketch instead.\n"\
         "-F/--ffile: read paths from file in addition to positional arguments.\n"\
         "-Q/--qfile: read query paths from file; this is used for asymmetric queries (e.g., containment).\n"\
-        "If multiple files are space-delimited in a single line, they will be sketched jointly.\n"\
-        "K-mer Filtering\n\n"\
+        "If multiple files are space-delimited in a single line, they will be sketched jointly.\n\n"\
+        "K-mer Filtering\n"\
         "If there are a set of common k-mers or artefactual sequence, you can specify --filterset to skip k-mers in this file when sketching other files.\n"\
         "By default, this converts it into a sorted hash set and skips k-mers which are found in the set.\n"\
         "`--filterset [path]` yields this.\n"\
@@ -333,11 +334,11 @@ static constexpr const char *siglen =
         "BagMinHash is most applicable for datasets where the absolute quantities of an event matter, rather than its fraction of the complete dataset.\n"\
         "-B/--multiset: Treats weighted sets as multisets.\n"\
         "        Aliases: --bagminhash, --bmh, --BMH\n"\
-        "It typically comes at 2-4x runtime cost over ProbMinHash, depending on sketch size.\n"\
+        "It typically comes at 2-4x runtime cost over ProbMinHash, depending on sketch size.\n\n"\
         "Weighted Sketching (Counting) Parameters -\n"\
-        "-c/--countsketch-size: Use Count-Sketch counting instead of exact counting, using <arg> as the size.\n    "\
+        "-c/--countmin-size/--countsketch-size: Use Count-Sketch counting instead of exact counting, using <arg> as the size.\n    "\
         "This allows you to avoid unbounded dictionary size at the cost of some approximation of the weighted sets\n"\
-        "(This only affects BagMinHash and ProbMinHash, and only for sequence data.\n"\
+        "This only affects BagMinHash and ProbMinHash, and is only relevant to sequence data.\n"\
         "\n\nExact Modes\n"\
         "You can also emit full k-mer sets, a count dictionary (key-count map), or a set of minimizer sequences\n"\
         "-H/--set: Full k-mer set. This generates a sorted hash set for k-mers in the data. If the parser is windowed (-w is fairly large), this could even be rather small.\n"\
@@ -355,7 +356,7 @@ static constexpr const char *siglen =
         "              Minimizer sequence will be homopolymer-compressed before emission. \n"\
         "              This makes the sequences insensitive to the lengths of minimizer stretches, which may simplify match finding\n"\
         "\n\nDistance Options (shared)\n"\
-        "--Exhaustive Distance Outputs--\n"\
+        "Exhaustive Distance Outputs--\n"\
         "The default output format is all-pairs upper-triangular.\n"\
         "We provide three other full matrix methods - \n"\
         "1. PHYLIP Upper Triangular distance matrix, enabled by --phylip.\n"\
@@ -367,8 +368,8 @@ static constexpr const char *siglen =
         "Use this if you want to compare a set of queries to a set of references rather than complete all-pairs. Note: -F must be provided, or reference files should be added as positional arguments\n"\
         "positional arguments and -F paths are treated as a reference set;\n"\
         "Paths provided in -Q/--qfile are are treated as a query set.\n"\
-        "The output shape then has |F| rows and |Q| columns, (F, Q) in row-major format\n"\
-        "--Sparse Distance Outputs--\n"\
+        "The output shape then has |F| rows and |Q| columns, (F, Q) in row-major format\n\n"\
+        "Sparse Distance Outputs--\n"\
         "We provide several sparse distance options - \n"\
         "    1. topk, -- only the top-k nearest neighbors are emitted for each item\n"\
         "    2. thresholded, -- only the similarities > threshold are emitted\n"\
@@ -423,8 +424,8 @@ static constexpr const char *siglen =
         "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
-        "--batch-size [16] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
-        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"\
+        "--batch-size [num_threads] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
+        "              \tBy default, this is the number of threads. \n"\
         "LSH Options\n"\
         "There are a variety of heuristics in the LSH tables; however, the most important besides sketch size is the number of hash tables used.\n"\
         "--nLSH <int=2>\t\n"\
