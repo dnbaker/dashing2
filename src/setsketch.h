@@ -875,8 +875,10 @@ struct SmallNibbleSetS: public SetSketch<uint8_t> {
 };
 struct ByteSetS: public SetSketch<uint8_t, long double> {
     using Super = SetSketch<uint8_t, long double>;
+    static constexpr long double DEFAULT_B = 1.2;
+    static constexpr long double DEFAULT_A = 20.;
     static constexpr size_t QV = 254u;
-    ByteSetS(size_t nreg, long double b=1.2, long double a=20.): Super(nreg, b, a, QV) {}
+    ByteSetS(size_t nreg, long double b=DEFAULT_B, long double a=DEFAULT_A): Super(nreg, b, a, QV) {}
     template<typename Arg> ByteSetS(const Arg &arg): Super(arg) {}
 };
 struct ShortSetS: public SetSketch<uint16_t, long double> {
