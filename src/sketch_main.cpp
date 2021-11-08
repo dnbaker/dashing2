@@ -28,6 +28,7 @@ int sketch_main(int argc, char **argv) {
     bool save_kmers = false, save_kmercounts = false, cache = false, use128 = false, canon = true;
     bool exact_kmer_dist = false, hpcompress = false;
     bool refine_exact = false;
+    long double compressed_a = -1.L, compressed_b = -1.L;
     bool fasta_dedup = false;
     double similarity_threshold = -1.;
     unsigned int count_threshold = 0.;
@@ -107,6 +108,9 @@ int sketch_main(int argc, char **argv) {
         .fasta_dedup(fasta_dedup);
     opts.by_chrom_ = by_chrom;
     opts.downsample(downsample_frac);
+    opts.compressed_a_ = compressed_a;
+    opts.compressed_b_ = compressed_b;
+    opts.fd_level_ = nbytes_for_fastdists;
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }
@@ -116,6 +120,7 @@ int sketch_main(int argc, char **argv) {
         opts.kmer_result_ = FULL_SETSKETCH;
     }
     opts.bed_parse_normalize_intervals_ = normalize_bed;
+    Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
     if(paths.empty()) {
         std::fprintf(stderr, "No paths provided. See usage.\n");
         sketch_usage();
@@ -125,7 +130,6 @@ int sketch_main(int argc, char **argv) {
     sketch_core(result, opts, paths, outfile);
     result.nqueries(nq);
     if(cmpout.size()) {
-        Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
         distopts.measure_ = measure;
         distopts.cmp_batch_size_ = default_batchsize(batch_size, distopts);
         cmp_core(distopts, result);

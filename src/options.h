@@ -21,7 +21,6 @@ enum OptArg {
     OPTARG_CMPOUT,
     OPTARG_BINARY_OUTPUT,
     OPTARG_FASTCMP,
-    OPTARG_REGBYTES,
     OPTARG_BBIT_SIGS,
     OPTARG_EXACT_KMER_DIST,
     OPTARG_ISZ,
@@ -49,6 +48,10 @@ enum OptArg {
     OPTARG_ENTROPYMIN,
     OPTARG_SIGRAMLIMIT,
     OPTARG_MAXCAND,
+    OPTARG_SETSKETCH_AB,
+    OPTARG_FASTCMPBYTES,
+    OPTARG_FASTCMPSHORTS,
+    OPTARG_FASTCMPWORDS,
     OPTARG_DUMMY
 };
 
@@ -65,6 +68,7 @@ enum OptArg {
     LO_ARG("topk", 'K')\
     LO_ARG("similarity-threshold", 'T')\
     LO_ARG("fastcmp", OPTARG_FASTCMP)\
+    LO_ARG("regsize", OPTARG_FASTCMP)\
     LO_ARG("countsketch-size", 'c')\
     LO_ARG("countmin-size", 'c')\
     LO_ARG("window-size", 'w')\
@@ -90,6 +94,7 @@ enum OptArg {
     /*LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)*/\
     LO_FLAG("bbit-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
     LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
+    LO_FLAG("intersection-size", OPTARG_ISZ, measure, INTERSECTION)\
     LO_FLAG("mash-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("symmetric-containment", OPTARG_SYMCONTAIN, measure, SYMMETRIC_CONTAINMENT)\
@@ -108,8 +113,10 @@ enum OptArg {
     LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_FLAG("asymmetric", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_FLAG("square", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
-    LO_ARG("regbytes", OPTARG_REGBYTES)\
+    LO_ARG("regbytes", OPTARG_FASTCMP)\
     /*LO_ARG("set", 'H')*/\
+    {"fastcmp-bytes", no_argument, 0, OPTARG_FASTCMPBYTES},\
+    {"fastcmp-shorts", no_argument, 0, OPTARG_FASTCMPSHORTS},\
     {"save-kmers", no_argument, 0, 's'},\
     {"save-kmercounts", no_argument, 0, 'N'},\
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
@@ -146,7 +153,8 @@ enum OptArg {
     {"by-chrom", no_argument, (int *)&by_chrom, 1},\
     {"sketch-size-l2", required_argument, 0, 'L'},\
     {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT},\
-    {"maxcand", required_argument, 0, OPTARG_MAXCAND}
+    {"maxcand", required_argument, 0, OPTARG_MAXCAND},\
+    {"setsketch-ab", required_argument, 0, OPTARG_SETSKETCH_AB}
 
 
 
@@ -198,7 +206,6 @@ enum OptArg {
         case 'F': ffile = optarg; break;\
         case 'Q': qfile = optarg; ok = PANEL; break;\
         case OPTARG_BED_NORMALIZE: normalize_bed = true; break;\
-        case OPTARG_REGBYTES: nbytes_for_fastdists = std::atof(optarg); break;\
         case 'o': outfile = optarg; break;\
         case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;\
         case 'k': k = std::atoi(optarg); break;\
@@ -240,6 +247,28 @@ enum OptArg {
         case OPTARG_MAXCAND: {\
             maxcand_global = std::atoi(optarg);\
             if(maxcand_global < 0) {std::fprintf(stderr, "Warning: maxcand_global < 0. This defaults to heuristics for selecting the number of candidates. This may be in error.\n");}\
+        } break;\
+        case OPTARG_SETSKETCH_AB: {\
+            char *e;\
+            compressed_a = std::strtold(optarg, &e);\
+            compressed_b = std::strtold(e + 1, nullptr);\
+            if(std::min(compressed_a, compressed_b) <= 0.) THROW_EXCEPTION(std::invalid_argument("Compressed A and B parameters must be greater than 0."));\
+            std::fprintf(stderr, "setsketch ab: %Lg, %Lg\n", compressed_a, compressed_b);\
+        } break;\
+        case OPTARG_FASTCMPSHORTS: {\
+            compressed_a = sketch::setsketch::ShortSetS::DEFAULT_A;\
+            compressed_b = sketch::setsketch::ShortSetS::DEFAULT_B;\
+            nbytes_for_fastdists = 2.;\
+        } break;\
+        case OPTARG_FASTCMPBYTES: {\
+            compressed_a = sketch::setsketch::ByteSetS::DEFAULT_A;\
+            compressed_b = sketch::setsketch::ByteSetS::DEFAULT_B;\
+            nbytes_for_fastdists = 1.;\
+        } break;\
+        case OPTARG_FASTCMPWORDS: {\
+            compressed_a = sketch::setsketch::UintSetS::DEFAULT_A;\
+            compressed_b = sketch::setsketch::UintSetS::DEFAULT_B;\
+            nbytes_for_fastdists = 4.;\
         } break;
 
 
@@ -408,24 +437,37 @@ static constexpr const char *siglen =
         "  Python code for parsing the binary representation is available at https://github.com/dnbaker/dashing2/blob/main/python/parse.py.\n"\
         "Runtime Options --\n"\
         "By default, we compare items with full hash function registers; to trade accuracy for speed, these sketches can be compressed before comparisons.\n"\
-        "--fastcmp <arg>\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are logarithmically-compressed\n"\
-        "For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
-        "<arg> may be 8 (64 bits), 4 (32 bits), 2 (16 bits), 1 (8 bits), or .5 (4 bits)\n"\
-        "Results may even be somewhat stabilized by the use of smaller registers.\n"\
-        "\tDependent Option:\n"\
-        "\t                 --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
-        "For minhash sketches (setsketch, probminhash, and bagminhash), this uses full registers instead of compressed.\n"\
-        "--refine-exact\tThis causes the candidate KNN graph to be refined to a final KNN graph using full distances.\tIf using sketches, then full hash registers are used.\nOtherwise, exact k-mer comparison functions are used.\n"\
+        "To truncate for faster comparisons, you can either select a register size to which to truncate to after generating full floating-point values, which will allow Dashing2 to use as much resolution as possible in a fixed number of bits.\n"\
+        "On the other hand, this means that initial sketching needs more memory.\n"\
+        "If you provide register values ahead of time, you can accumulate in smaller registers directly to reduce memory requirements.\n"\
+        "--fastcmp/--regsize <arg>\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are logarithmically-compressed\n"\
+        "  You can use this first approach with --fastcmp/--regsize. These are logarithmically compressed.\n"\
+        "  For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
+        "  <arg> may be 8 (64 bits), 4 (32 bits), 2 (16 bits), 1 (8 bits), or .5 (4 bits)\n"\
+        "  Results may even be somewhat stabilized by the use of smaller registers.\n"\
+        "\tDependent Options:\n"\
+        "\t          --setsketch-ab <float1>,<float2>\n"\
+        "\t            Example: --setsketch-ab 0.4,1.005\n"\
+        "\t            If you specify a, b before using this method, then SetSketches of --fastcmp size bytes will be generated directly, rather than truncating after sketching all items.\n"\
+        "\t            However, this is only supported for the SetSketch. (e.g., not for --bagminhash or --probminhash).\n"\
+        "\t            This can allow you to scale to larger collections.\n"\
+        "\t            We also provide several pre-set parameter values.\n"\
+        "\t          --fastcmp-bytes sets a and b to 20 and 1.2, and sets --fastcmp to 1\n"\
+        "\t          --fastcmp-shorts sets a and b to .06 and 1.0005, and sets --fastcmp to 2.\n"\
+        "\t          --fastcmp-words sets a and b to 19.77 and 1.0000000109723500835 and sets --fastcmp to 4.\n"\
+        "\n"\
+        "If you instead want to truncate to the bottom-b bits of the signature --\n"\
+        "\t          --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
+        "The runtime is effectively equivalent to the setsketch.\n"\
         "\n\nDistance specifications\n"\
         "The default value emitted is similarity. For MinHash/HLL/SetSketch sketches, this is the fraction of shared registers.\n"\
         "This can be changed to a distance (--mash-distance) for k-mer similarity, where it can be used for hierarchical clustering.\n"\
         "--mash-distance/--poisson-distance\t Emit distances, as estimated by the Poisson model for k-mer distances.\n"\
         "--symmetric-containment\t Use symmetric containment as the distance. e.g., (|A & B| / min(|A|, |B|))\n"\
         "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
+        "--intersection-size/--intersection\t Emit the cardinality of the intersection between objects. IE, the number of k-mers shared between the two.\n"\
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
-        "--batch-size [num_threads] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
-        "              \tBy default, this is the number of threads. \n"\
         "LSH Options\n"\
         "There are a variety of heuristics in the LSH tables; however, the most important besides sketch size is the number of hash tables used.\n"\
         "--nLSH <int=2>\t\n"\

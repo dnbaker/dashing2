@@ -203,11 +203,18 @@ INLINE void *ptr_roundup(void *ptr) {
     return ptr;
 }
 
-void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance) {
+void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance, long double a=-1., long double b=-1., const bool sketch_compressed_set=0) {
     if(fd >= sizeof(RegT)) return;
     ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
     auto &compressed_reps = std::get<0>(ret);
+    if(sketch_compressed_set) {
+        compressed_reps = static_cast<void *>(const_cast<RegT *>(sigs.data()));
+        ret.a(a);
+        ret.b(b);
+        assert(std::min(a, b) > 0.L);
+        return;
+    }
     ret.up.reset(new uint8_t[ret.nbytes + 63]);
     compressed_reps = ptr_roundup(static_cast<void *>(ret.up.get()));
     const size_t nsigs = sigs.size();
@@ -231,19 +238,23 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
             }
         }
     } else if(truncation_method <= 0) {
-        RegT minreg = std::numeric_limits<RegT>::max(), maxreg = -std::numeric_limits<RegT>::max();
-        OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
-        for(size_t i = 0; i < nsigs; ++i) {
-            const auto v = sigs[i];
-            if(v <= 0 || v == std::numeric_limits<RegT>::max()) continue;
-            minreg = std::min(minreg, v);
-            maxreg = std::max(maxreg, v);
-        }
-        long double q = fd == 1. ? 254.3: fd == 2. ? 65534: fd == 4. ? 4294967294: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
         long double logbinv;
-        assert(q > 0.);
-        auto [b, a] = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
-        std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %Lg, %Lg\n", a, b, static_cast<long double>(minreg), static_cast<long double>(maxreg));
+        const long double q = fd == 1. ? 254.3: fd == 2. ? 65534: fd == 4. ? 4294967294: fd == 8. ? 18446744073709551615. : fd == 0.5 ? 15.4: -1.;
+        if(a <= 0. or b <= 0.) {
+            RegT minreg = std::numeric_limits<RegT>::max(), maxreg = -std::numeric_limits<RegT>::max();
+            OMP_ONLY(_Pragma("omp parallel for simd reduction(min:minreg) reduction(max:maxreg)"))
+            for(size_t i = 0; i < nsigs; ++i) {
+                const auto v = sigs[i];
+                if(v <= 0 || v == std::numeric_limits<RegT>::max()) continue;
+                minreg = std::min(minreg, v);
+                maxreg = std::max(maxreg, v);
+            }
+            assert(q > 0.);
+            const auto tailored = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
+            b = tailored.first;
+            a = tailored.second;
+            std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %Lg, %Lg\n", a, b, static_cast<long double>(minreg), static_cast<long double>(maxreg));
+        }
         if(a == 0. || std::isinf(b)) {
             std::fprintf(stderr, "Note: setsketch compression yielded infinite value; falling back to b-bit compression\n");
             return make_compressed(ret, 1, fd, sigs, kmers, is_edit_distance);
@@ -368,7 +379,6 @@ case v: {\
             else if(opts.measure_ == SYMMETRIC_CONTAINMENT)
                 ret = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L) * ret / std::min(lhcard, rhcard);
         } else {
-            //std::fprintf(stderr, "alpha gt: %zu. beta gt: %zu\n", res.first, res.second);
             long double alpha = res.first * invdenom;
             long double beta = res.second * invdenom;
             const long double b = opts.compressed_b_;
@@ -378,6 +388,7 @@ case v: {\
                 alpha = g_b(b, alpha);
                 beta = g_b(b, beta);
             }
+            //std::fprintf(stderr, "alpha gt: %zu. beta gt: %zu, Alpha %Lg, Beta %Lg\n", res.first, res.second, alpha, beta);
             VERBOSE_ONLY(std::fprintf(stderr, "Alpha: %Lg. Beta: %Lg\n", alpha, beta);)
             if(alpha + beta >= 1.) {
                 mu = lhcard + rhcard;
@@ -517,6 +528,12 @@ inline size_t densify(MHT *minhashes, uint64_t *const kmers, const size_t sketch
 }
 
 void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
+    if(opts.sketch_compressed() && opts.truncate_mode() != 0) {
+        THROW_EXCEPTION(std::invalid_argument("Can't use truncated setsketch generation with bbit signatures. Omit --bbit-sigs or --setsketch-ab"));
+    }
+    if(opts.sketch_compressed() && opts.save_kmers()) {
+        THROW_EXCEPTION(std::invalid_argument("Can't use truncated setsketch generation --save-kmers. Omit --save-kmers or --setsketch-ab"));
+    }
     // We handle some details before dispatching the final comparison code
     // First, we compute cardinalities for sets/multisets
     // and then we densify one-permutation minhashing
@@ -612,7 +629,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
     CompressedRet cret;
-    make_compressed(cret, opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE);
+    make_compressed(cret, opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE, opts.compressed_a_, opts.compressed_b_, opts.sketch_compressed_set);
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = cret;
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS || opts.output_kind_ == PANEL) {
         emit_rectangular(opts, result);

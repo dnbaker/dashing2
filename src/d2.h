@@ -8,7 +8,7 @@
 #include <vector>
 #include "bonsai/encoder.h"
 #include "xxHash/xxh3.h"
-#include "./setsketch.h"
+#include "src/setsketch.h"
 #include "sketch/bmh.h"
 #include "counter.h"
 #include "oph.h"
@@ -113,6 +113,8 @@ public:
     uint64_t sampler_rng_;
     uint64_t sampler_threshold_;
     uint64_t seedseed_ = 0;
+    double fd_level_ = sizeof(RegT); // Determines the number of bytes to which the minhash sketches are compressed
+    int truncation_method_ = 0;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
@@ -120,6 +122,7 @@ public:
     DataType dtype_;
     bool use128_ = false;
     unsigned nthreads_;
+    mutable long double compressed_b_ = -1.L, compressed_a_ = -1.L;
     bool fasta_dedup_ = false;
 
     std::unique_ptr<FilterSet> fs_;
@@ -213,6 +216,11 @@ public:
     size_t nremperres128() const {return enc_.nremperres128();}
     uint64_t seedseed() const {return seedseed_;}
     Dashing2Options &seedseed(uint64_t seed) {seedseed_ = seed; seed_mask(seedseed_); return *this;}
+    bool sketch_compressed() const {
+        return std::min(compressed_a_, compressed_b_) > 0.L;
+        // Note: this always returns True after make_compressed (cmp_main.{h,cpp}) if --fastcmp is less than 8.
+        // This is meant solely to be used during sketching
+    }
 };
 
 static INLINE bool endswith(std::string lhs, std::string rhs) {

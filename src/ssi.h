@@ -85,7 +85,7 @@ public:
     SetSketchIndex(size_t m, bool densified=false): m_(m) {
         total_ids_ = 0;
         uint64_t rpr = 1;
-        const size_t nrpr = densified ? m: size_t(ilog2(sketch::integral::roundup(m)));
+        const size_t nrpr = densified ? m: size_t(ilog2(integral::roundup(m)));
         regs_per_reg_.reserve(nrpr);
         packed_maps_.reserve(nrpr);
         for(;rpr <= m_;) {
@@ -301,22 +301,22 @@ public:
         return my_id;
     }
     INLINE KeyT hashmem256(const uint64_t *x) const {
-        sketch::hash::CEHasher ceh;
+        hash::CEHasher ceh;
         uint64_t v[4];
         std::memcpy(&v, x, sizeof(v));
-        return sketch::hash::WangHash::hash(ceh(v[0]) ^ (ceh(v[1]) * ceh(v[2]) - v[3]));
+        return hash::WangHash::hash(ceh(v[0]) ^ (ceh(v[1]) * ceh(v[2]) - v[3]));
     }
     INLINE KeyT hashmem128(const uint64_t *x) const {
         uint64_t v[2];
         std::memcpy(&v, x, sizeof(v));
-        v[0] = sketch::hash::WangHash::hash(v[0]);
-        v[1] = sketch::hash::WangHash::hash(v[1] ^ v[0]);
+        v[0] = hash::WangHash::hash(v[0]);
+        v[1] = hash::WangHash::hash(v[1] ^ v[0]);
         return v[0] ^ v[1];
     }
     INLINE KeyT hashmem64(const uint64_t *x) const {
         uint64_t v;
         std::memcpy(&v, x, sizeof(v));
-        v = sketch::hash::WangHash::hash(v);
+        v = hash::WangHash::hash(v);
         return v;
     }
     INLINE KeyT hashmem32(const uint32_t *x) const {
