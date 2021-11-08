@@ -140,7 +140,28 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
 
 using sketch::setsketch::ByteSetS;
 using sketch::setsketch::ShortSetS;
-using VSetSketch = std::variant<ByteSetS, ShortSetS>;
+struct UintSetS: public sketch::setsketch::SetSketch<uint32_t, long double> {
+    static constexpr long double DEFAULT_B = 1.0000000109723500835;
+    static constexpr long double DEFAULT_A = 19.77882586;
+    static constexpr size_t QV = 0xFFFFFFFE;
+    UintSetS(size_t nreg, long double b=DEFAULT_B, long double a=DEFAULT_A): SetSketch<uint32_t, long double>(nreg, b, a, QV) {}
+    template<typename Arg> UintSetS(const Arg &arg): SetSketch<uint32_t, long double>(arg) {}
+};
+using VSetSketch = std::variant<ByteSetS, ShortSetS, UintSetS>;
+
+#if 0
+RegT *getdata(VSetSketch &o) {
+    RegT *ret;
+    std::visit([&ret](auto &x) {ret = (const RegT *)x.data();}, o);
+    return ret;
+}
+#endif
+
+const RegT *getdata(VSetSketch &o) {
+    const RegT *ret;
+    std::visit([&ret](auto &x) {ret = (const RegT *)x.data();}, o);
+    return ret;
+}
 
 
 
@@ -181,10 +202,10 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                 for(size_t i = 0; i < nt; ++i) {
                     if(opts.fd_level_ == 1.) {
                         cfss.emplace_back(ByteSetS(ss, opts.compressed_b_, opts.compressed_a_));
-                    } else {
-                        std::fprintf(stderr, "fd level: %g\n", opts.fd_level_);
-                        assert(opts.fd_level_ == 2.);
+                    } else if(opts.fd_level_ == 2.) {
                         cfss.emplace_back(ShortSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                    } else if(opts.fd_level_ == 4.) {
+                        cfss.emplace_back(UintSetS(ss, opts.compressed_b_, opts.compressed_a_));
                     }
                 }
             } else {
@@ -332,13 +353,11 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                         }
                         RegT *const ptr = &ret.signatures_[(ss >> sigshift) * myind];
                         if(std::fread(ptr, sizeof(RegT), ss >> sigshift, ifp) != (ss >> sigshift)) THROW_EXCEPTION(std::runtime_error("Failed to read compressed signatures from file "s + destination));
-                        if(!std::feof(ifp)) {
+                        if(std::fgetc(ifp) != EOF) {
                             THROW_EXCEPTION(std::runtime_error("File corrupted - ifp should be at eof."));
                         }
                         std::fclose(ifp);
-                        continue;
-                    }
-                    if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
+                    } else if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
                         std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
                         goto perform_sketch;
                     }
@@ -557,7 +576,7 @@ do {\
                     std::visit([&](auto &x) {
                         perf_for_substrs([&x](auto hv) {x.update(hv);});
                         cret = x.cardinality();
-                        std::fprintf(stderr, "cret: %g\n", cret);
+                        //std::fprintf(stderr, "cret: %g\n", cret);
                     }, cfss[tid]);
                 } else {
                     perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
@@ -569,7 +588,7 @@ do {\
             const uint64_t *ids = nullptr;
             const uint32_t *counts = nullptr;
             // Update this and VSetSketch above to filter down
-            const RegT *ptr = opsssz ? opss[tid].data(): fss.size() ? fss[tid].data(): opts.fd_level_ == 1. ? (const RegT *)(std::get<ByteSetS>(cfss[tid]).data()): (const RegT *)(std::get<ShortSetS>(cfss[tid]).data());
+            const RegT *ptr = opsssz ? opss[tid].data(): fss.size() ? fss[tid].data(): getdata(cfss[tid]);
             const size_t regsize = opsssz  || fss.size() ? sizeof(RegT): size_t(opts.fd_level_);
             assert(ptr);
             if(opts.save_kmers_)
