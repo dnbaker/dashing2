@@ -111,10 +111,8 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
     const bool indexing_compressed = opts.sketch_compressed_set && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
     if(indexing_compressed) {
         if(opts.fd_level_ == 0.5) {
-            query_res = idx.query_candidates(minispan<uint8_t>((uint8_t *)compressed_ptr_ + opts.sketchsize_ / 2 * i, opts.sketchsize_ / 2));
-            continue;
-        }
-        switch(int(opts.fd_level_)) {
+            query_res = idx.query_candidates(minispan<uint8_t>((uint8_t *)opts.compressed_ptr_ + opts.sketchsize_ / 2 * oid, opts.sketchsize_ / 2), maxcands);
+        } else switch(int(opts.fd_level_)) {
 #define CASE_N(i, TYPE) \
     case i: {query_res = idx.query_candidates(\
         minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * oid, opts.sketchsize_),\
@@ -142,9 +140,7 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
         if(indexing_compressed) {
         if(opts.fd_level_ == 0.5) {
             idx.update_mt(minispan<uint8_t>((uint8_t *)opts.compressed_ptr_ + opts.sketchsize_ * oid / 2, opts.sketchsize_ / 2));
-            continue;
-        }
-        switch(int(opts.fd_level_)) {
+        } else switch(int(opts.fd_level_)) {
 #define CASE_N(i, TYPE) \
     case i: {idx.update_mt(minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * oid, opts.sketchsize_));} break;
            ALL_CASE_NS

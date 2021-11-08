@@ -554,7 +554,7 @@ do {\
             const uint64_t *ids = nullptr;
             const uint32_t *counts = nullptr;
             // Update this and VSetSketch above to filter down
-            const RegT *ptr = opsssz ? opss[tid].data(): fss.size() ? fss[tid].data(): opts.fd_level_ == 1. ? (const RegT *)(std::get<ByteSetS>(cfss[tid]).data()): opts.fd_level_ == 2. ? (const RegT *)(std::get<ShortSetS>(cfss[tid]).data());
+            const RegT *ptr = opsssz ? opss[tid].data(): fss.size() ? fss[tid].data(): opts.fd_level_ == 1. ? (const RegT *)(std::get<ByteSetS>(cfss[tid]).data()): (const RegT *)(std::get<ShortSetS>(cfss[tid]).data());
             const size_t regsize = opsssz  || fss.size() ? sizeof(RegT): size_t(opts.fd_level_);
             const int sigshift = (opts.fd_level_ == 1. ? 3: opts.fd_level_ == 2. ? 2: opts.fd_level_ == 4. ? 1: opts.fd_level_ == 0.5 ? 4: opts.fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
             assert(ptr);

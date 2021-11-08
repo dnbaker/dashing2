@@ -203,7 +203,7 @@ INLINE void *ptr_roundup(void *ptr) {
     return ptr;
 }
 
-void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance, long double a=-1., long double b=-1., const bool sketch_compressed_set) {
+void make_compressed(CompressedRet &ret, int truncation_method, double fd, const mm::vector<RegT> &sigs, const mm::vector<uint64_t> &kmers, bool is_edit_distance, long double a=-1., long double b=-1., const bool sketch_compressed_set=0) {
     if(fd >= sizeof(RegT)) return;
     ret.nbytes = fd * sigs.size();
     if(fd == 0. && std::fmod(fd * sigs.size(), 1.)) THROW_EXCEPTION(std::runtime_error("Can't do nibble registers without an even number of signatures"));
@@ -525,10 +525,10 @@ inline size_t densify(MHT *minhashes, uint64_t *const kmers, const size_t sketch
 }
 
 void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
-    if(opts.sketch_compressed() && opts.truncate_mode != 0) {
+    if(opts.sketch_compressed() && opts.truncate_mode() != 0) {
         THROW_EXCEPTION(std::invalid_argument("Can't use truncated setsketch generation with bbit signatures. Omit --bbit-sigs or --setsketch-ab"));
     }
-    if(opts.sketch_compressed() && opts.save_kmers) {
+    if(opts.sketch_compressed() && opts.save_kmers()) {
         THROW_EXCEPTION(std::invalid_argument("Can't use truncated setsketch generation --save-kmers. Omit --save-kmers or --setsketch-ab"));
     }
     // We handle some details before dispatching the final comparison code
@@ -626,7 +626,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
     CompressedRet cret;
-    make_compressed(cret, opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE, opts.compressed_a_, opts.compressed_b_, opts.sketch_compressed_set());
+    make_compressed(cret, opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE, opts.compressed_a_, opts.compressed_b_, opts.sketch_compressed_set);
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = cret;
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS || opts.output_kind_ == PANEL) {
         emit_rectangular(opts, result);

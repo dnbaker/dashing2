@@ -68,13 +68,13 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
     std::unique_ptr<std::mutex[]> mutexes(new std::mutex[ns]);
     auto idxstart = std::chrono::high_resolution_clock::now();
     // Build the index
-    const bool indexing_compressed = opts.sketch_compressed_set() && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
+    const bool indexing_compressed = opts.sketch_compressed_set && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
     idx.size(ns);
     OMP_PFOR
     for(size_t i  = 0; i < ns; ++i) {
         if(indexing_compressed) {
             if(opts.fd_level_ == 0.5) {
-                idx.update(minispan<uint8_t>((uint8_t *)compressed_ptr_ + opts.sketchsize_ / 2 * i, opts.sketchsize_ / 2);
+                idx.update(minispan<uint8_t>((uint8_t *)opts.compressed_ptr_ + opts.sketchsize_ / 2 * i, opts.sketchsize_ / 2));
                 continue;
             }
             switch(int(opts.fd_level_)) {
@@ -137,7 +137,7 @@ VERBOSE_ONLY(
     std::fprintf(stderr, "Index building took %Lgs. KNN Generation took %Lgs\n", std::chrono::duration<long double, std::ratio<1, 1>>(idxstop - idxstart).count(), std::chrono::duration<long double, std::ratio<1, 1>>(knnstop - idxstop).count());
     return neighbor_lists;
 }
-std::vector<pqueue> build_exact_graph(SetSketchIndex<LSHIDType, LSHIDType> &, const Dashing2DistOptions &opts, const SketchingResult &result, const bool) {
+std::vector<pqueue> build_exact_graph(SetSketchIndex<LSHIDType, LSHIDType> &, const Dashing2DistOptions &opts, const SketchingResult &result) {
     // Builds the LSH index and populates nearest-neighbor lists in parallel
     const size_t ns = result.names_.size();
     //const int topk = opts.min_similarity_ > 0. ? -1: opts.num_neighbors_ > 0 ? 1: 0;

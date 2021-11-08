@@ -76,8 +76,15 @@ struct Dashing2DistOptions: public Dashing2Options {
         if(outfile_path_.empty() || outfile_path_ == "-") outfile_path_ = "/dev/stdout";
         if(nLSH < 1) nLSH = 1;
         sketch_compressed_set = this->sketch_compressed();
+        if(sketch_compressed_set) {
+            if(size_t rem = opts.sketchsize_ % sizeof(RegT) / opts.fd_level_; rem != 0) {
+                opts.sketchsize_ += sizeof(RegT) / opts.fd_level_ - rem;
+                std::fprintf(stderr, "Sketchsize is not %zu-bit register multiple; padding the number of registers to fit. New number of registers: %zu\n", sizeof(RegT) * 8, opts.sketchsize_);
+            }
+        }
         validate();
     }
+    bool truncate_mode() const {return truncation_method_;}
     void validate() const {
         Dashing2Options::validate();
         if(num_neighbors_ > 0 && min_similarity_ > 0.) {

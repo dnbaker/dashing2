@@ -84,7 +84,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
 
 FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Options &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel, size_t seqs_per_batch) {
 
-    if(std::min(opts.compressed_a, opts.compressed_b) <= 0.L) {
+    if(std::min(opts.compressed_a_, opts.compressed_b_) <= 0.L) {
         THROW_EXCEPTION(std::invalid_argument("fastx sketchbyseq does not yet support pre-set SetSketch parameters."));
     }
     gzFile ifp;
