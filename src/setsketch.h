@@ -587,6 +587,339 @@ public:
         return ret;
     }
 };
+template<typename ResT, typename FT>
+class SetSketch {
+    static_assert(std::is_floating_point<FT>::value, "Must float");
+    static_assert(std::is_integral<ResT>::value, "Must be integral");
+    // Set sketch 1
+    size_t m_; // Number of registers
+    FT a_; // Exponential parameter
+    FT b_; // Base
+    FT ainv_;
+    FT logbinv_;
+    using QType = std::common_type_t<ResT, int64_t>;
+    QType q_;
+    std::unique_ptr<ResT[], detail::Deleter> data_;
+    std::vector<uint64_t> ids_; // The IDs representing the sampled items.
+                                // Only used if SetSketch is
+    fy::LazyShuffler ls_;
+    minvt_t<ResT> lowkh_;
+    std::vector<FT> lbetas_; // Cache Beta values * 1. / a
+    mutable double mycard_ = -1.;
+    static ResT *allocate(size_t n) {
+        n = (n << 1) - 1;
+        ResT *ret = nullptr;
+        static constexpr size_t ALN =
+#if __AVX512F__
+            64;
+#elif __AVX2__
+            32;
+#else
+            16;
+#endif
+#if __cplusplus >= 201703L && defined(_GLIBCXX_HAVE_ALIGNED_ALLOC)
+        if((ret = static_cast<ResT *>(std::aligned_alloc(ALN, n * sizeof(ResT)))) == nullptr)
+#else
+        if(posix_memalign((void **)&ret, ALN, n * sizeof(ResT)))
+#endif
+            throw std::bad_alloc();
+        return ret;
+    }
+    FT getbeta(size_t idx) const {
+        return FT(1.) / (m_ - idx);
+    }
+public:
+    const ResT *data() const {return data_.get();}
+    ResT *data() {return data_.get();}
+    auto &lowkh() {return lowkh_;}
+    const auto &lowkh() const {return lowkh_;}
+    SetSketch(size_t m, FT b, FT a, QType q, bool track_ids = false): m_(m), a_(a), b_(b), ainv_(1./ a), logbinv_(1. / std::log1p(b_ - 1.)), q_(q), ls_(m_), lowkh_(m) {
+        ResT *p = allocate(m_);
+        data_.reset(p);
+        std::fill(p, p + m_, static_cast<ResT>(0));
+        lowkh_.assign(p, m_, b_);
+        if(track_ids) ids_.resize(m_);
+        lbetas_.resize(m_);
+        for(size_t i = 0; i < m_; ++i) {
+            lbetas_[i] = -ainv_ / (m_ - i);
+        }
+    }
+    SetSketch(const SetSketch &o): m_(o.m_), a_(o.a_), b_(o.b_), ainv_(o.ainv_), logbinv_(o.logbinv_), q_(o.q_), ls_(m_), lowkh_(m_), lbetas_(o.lbetas_) {
+        ResT *p = allocate(m_);
+        data_.reset(p);
+        lowkh_.assign(p, m_, b_);
+        std::copy(o.data_.get(), &o.data_[2 * m_ - 1], p);
+    }
+    SetSketch(SetSketch &&o) = default;
+    SetSketch(const std::string &s): ls_(1), lowkh_(1) {
+        read(s);
+    }
+    size_t size() const {return m_;}
+    double b() const {return b_;}
+    double a() const {return a_;}
+    ResT &operator[](size_t i) {return data_[i];}
+    const ResT &operator[](size_t i) const {return data_[i];}
+    int klow() const {return lowkh_.klow();}
+    auto max() const {return lowkh_.max();}
+    auto min() const {return lowkh_.min();}
+    void addh(uint64_t id) {update(id);}
+    void add(uint64_t id) {update(id);}
+    void print() const {
+        std::fprintf(stderr, "%zu = m, a %lg, b %lg, q %d\n", m_, double(a_), double(b_), int(q_));
+    }
+    void update(const uint64_t id) {
+        using GenFT = std::conditional_t<(sizeof(FT) <= 8), double, long double>;
+        GenFT carry = 0.;
+        mycard_ = -1.;
+        uint64_t hid = id;
+        size_t bi = 0;
+        uint64_t rv = wy::wyhash64_stateless(&hid);
+        GenFT ev = 0.;
+        ls_.reset();
+        ls_.seed(rv);
+        for(;;) {
+            const GenFT ba = lbetas_[bi];
+            if(sizeof(GenFT) > 8) {
+                auto lrv = __uint128_t(rv) << 64;
+                lrv |= wy::wyhash64_stateless(&rv);
+                kahan::update(ev, carry, GenFT(ba * std::log((lrv >> 32) * 1.2621774483536188887e-29L)));
+            } else kahan::update(ev, carry, ba * std::log(rv * INVMUL64));
+            if(ev > lowkh_.explim()) return;
+            const QType k = std::max(QType(0), std::min(q_ + 1, static_cast<QType>((1. - std::log(ev) * logbinv_))));
+            if(k <= klow()) return;
+            auto idx = ls_.step();
+            if(lowkh_.update(idx, k)) {
+                if(!ids_.empty()) {
+                    ids_[idx] = id;
+                }
+            }
+            if(++bi == m_)
+                return;
+            rv = wy::wyhash64_stateless(&hid);
+        }
+    }
+    bool operator==(const SetSketch<ResT, FT> &o) const {
+        return same_params(o) && std::equal(data(), data() + m_, o.data());
+    }
+    bool same_params(const SetSketch<ResT,FT> &o) const {
+        return std::tie(b_, a_, m_, q_) == std::tie(o.b_, o.a_, o.m_, o.q_);
+    }
+    double harmean(const SetSketch<ResT, FT> *ptr=static_cast<const SetSketch<ResT, FT> *>(nullptr)) const {
+        static std::unordered_map<FT, std::vector<FT>> powers;
+        auto it = powers.find(b_);
+        if(it == powers.end()) {
+            it = powers.emplace(b_, std::vector<FT>()).first;
+            it->second.resize(q_ + 2);
+            for(size_t i = 0; i < it->second.size(); ++i) {
+                it->second[i] = std::pow(static_cast<long double>(b_), -static_cast<ptrdiff_t>(i));
+            }
+        }
+        if(q_ <= 256) {
+            std::vector<uint32_t> counts(q_ + 2);
+            if(ptr) {
+                for(size_t i = 0; i < m_; ++i)
+                    ++counts[std::max(data_[i], ptr->data()[i])];
+            } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
+            return std::inner_product(&counts[lowkh_.klow()], &counts[q_ + 2], &it->second[lowkh_.klow()], 0.L);
+        } else {
+            ska::flat_hash_map<ResT, uint32_t> counts; counts.reserve(q_ + 2);
+            if(ptr) {
+                for(size_t i = 0; i < m_; ++i)
+                    ++counts[std::max(data_[i], ptr->data()[i])];
+            } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
+            auto &ptable = it->second;
+            return std::accumulate(counts.begin(), counts.end(), 0.L, [&ptable](long double s, std::pair<ResT, uint32_t> reg) {return s + reg.second * ptable[reg.first];});
+        }
+    }
+    double jaccard_by_ix(const SetSketch<ResT, FT> &o) const {
+        auto us = union_size(o);
+        auto mycard = getcard(), ocard = o.getcard();
+        return (mycard + ocard - us) / us;
+    }
+    double union_size(const SetSketch<ResT, FT> &o) const {
+        double num = m_ * (1. - 1. / b_) * logbinv_ * ainv_;
+        return num / harmean(&o);
+    }
+    double cardinality_estimate() const {return cardinality();}
+    double cardinality() const {
+        double num = m_ * (1. - 1. / b_) * logbinv_ * ainv_;
+        return num / harmean();
+    }
+    void merge(const SetSketch<ResT, FT> &o) {
+        if(!same_params(o)) throw std::runtime_error("Can't merge sets with differing parameters");
+        std::transform(data(), data() + m_, o.data(), data(), [](auto x, auto y) {return std::max(x, y);});
+        mycard_ = -1.;
+    }
+    SetSketch &operator+=(const SetSketch<ResT, FT> &o) {merge(o); return *this;}
+    SetSketch operator+(const SetSketch<ResT, FT> &o) const {
+        SetSketch ret(*this);
+        ret += o;
+        return ret;
+    }
+    size_t shared_registers(const SetSketch<ResT, FT> &o) const {
+        return eq::count_eq(data(), o.data(), m_);
+    }
+    std::pair<double, double> alpha_beta(const SetSketch<ResT, FT> &o) const {
+        auto gtlt = eq::count_gtlt(data(), o.data(), m_);
+        double alpha = g_b(b_, double(gtlt.first) / m_);
+        double beta = g_b(b_, double(gtlt.second) / m_);
+        return {alpha, beta};
+    }
+    static constexpr double __union_card(double alph, double beta, double lhcard, double rhcard) {
+        return std::max((lhcard + rhcard) / (2. - alph - beta), 0.);
+    }
+    double getcard() const {
+        if(mycard_ < 0.)
+            mycard_ = cardinality();
+        return mycard_;
+    }
+    double jaccard_index(const SetSketch<ResT, FT> &o) const {
+        if(!same_params(o))
+            throw std::invalid_argument("Parameters must match for comparison");
+        auto gtlt = eq::count_gtlt(data(), o.data(), m_);
+        return jmle_simple<double>(gtlt.first, gtlt.second, m_, getcard(), o.getcard(), b_);
+    }
+    std::tuple<double, double, double> jointmle(const SetSketch<ResT, FT> &o) const {
+        auto ji = jaccard_index(o);
+        const auto y = 1. / (1. + ji);
+        double mycard = getcard(), ocard = o.getcard();
+        return {std::max(0., mycard - ocard * ji) * y,
+                std::max(0., ocard - mycard * ji) * y,
+                (mycard + ocard) * ji * y};
+    };
+    double jaccard_index_by_card(const SetSketch<ResT, FT> &o) const {
+        auto tup = jointmle(o);
+        return std::get<2>(tup) / (std::get<0>(tup) + std::get<1>(tup) + std::get<2>(tup));
+    }
+    std::tuple<double, double, double> alpha_beta_mu(const SetSketch<ResT, FT> &o) const {
+        auto gtlt = eq::count_gtlt(data(), o.data(), m_);
+        double alpha = g_b(b_, double(gtlt.first) / m_);
+        double beta = g_b(b_, double(gtlt.second) / m_);
+        double mycard = getcard(), ocard = o.getcard();
+        if(alpha + beta >= 1.) // They seem to be disjoint sets, use SetSketch (15)
+            return {(mycard) / (mycard + ocard), ocard / (mycard + ocard), mycard + ocard};
+        return {alpha, beta, __union_card(alpha, beta, mycard, ocard)};
+    }
+    void write(std::string s) const {
+        gzFile fp = gzopen(s.data(), "w");
+        if(!fp) throw ZlibError(std::string("Failed to open file ") + s + "for writing");
+        write(fp);
+        gzclose(fp);
+    }
+    void read(std::string s) {
+        gzFile fp = gzopen(s.data(), "r");
+        if(!fp) throw ZlibError(std::string("Failed to open file ") + s);
+        read(fp);
+        gzclose(fp);
+    }
+    void read(gzFile fp) {
+        gzread(fp, &m_, sizeof(m_));
+        gzread(fp, &a_, sizeof(a_));
+        gzread(fp, &b_, sizeof(b_));
+        gzread(fp, &q_, sizeof(q_));
+        ainv_ = 1.L / a_;
+        logbinv_ = 1.L / std::log1p(b_ - 1.);
+        data_.reset(allocate(m_));
+        lowkh_.assign(data_.get(), m_, b_);
+        gzread(fp, (void *)data_.get(), m_ * sizeof(ResT));
+        std::fill(&data_[m_], &data_[2 * m_ - 1], ResT(0));
+        for(size_t i = 0;i < m_; ++i) lowkh_.update(i, data_[i]);
+        ls_.resize(m_);
+    }
+    int checkwrite(std::FILE *fp, const void *ptr, size_t nb) const {
+        auto ret = ::write(::fileno(fp), ptr, nb);
+        if(size_t(ret) != nb) throw ZlibError("Failed to write setsketch to file");
+        return ret;
+    }
+    int checkwrite(gzFile fp, const void *ptr, size_t nb) const {
+        auto ret = gzwrite(fp, ptr, nb);
+        if(size_t(ret) != nb) throw ZlibError("Failed to write setsketch to file");
+        return ret;
+    }
+    void write(std::FILE *fp) const {
+        checkwrite(fp, (const void *)&m_, sizeof(m_));
+        checkwrite(fp, (const void *)&a_, sizeof(a_));
+        checkwrite(fp, (const void *)&b_, sizeof(b_));
+        checkwrite(fp, (const void *)&q_, sizeof(q_));
+        checkwrite(fp, (const void *)data_.get(), m_ * sizeof(ResT));
+    }
+    void write(gzFile fp) const {
+        checkwrite(fp, (const void *)&m_, sizeof(m_));
+        checkwrite(fp, (const void *)&a_, sizeof(a_));
+        checkwrite(fp, (const void *)&b_, sizeof(b_));
+        checkwrite(fp, (const void *)&q_, sizeof(q_));
+        checkwrite(fp, (const void *)data_.get(), m_ * sizeof(ResT));
+    }
+    void clear() {
+        std::fill(data_.get(), &data_[m_ * 2 - 1], ResT(0));
+        mycard_ = -1.;
+    }
+    const std::vector<uint64_t> &ids() const {return ids_;}
+};
+
+
+#ifndef M_E
+#define EULER_E 2.718281828459045
+#else
+#define EULER_E M_E
+#endif
+struct NibbleSetS: public SetSketch<uint8_t> {
+    NibbleSetS(size_t nreg, double b=EULER_E, double a=5e-4): SetSketch<uint8_t>(nreg, b, a, QV) {}
+    static constexpr size_t QV = 14u;
+    template<typename Arg> NibbleSetS(const Arg &arg): SetSketch<uint8_t>(arg) {}
+};
+struct SmallNibbleSetS: public SetSketch<uint8_t> {
+    SmallNibbleSetS(size_t nreg, double b=4., double a=1e-6): SetSketch<uint8_t>(nreg, b, a, QV) {}
+    static constexpr size_t QV = 14u;
+    template<typename Arg> SmallNibbleSetS(const Arg &arg): SetSketch<uint8_t>(arg) {}
+};
+struct ByteSetS: public SetSketch<uint8_t, long double> {
+    using Super = SetSketch<uint8_t, long double>;
+    static constexpr size_t QV = 254u;
+    ByteSetS(size_t nreg, long double b=1.2, long double a=20.): Super(nreg, b, a, QV) {}
+    template<typename Arg> ByteSetS(const Arg &arg): Super(arg) {}
+};
+struct ShortSetS: public SetSketch<uint16_t, long double> {
+    static constexpr long double DEFAULT_B = 1.0005;
+    static constexpr long double DEFAULT_A = .06;
+    static constexpr size_t QV = 65534u;
+    ShortSetS(size_t nreg, long double b=DEFAULT_B, long double a=DEFAULT_A): SetSketch<uint16_t, long double>(nreg, b, a, QV) {}
+    template<typename Arg> ShortSetS(const Arg &arg): SetSketch<uint16_t, long double>(arg) {}
+};
+struct WideShortSetS: public SetSketch<uint16_t, long double> {
+    static constexpr long double DEFAULT_B = 1.0004;
+    static constexpr long double DEFAULT_A = .06;
+    static constexpr size_t QV = 65534u;
+    WideShortSetS(size_t nreg, long double b=DEFAULT_B, long double a=DEFAULT_A): SetSketch<uint16_t, long double>(nreg, b, a, QV) {}
+    template<typename...Args> WideShortSetS(Args &&...args): SetSketch<uint16_t, long double>(std::forward<Args>(args)...) {}
+};
+struct EShortSetS: public SetSketch<uint16_t, long double> {
+    using Super = SetSketch<uint16_t, long double>;
+    static constexpr long double DEFAULT_B = 1.0006;
+    static constexpr long double DEFAULT_A = .06;
+    static constexpr size_t QV = 65534u;
+    template<typename IT, typename OFT, typename=typename std::enable_if<std::is_integral<IT>::value && std::is_floating_point<OFT>::value>::type>
+    EShortSetS(IT nreg, OFT b=DEFAULT_B, OFT a=DEFAULT_A): Super(nreg, b, a, QV) {}
+    EShortSetS(size_t nreg): Super(nreg, DEFAULT_B, DEFAULT_A, QV) {}
+    EShortSetS(int nreg): Super(nreg, DEFAULT_B, DEFAULT_A, QV) {}
+    template<typename...Args> EShortSetS(Args &&...args): Super(std::forward<Args>(args)...) {}
+};
+struct EByteSetS: public SetSketch<uint8_t, double> {
+    static constexpr double DEFAULT_B = 1.09;
+    static constexpr double DEFAULT_A = .08;
+    static constexpr size_t QV = 254u;
+    template<typename IT, typename=typename std::enable_if<std::is_integral<IT>::value>::type>
+    EByteSetS(IT nreg, double b=DEFAULT_B, double a=DEFAULT_A): SetSketch<uint8_t, double>(nreg, b, a, QV) {}
+    template<typename...Args> EByteSetS(Args &&...args): SetSketch<uint8_t, double>(std::forward<Args>(args)...) {}
+};
+struct UintSetS: public sketch::setsketch::SetSketch<uint32_t, long double> {
+    static constexpr long double DEFAULT_B = 1.0000000109723500835;
+    static constexpr long double DEFAULT_A = 19.77882586;
+    static constexpr size_t QV = 0xFFFFFFFE;
+    UintSetS(size_t nreg, long double b=DEFAULT_B, long double a=DEFAULT_A): SetSketch<uint32_t, long double>(nreg, b, a, QV) {}
+    template<typename Arg> UintSetS(const Arg &arg): SetSketch<uint32_t, long double>(arg) {}
+};
+
 template<typename FT=double>
 struct CountFilteredCSetSketch: public CSetSketch<FT> {
     using super = CSetSketch<FT>;
@@ -636,7 +969,7 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
             FT nv;
             uint64_t hid = it->first;
             uint64_t rv = wy::wyhash64_stateless(&hid);
-            if constexpr(sizeof(FT) > 8) {
+            CONST_IF(sizeof(FT) > 8) {
                 nv = id2ldv(&rv, mi);
                 // Uses 96 bits of precision
             } else {

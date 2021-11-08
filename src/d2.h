@@ -8,7 +8,7 @@
 #include <vector>
 #include "bonsai/encoder.h"
 #include "xxHash/xxh3.h"
-#include "sketch/setsketch.h"
+#include "src/setsketch.h"
 #include "sketch/bmh.h"
 #include "counter.h"
 #include "oph.h"

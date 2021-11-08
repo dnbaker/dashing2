@@ -140,13 +140,7 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
 
 using sketch::setsketch::ByteSetS;
 using sketch::setsketch::ShortSetS;
-struct UintSetS: public sketch::setsketch::SetSketch<uint32_t, long double> {
-    static constexpr long double DEFAULT_B = 1.0000000109723500835;
-    static constexpr long double DEFAULT_A = 19.77882586;
-    static constexpr size_t QV = 0xFFFFFFFE;
-    UintSetS(size_t nreg, long double b=DEFAULT_B, long double a=DEFAULT_A): SetSketch<uint32_t, long double>(nreg, b, a, QV) {}
-    template<typename Arg> UintSetS(const Arg &arg): SetSketch<uint32_t, long double>(arg) {}
-};
+using sketch::setsketch::UintSetS;
 using VSetSketch = std::variant<ByteSetS, ShortSetS, UintSetS>;
 
 #if 0
