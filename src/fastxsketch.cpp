@@ -316,6 +316,13 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
             if(opts.kmer_result_ < FULL_MMER_SET) {
                 struct hello; // You must modify this to handle the many possibilities. Maybe this isn't necessary.
                 if(ret.signatures_.size()) {
+
+#pragma message("You must update this load_copy step for the sketch_compressed case to match what you write below!")
+#if 0
+                std::array<long double, 3> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_)};
+                std::fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
+                std::fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
+#endif
                     if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
                         std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
                         goto perform_sketch;
@@ -555,8 +562,13 @@ do {\
                 ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
             if(opts.save_kmercounts_)
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
-            ::write(::fileno(ofp), ptr, regsize * ss);
-            //checked_fwrite(ofp, ptr, sizeof(RegT) * ss);
+            if(opts.sketch_compressed()) {
+                std::array<long double, 3> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_)};
+                std::fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
+                std::fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
+            } else {
+                ::write(::fileno(ofp), ptr, regsize * ss);
+            }
             std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {
                 std::copy(ptr, ptr + (ss >> sigshift), &ret.signatures_[mss >> sigshift]);
