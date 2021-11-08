@@ -455,8 +455,9 @@ static constexpr const char *siglen =
         "\t          --fastcmp-shorts sets a and b to .06 and 1.0005, and sets --fastcmp to 2.\n"\
         "\t          --fastcmp-words sets a and b to 19.77 and 1.0000000109723500835 and sets --fastcmp to 4.\n"\
         "\n"\
-        "If you instead want to truncate to the bottom-b bits of the signature.\n"\
-        "\t         --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
+        "If you instead want to truncate to the bottom-b bits of the signature --\n"\
+        "\t          --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
+        "The runtime is effectively equivalent to the setsketch.\n"\
         "\n\nDistance specifications\n"\
         "The default value emitted is similarity. For MinHash/HLL/SetSketch sketches, this is the fraction of shared registers.\n"\
         "This can be changed to a distance (--mash-distance) for k-mer similarity, where it can be used for hierarchical clustering.\n"\
