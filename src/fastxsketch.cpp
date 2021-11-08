@@ -282,6 +282,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     if(opts.kmer_result_ == FULL_MMER_SET) {
         ret.kmerfiles_.resize(ret.destination_files_.size());
     }
+    const int sigshift = (opts.fd_level_ == 1. ? 3: opts.fd_level_ == 2. ? 2: opts.fd_level_ == 4. ? 1: opts.fd_level_ == 0.5 ? 4: opts.fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
     OMP_PFOR_DYN
     for(size_t i = 0; i < nitems; ++i) {
         int tid = 0;
@@ -314,15 +315,29 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         )
         {
             if(opts.kmer_result_ < FULL_MMER_SET) {
-                struct hello; // You must modify this to handle the many possibilities. Maybe this isn't necessary.
                 if(ret.signatures_.size()) {
-
-#pragma message("You must update this load_copy step for the sketch_compressed case to match what you write below!")
-#if 0
-                std::array<long double, 3> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_)};
-                std::fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
-                std::fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
-#endif
+                    if(opts.sketch_compressed()) {
+                        std::FILE *ifp = std::fopen(destination.data(), "rb");
+                        std::fread(&ret.cardinalities_[myind], sizeof(double), 1, ifp);
+                        std::array<long double, 4> arr;
+                        std::fread(arr.data(), sizeof(long double), arr.size(), ifp);
+                        auto &[a, b, fd_level, sketchsize] = arr;
+                        if(fd_level != opts.fd_level_) {
+                            std::fprintf(stderr, "fd level found %g mismatches expected %g\n", double(fd_level), opts.fd_level_);
+                            THROW_EXCEPTION(std::runtime_error("fd level mismatch."));
+                        }
+                        if(sketchsize != ss) {
+                            std::fprintf(stderr, "fd level found %g mismatches expected %zu\n", double(sketchsize), ss);
+                            THROW_EXCEPTION(std::runtime_error("sketch size mismatch."));
+                        }
+                        RegT *const ptr = &ret.signatures_[(ss >> sigshift) * myind];
+                        if(std::fread(ptr, sizeof(RegT), ss >> sigshift, ifp) != (ss >> sigshift)) THROW_EXCEPTION(std::runtime_error("Failed to read compressed signatures from file "s + destination));
+                        if(!std::feof(ifp)) {
+                            THROW_EXCEPTION(std::runtime_error("File corrupted - ifp should be at eof."));
+                        }
+                        std::fclose(ifp);
+                        continue;
+                    }
                     if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
                         std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
                         goto perform_sketch;
@@ -556,14 +571,13 @@ do {\
             // Update this and VSetSketch above to filter down
             const RegT *ptr = opsssz ? opss[tid].data(): fss.size() ? fss[tid].data(): opts.fd_level_ == 1. ? (const RegT *)(std::get<ByteSetS>(cfss[tid]).data()): (const RegT *)(std::get<ShortSetS>(cfss[tid]).data());
             const size_t regsize = opsssz  || fss.size() ? sizeof(RegT): size_t(opts.fd_level_);
-            const int sigshift = (opts.fd_level_ == 1. ? 3: opts.fd_level_ == 2. ? 2: opts.fd_level_ == 4. ? 1: opts.fd_level_ == 0.5 ? 4: opts.fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
             assert(ptr);
             if(opts.save_kmers_)
                 ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
             if(opts.save_kmercounts_)
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
             if(opts.sketch_compressed()) {
-                std::array<long double, 3> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_)};
+                std::array<long double, 4> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_), static_cast<long double>(opts.sketchsize_)};
                 std::fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
                 std::fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
             } else {

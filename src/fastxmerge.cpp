@@ -99,6 +99,9 @@ std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer
         if(opts.ct() != EXACT_COUNTING)
             ret += std::to_string(opts.cssize_);
     }
+    if(opts.sspace_ == SPACE_SET && opts.sketch_compressed()) {
+        ret += ".a=" + std::to_string(opts.compressed_a_) + ".b=" + std::to_string(opts.compressed_b_) + ".fd=" + std::to_string(opts.fd_level_);
+    }
     ret += ".";
     if(opts.kmer_result_ <= FULL_SETSKETCH)
         ret += to_string(opts.sspace_);

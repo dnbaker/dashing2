@@ -100,7 +100,7 @@ struct Dashing2DistOptions: public Dashing2Options {
         }
         if(sketch_compressed_set) {
             if(this->kmer_result_ != FULL_SETSKETCH)
-                THROW_EXCEPTION(std::invalid_argument("Cannot sketch compressed with one-permutation sketches."));
+                THROW_EXCEPTION(std::invalid_argument("Sketch compressed is only available for FullSetSketch."));
             if(fd_level_ < 1.)
                 THROW_EXCEPTION(std::invalid_argument("Cannot index nibble-sized registers currently. This may change."));
             if(fd_level_ > 2.)
