@@ -66,6 +66,7 @@ enum OptArg {
     LO_ARG("topk", 'K')\
     LO_ARG("similarity-threshold", 'T')\
     LO_ARG("fastcmp", OPTARG_FASTCMP)\
+    LO_ARG("regsize", OPTARG_FASTCMP)\
     LO_ARG("countsketch-size", 'c')\
     LO_ARG("window-size", 'w')\
     LO_ARG("kmer-length", 'k')\
@@ -248,6 +249,7 @@ enum OptArg {
             compressed_a = std::strtold(optarg, &e);\
             compressed_b = std::strtold(e + 1, nullptr);\
             if(std::min(compressed_a, compressed_b) <= 0.) THROW_EXCEPTION(std::invalid_argument("Compressed A and B parameters must be greater than 0."));\
+            std::fprintf(stderr, "setsketch ab: %Lg, %Lg\n", compressed_a, compressed_b);\
         } break;
 
 
@@ -416,7 +418,7 @@ static constexpr const char *siglen =
         "  Python code for parsing the binary representation is available at https://github.com/dnbaker/dashing2/blob/main/python/parse.py.\n"\
         "Runtime Options --\n"\
         "By default, we compare items with full hash function registers; to trade accuracy for speed, these sketches can be compressed before comparisons.\n"\
-        "--fastcmp <arg>\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are logarithmically-compressed\n"\
+        "--fastcmp/--regsize <arg>\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are logarithmically-compressed\n"\
         "For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
         "<arg> may be 8 (64 bits), 4 (32 bits), 2 (16 bits), 1 (8 bits), or .5 (4 bits)\n"\
         "Results may even be somewhat stabilized by the use of smaller registers.\n"\

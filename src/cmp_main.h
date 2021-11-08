@@ -99,12 +99,13 @@ struct Dashing2DistOptions: public Dashing2Options {
              measure_ = M_EDIT_DISTANCE;
         }
         if(sketch_compressed_set) {
-            if(this->kmer_result_ == ONE_PERM)
+            if(this->kmer_result_ != FULL_SETSKETCH)
                 THROW_EXCEPTION(std::invalid_argument("Cannot sketch compressed with one-permutation sketches."));
             if(fd_level_ < 1.)
                 THROW_EXCEPTION(std::invalid_argument("Cannot index nibble-sized registers currently. This may change."));
             if(fd_level_ > 2.)
                 THROW_EXCEPTION(std::invalid_argument("Only permitting setsketch of 1 or 2 bytes per register."));
+            if(this->compressed_b_ < 1.L) THROW_EXCEPTION(std::invalid_argument("base must be >= 1."));
         }
     }
 };

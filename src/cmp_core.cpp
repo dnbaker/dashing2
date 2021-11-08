@@ -210,6 +210,9 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
     auto &compressed_reps = std::get<0>(ret);
     if(sketch_compressed_set) {
         compressed_reps = static_cast<void *>(const_cast<RegT *>(sigs.data()));
+        ret.a(a);
+        ret.b(b);
+        assert(std::min(a, b) > 0.L);
         return;
     }
     ret.up.reset(new uint8_t[ret.nbytes + 63]);
@@ -376,7 +379,6 @@ case v: {\
             else if(opts.measure_ == SYMMETRIC_CONTAINMENT)
                 ret = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L) * ret / std::min(lhcard, rhcard);
         } else {
-            //std::fprintf(stderr, "alpha gt: %zu. beta gt: %zu\n", res.first, res.second);
             long double alpha = res.first * invdenom;
             long double beta = res.second * invdenom;
             const long double b = opts.compressed_b_;
@@ -386,6 +388,7 @@ case v: {\
                 alpha = g_b(b, alpha);
                 beta = g_b(b, beta);
             }
+            //std::fprintf(stderr, "alpha gt: %zu. beta gt: %zu, Alpha %Lg, Beta %Lg\n", res.first, res.second, alpha, beta);
             VERBOSE_ONLY(std::fprintf(stderr, "Alpha: %Lg. Beta: %Lg\n", alpha, beta);)
             if(alpha + beta >= 1.) {
                 mu = lhcard + rhcard;

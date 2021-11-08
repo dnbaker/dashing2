@@ -182,8 +182,9 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                     if(opts.fd_level_ == 1.) {
                         cfss.emplace_back(ByteSetS(ss, opts.compressed_b_, opts.compressed_a_));
                     } else {
+                        std::fprintf(stderr, "fd level: %g\n", opts.fd_level_);
                         assert(opts.fd_level_ == 2.);
-
+                        cfss.emplace_back(ShortSetS(ss, opts.compressed_b_, opts.compressed_a_));
                     }
                 }
             } else {
@@ -206,6 +207,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
 #define __RESET(tid) do { \
         if(!opss.empty()) opss[tid].reset();\
         else if(!fss.empty()) fss[tid].reset();\
+        else if(!cfss.empty()) std::visit([](auto &x) {x.clear();}, cfss[tid]);\
         else if(!bmhs.empty()) bmhs[tid].reset();\
         else if(!pmhs.empty()) pmhs[tid].reset();\
         /*else if(!omhs.empty()) omhs[tid].reset();*/\
@@ -515,7 +517,7 @@ do {\
             std::FILE * ofp;
             if((ofp = bfopen(destination.data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
-            if(opss.empty() && fss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
+            if(opss.empty() && fss.empty() && cfss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
             const size_t opsssz = opss.size();
             auto &cret = ret.cardinalities_[myind];
             if(opsssz) {
@@ -532,18 +534,9 @@ do {\
                 if(opts.sketch_compressed()) {
                     std::visit([&](auto &x) {
                         perf_for_substrs([&x](auto hv) {x.update(hv);});
+                        cret = x.cardinality();
+                        std::fprintf(stderr, "cret: %g\n", cret);
                     }, cfss[tid]);
-#if 0
-                    if(opts.fd_level_ == 1.) {
-                        const auto p = &std::get<ByteSetS>(cfss[tid]);
-                        perf_for_substrs([p](auto hv) {p->update(hv);});
-                        cret = p->cardinality();
-                    } else if(opts.fd_level_ == 2.) {
-                        const auto p = &std::get<ShortSetS>(cfss[tid]);
-                        perf_for_substrs([p](auto hv) {p->update(hv);});
-                        cret = p->cardinality();
-                    }
-#endif
                 } else {
                     perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
                     cret = fss[tid].getcard();
