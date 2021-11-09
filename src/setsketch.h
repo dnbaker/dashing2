@@ -667,6 +667,8 @@ public:
     void print() const {
         std::fprintf(stderr, "%zu = m, a %lg, b %lg, q %d\n", m_, double(a_), double(b_), int(q_));
     }
+    template<typename OFT, typename=std::enable_if_t<std::is_arithmetic_v<OFT>>>
+    INLINE void update(const uint64_t id, OFT) {update(id);}
     void update(const uint64_t id) {
         using GenFT = std::conditional_t<(sizeof(FT) <= 8), double, long double>;
         GenFT carry = 0.;
@@ -858,19 +860,18 @@ public:
 };
 
 
-#ifndef M_E
-#define EULER_E 2.718281828459045
-#else
-#define EULER_E M_E
-#endif
 struct NibbleSetS: public SetSketch<uint8_t> {
-    NibbleSetS(size_t nreg, double b=EULER_E, double a=5e-4): SetSketch<uint8_t>(nreg, b, a, QV) {}
+    static constexpr long double DEFAULT_B = 2.7182818284590452354L;
+    static constexpr long double DEFAULT_A = 5e-4L;
+    NibbleSetS(size_t nreg, double b=DEFAULT_B, double a=DEFAULT_A): SetSketch<uint8_t>(nreg, b, a, QV) {}
     static constexpr size_t QV = 14u;
     template<typename Arg> NibbleSetS(const Arg &arg): SetSketch<uint8_t>(arg) {}
 };
 struct SmallNibbleSetS: public SetSketch<uint8_t> {
-    SmallNibbleSetS(size_t nreg, double b=4., double a=1e-6): SetSketch<uint8_t>(nreg, b, a, QV) {}
+    static constexpr long double DEFAULT_B = 4L;
+    static constexpr long double DEFAULT_A = 1e-6L;
     static constexpr size_t QV = 14u;
+    SmallNibbleSetS(size_t nreg, double b=DEFAULT_B, double a=DEFAULT_A): SetSketch<uint8_t>(nreg, b, a, QV) {}
     template<typename Arg> SmallNibbleSetS(const Arg &arg): SetSketch<uint8_t>(arg) {}
 };
 struct ByteSetS: public SetSketch<uint8_t, long double> {

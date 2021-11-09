@@ -3,6 +3,7 @@
 #define DASHING2_FASTX_SKETCH_H__
 #include "d2.h"
 #include "mmvec.h"
+#include <variant>
 
 namespace dashing2 {
 using std::to_string;
@@ -59,15 +60,20 @@ using sketch::setsketch::ByteSetS;
 using sketch::setsketch::NibbleSetS;
 using sketch::setsketch::ShortSetS;
 using sketch::setsketch::UintSetS;
-using VSetSketch = std::variant<ByteSetS, ShortSetS, UintSetS>;
+using VSetSketch = std::variant<NibbleSetS, ByteSetS, ShortSetS, UintSetS>;
 
-const RegT *getdata(VSetSketch &o) {
+INLINE const RegT *getdata(VSetSketch &o) {
     const RegT *ret;
     std::visit([&ret](auto &x) {ret = (const RegT *)x.data();}, o);
     return ret;
 }
+INLINE double getcard(VSetSketch &o) {
+    double ret;
+    std::visit([&ret](auto &x) {ret = x.getcard();}, o);
+    return ret;
+}
 } // namespace variation
 using variation::VSetSketch;
-}
+} // namespace dashing2
 
 #endif

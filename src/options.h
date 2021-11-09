@@ -52,6 +52,7 @@ enum OptArg {
     OPTARG_FASTCMPBYTES,
     OPTARG_FASTCMPSHORTS,
     OPTARG_FASTCMPWORDS,
+    OPTARG_FASTCMPNIBBLES,
     OPTARG_DUMMY
 };
 
@@ -115,8 +116,10 @@ enum OptArg {
     LO_FLAG("square", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_ARG("regbytes", OPTARG_FASTCMP)\
     /*LO_ARG("set", 'H')*/\
+    {"fastcmp-nibbles", no_argument, 0, OPTARG_FASTCMPNIBBLES},\
     {"fastcmp-bytes", no_argument, 0, OPTARG_FASTCMPBYTES},\
     {"fastcmp-shorts", no_argument, 0, OPTARG_FASTCMPSHORTS},\
+    {"fastcmp-words", no_argument, 0, OPTARG_FASTCMPWORDS},\
     {"save-kmers", no_argument, 0, 's'},\
     {"save-kmercounts", no_argument, 0, 'N'},\
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
@@ -264,6 +267,11 @@ enum OptArg {
             compressed_a = sketch::setsketch::ByteSetS::DEFAULT_A;\
             compressed_b = sketch::setsketch::ByteSetS::DEFAULT_B;\
             nbytes_for_fastdists = 1.;\
+        } break;\
+        case OPTARG_FASTCMPNIBBLES: {\
+            compressed_a = sketch::setsketch::NibbleSetS::DEFAULT_A;\
+            compressed_b = sketch::setsketch::NibbleSetS::DEFAULT_B;\
+            nbytes_for_fastdists = .5;\
         } break;\
         case OPTARG_FASTCMPWORDS: {\
             compressed_a = sketch::setsketch::UintSetS::DEFAULT_A;\
@@ -455,6 +463,7 @@ static constexpr const char *siglen =
         "\t          --fastcmp-bytes sets a and b to 20 and 1.2, and sets --fastcmp to 1\n"\
         "\t          --fastcmp-shorts sets a and b to .06 and 1.0005, and sets --fastcmp to 2.\n"\
         "\t          --fastcmp-words sets a and b to 19.77 and 1.0000000109723500835 and sets --fastcmp to 4.\n"\
+        "\t          --fastcmp-nibbles sets a and b to .0005 and 2.71828, and sets --fastcmp to .5\n"\
         "\n"\
         "If you instead want to truncate to the bottom-b bits of the signature --\n"\
         "\t          --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\

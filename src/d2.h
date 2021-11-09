@@ -221,6 +221,9 @@ public:
         // Note: this always returns True after make_compressed (cmp_main.{h,cpp}) if --fastcmp is less than 8.
         // This is meant solely to be used during sketching
     }
+    int sigshift() const {
+        return (fd_level_ == 1. ? 3: fd_level_ == 2. ? 2: fd_level_ == 4. ? 1: fd_level_ == 0.5 ? 4: fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
+    }
 };
 
 static INLINE bool endswith(std::string lhs, std::string rhs) {

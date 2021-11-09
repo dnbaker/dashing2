@@ -81,6 +81,11 @@ struct Dashing2DistOptions: public Dashing2Options {
                 opts.sketchsize_ += sizeof(RegT) / opts.fd_level_ - rem;
                 std::fprintf(stderr, "Sketchsize is not %zu-bit register multiple; padding the number of registers to fit. New number of registers: %zu\n", sizeof(RegT) * 8, opts.sketchsize_);
             }
+            const size_t mul = 8 / nbytes_for_fastdists;
+            if(const size_t rem = opts.sketchsize_ % size_t(8 / nbytes_for_fastdists); rem) {
+                std::fprintf(stderr, "When sketching compressed, always pad to 64-bit sets.\n");
+                opts.sketchsize_ += mul - rem;
+            }
         }
         validate();
     }
