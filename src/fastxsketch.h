@@ -53,6 +53,21 @@ using FastxSketchingResult = SketchingResult;
 FastxSketchingResult &fastx2sketch(FastxSketchingResult &res, Dashing2Options &opts, const std::vector<std::string> &paths, std::string path);
 FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &res, Dashing2Options &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel=false, const size_t seqs_per_batch = 8192);
 std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer=false);
+
+namespace variation {
+using sketch::setsketch::ByteSetS;
+using sketch::setsketch::NibbleSetS;
+using sketch::setsketch::ShortSetS;
+using sketch::setsketch::UintSetS;
+using VSetSketch = std::variant<ByteSetS, ShortSetS, UintSetS>;
+
+const RegT *getdata(VSetSketch &o) {
+    const RegT *ret;
+    std::visit([&ret](auto &x) {ret = (const RegT *)x.data();}, o);
+    return ret;
+}
+} // namespace variation
+using variation::VSetSketch;
 }
 
 #endif

@@ -138,24 +138,6 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     return m / s;
 }
 
-using sketch::setsketch::ByteSetS;
-using sketch::setsketch::ShortSetS;
-using sketch::setsketch::UintSetS;
-using VSetSketch = std::variant<ByteSetS, ShortSetS, UintSetS>;
-
-#if 0
-RegT *getdata(VSetSketch &o) {
-    RegT *ret;
-    std::visit([&ret](auto &x) {ret = (const RegT *)x.data();}, o);
-    return ret;
-}
-#endif
-
-const RegT *getdata(VSetSketch &o) {
-    const RegT *ret;
-    std::visit([&ret](auto &x) {ret = (const RegT *)x.data();}, o);
-    return ret;
-}
 
 
 
@@ -256,7 +238,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         static_assert(sizeof(uint32_t) * 4 + sizeof(uint64_t) == 24, "Sanity check");
         ret.kmers_.assign(kmeroutpath, 24);
         for(const auto &n: paths) {
-            std::fwrite(n.data(), 1, n.size(), fp);
+            checked_fwrite(n.data(), 1, n.size(), fp);
             std::fputc('\n', fp);
         }
         std::fclose(fp);
@@ -458,7 +440,7 @@ do {\
                 }
             }
             std::FILE * ofp = bfopen(destination.data(), "wb");
-            std::fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
+            checked_fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
             if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
             const void *buf = nullptr;
             size_t nb;
@@ -591,8 +573,8 @@ do {\
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
             if(opts.sketch_compressed()) {
                 std::array<long double, 4> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_), static_cast<long double>(opts.sketchsize_)};
-                std::fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
-                std::fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
+                checked_fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
+                checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
             } else {
                 ::write(::fileno(ofp), ptr, regsize * ss);
             }

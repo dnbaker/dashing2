@@ -10,6 +10,7 @@ struct OptSketcher {
     std::unique_ptr<OPSetSketch> opss;
     std::unique_ptr<FullSetSketch> fss;
     std::unique_ptr<OrderMinHash> omh;
+    std::unique_ptr<VSetSketch> cfss;
     std::unique_ptr<Counter> ctr;
     bns::RollingHasher<uint64_t> rh_;
     bns::RollingHasher<u128_t> rh128_;
@@ -29,6 +30,7 @@ struct OptSketcher {
         else if(o.opss) opss.reset(new OPSetSketch(o.opss->size()));
         else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
+        else if(o.cfss) cfss.reset(new VSetSketch(*o.cfss));
         return *this;
     }
     OptSketcher(const OptSketcher &o): rh_(o.rh_), rh128_(o.rh128_), enc_(o.enc_), enc128_(o.enc128_), ence_(o.ence_), ence128_(o.ence128_), k_(o.k_), w_(o.w_), use128_(o.use128_) {
@@ -39,12 +41,22 @@ struct OptSketcher {
         else if(o.opss) opss.reset(new OPSetSketch(o.opss->size()));
         else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
+        else if(o.cfss) cfss.reset(new VSetSketch(*o.cfss));
     }
     OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), ence_(enc_.to_entmin64()), ence128_(enc_.to_entmin128()), k_(opts.k_), w_(opts.w_), use128_(opts.use128()) {
         input_mode(opts.input_mode());
         assert(opts.hashtype() == it_);
         if(opts.sspace_ == SPACE_EDIT_DISTANCE)
             omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
+        else if(opts.sketch_compressed()) {
+            switch(int(opts.fd_level_ * 2.)) {
+                case 1: cfss.reset(new variation::NibbleSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_)); break;
+                case 2: cfss.reset(new variation::ByteSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_)); break;
+                case 4: cfss.reset(new variation::ShortSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_)); break;
+                case 8: cfss.reset(new variation::UintSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_)); break;
+                default: []() __attribute__(cold,noinline) {THROW_EXCEPTION(std::invalid_argument("Unexpected fd_level."));}();
+            }
+        }
     }
     template<typename Func>
     void for_each(const Func &func, const char *s, size_t n) {
