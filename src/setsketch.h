@@ -607,7 +607,7 @@ class SetSketch {
     std::vector<FT> lbetas_; // Cache Beta values * 1. / a
     mutable double mycard_ = -1.;
     static ResT *allocate(size_t num_sigs) {
-        size_t n = (num_sigs << 1) - 1;
+        const size_t n = (num_sigs << 1) - 1;
         ResT *ret = nullptr;
         static constexpr size_t ALN =
 #if __AVX512F__
@@ -625,7 +625,7 @@ class SetSketch {
         if(posix_memalign((void **)&ret, ALN, n * sizeof(ResT)))
 #endif
         {
-            std::fprintf(stderr, "Failed to allocate with nsigs = %zu, nalloc = %zu, sizef(ResT) == %zu, ALN = %zu\n", num_sigs, n, sizeof(ResT), ALN);
+            std::fprintf(stderr, "[%s:%s:%d] Failed to allocate with nsigs = %zu, nalloc = %zu, sizef(ResT) == %zu, ALN = %zu\n", __PRETTY_FUNCTION__, __FILE__, __LINE__, num_sigs, n, sizeof(ResT), ALN);
             throw std::bad_alloc();
         }
         return ret;
@@ -735,7 +735,7 @@ public:
                     ++counts[std::max(data_[i], ptr->data()[i])];
             } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
             auto &ptable = it->second;
-            return std::accumulate(counts.begin(), counts.end(), 0.L, [&ptable](long double s, std::pair<ResT, uint32_t> reg) {return s + reg.second * ptable[reg.first];});
+            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [&ptable](long double s, std::pair<ResT, uint32_t> reg) {return std::fma(reg.second, ptable[reg.first], s);});
         }
     }
     double jaccard_by_ix(const SetSketch<ResT, FT> &o) const {

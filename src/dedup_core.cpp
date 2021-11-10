@@ -103,7 +103,7 @@ void par_reduce(T *x, size_t n) {
 void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vector<LSHIDType>> &constituents,
                    sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result, const size_t maxcands)
 {
-    const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
+    const LSHDistType simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     const int sigshift = opts.sigshift();
     assert(((opts.sketchsize_ * oid) >> sigshift) < result.signatures_.size());
     std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
@@ -174,7 +174,7 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
                 sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result, const size_t maxcands)
 {
     const bool indexing_compressed = opts.sketch_compressed_set && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
-    const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
+    const LSHDistType simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
     const int sigshift = (opts.fd_level_ == 1. ? 3: opts.fd_level_ == 2. ? 2: opts.fd_level_ == 4. ? 1: opts.fd_level_ == 0.5 ? 4: opts.fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
     assert(((opts.sketchsize_ * oid) >> sigshift) < result.signatures_.size());
     const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
@@ -262,6 +262,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
     const size_t maxcands = default_candidates(nelem);
     if(exhaustive_dedup) {
         const LSHDistType mult = distance(opts.measure_)  ? 1.: -1.;
+        const LSHDistType simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
         auto &ids = ret.first;
         auto &constituents = ret.second;
         for(size_t i = 0; i < nelem; ++i) {
@@ -273,7 +274,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             for(size_t j = 0; j < ids.size(); ++j) {
                 bestc = std::min(bestc, std::pair<LSHDistType, LSHIDType>{compare(opts, result, i, ids[j]) * mult, j});
             }
-            if(bestc.first * mult < opts.min_similarity_ || bestc.second == LSHIDType(-1)) {
+            if(bestc.first * mult < simt || bestc.second == LSHIDType(-1)) {
                 ids.push_back(i);
                 constituents.emplace_back();
             } else {

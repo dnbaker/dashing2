@@ -27,7 +27,6 @@ def parse_knn(path, idsize=4, dstsize=4):
     nnz * sizeof(LSHIDType): indices in LSHIDType (default uint32_t)
     nnz * sizeof(LSHDistType): data in LSHDistType (default float)
     '''
-    import scipy.sparse as sp
     fp = open(path, "rb")
     ft = np.float32 if dstsize == 4 else np.float64
     if ft is np.float64:

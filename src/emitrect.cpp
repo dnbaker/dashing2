@@ -19,7 +19,7 @@ struct QTup: public std::tuple<std::unique_ptr<float[]>, size_t, size_t, size_t>
     auto &stop() {return std::get<2>(*this);}
     const auto stop() const {return std::get<2>(*this);}
     auto &nwritten() {return std::get<3>(*this);}
-    const auto nwritten() const {return std::get<3>(*this);}
+    const auto &nwritten() const {return std::get<3>(*this);}
 };
 
 template<size_t L>
