@@ -124,6 +124,7 @@ public:
     unsigned nthreads_;
     mutable long double compressed_b_ = -1.L, compressed_a_ = -1.L;
     bool fasta_dedup_ = false;
+    bool sketch_compressed_set;
 
     std::unique_ptr<FilterSet> fs_;
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false, KmerSketchResultType kres=ONE_PERM):
@@ -222,7 +223,11 @@ public:
         // This is meant solely to be used during sketching
     }
     int sigshift() const {
+        if(!sketch_compressed_set) return 0;
         return (fd_level_ == 1. ? 3: fd_level_ == 2. ? 2: fd_level_ == 4. ? 1: fd_level_ == 0.5 ? 4: fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
+    }
+    void set_sketch_compressed() {
+        sketch_compressed_set = this->sketch_compressed();
     }
 };
 

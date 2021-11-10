@@ -174,7 +174,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
             make(opss);
             for(auto &x: opss) x.set_mincount(opts.count_threshold_);
         } else if(opts.kmer_result_ == FULL_SETSKETCH) {
-            if(opts.sketch_compressed()) {
+            if(opts.sketch_compressed_set) {
                 cfss.reserve(nt);
                 for(size_t i = 0; i < nt; ++i) {
                     if(opts.fd_level_ == .5) {
@@ -311,7 +311,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         {
             if(opts.kmer_result_ < FULL_MMER_SET) {
                 if(ret.signatures_.size()) {
-                    if(opts.sketch_compressed()) {
+                    if(opts.sketch_compressed_set) {
                         std::FILE *ifp = std::fopen(destination.data(), "rb");
                         std::fread(&ret.cardinalities_[myind], sizeof(double), 1, ifp);
                         std::array<long double, 4> arr;
@@ -546,12 +546,12 @@ do {\
                 cret = p->getcard();
             } else {
                 //std::fprintf(stderr, "Encode for the set sketch\n");
-                if(opts.sketch_compressed()) {
+                if(opts.sketch_compressed_set) {
                     std::visit([&](auto &x) {
                         perf_for_substrs([&x](auto hv) {x.update(hv);});
                         cret = x.cardinality();
                         //std::fprintf(stderr, "cret: %g\n", cret);
-                    }, cfss[tid]);
+                    }, cfss.at(tid));
                 } else {
                     perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
                     cret = fss[tid].getcard();
@@ -569,7 +569,7 @@ do {\
                 ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
             if(opts.save_kmercounts_)
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
-            if(opts.sketch_compressed()) {
+            if(opts.sketch_compressed_set) {
                 std::array<long double, 4> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_), static_cast<long double>(opts.sketchsize_)};
                 checked_fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
                 if(opts.fd_level_ == 0.5) {

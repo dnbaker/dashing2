@@ -49,7 +49,7 @@ struct OptSketcher {
         assert(opts.hashtype() == it_);
         if(opts.sspace_ == SPACE_EDIT_DISTANCE)
             omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
-        else if(opts.sketch_compressed()) {
+        else if(opts.sketch_compressed_set) {
             switch(int(opts.fd_level_ * 2.)) {
                 case 1: cfss.reset(new VSetSketch(NibbleSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
                 case 2: cfss.reset(new VSetSketch(ByteSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
