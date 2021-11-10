@@ -104,7 +104,7 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
                    sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result, const size_t maxcands)
 {
     const double simt = opts.min_similarity_ > 0. ? opts.min_similarity_: 0.9; // 90% is the default cut-off for deduplication
-    const int sigshift = (opts.fd_level_ == 1. ? 3: opts.fd_level_ == 2. ? 2: opts.fd_level_ == 4. ? 1: opts.fd_level_ == 0.5 ? 4: opts.fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
+    const int sigshift = opts.sigshift();
     assert(((opts.sketchsize_ * oid) >> sigshift) < result.signatures_.size());
     std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
     auto &[hits, counts, nper] = query_res;
@@ -181,7 +181,9 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
     std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
     auto &[hits, counts, nper] = query_res;
     if(indexing_compressed) {
-        switch(int(opts.fd_level_)) {
+        if(opts.fd_level_ == 0.5) {
+            query_res = idx.query_candidates(minispan<uint8_t>((uint8_t *)opts.compressed_ptr_ + opts.sketchsize_ / 2 * oid, opts.sketchsize_ / 2), maxcands);
+        } else switch(int(opts.fd_level_)) {
 #define CASE_N(i, TYPE) \
     case i: {query_res = idx.query_candidates(\
         minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * oid, opts.sketchsize_),\
@@ -232,66 +234,6 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
         }
     }
 }
-
-#if 0
-void cleanup(std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> &ret, sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result) {
-    DBG_ONLY(std::fprintf(stderr, "%zu clusters before\n", ret.first.size());)
-    DBG_ONLY(auto ts = std::chrono::high_resolution_clock::now();)
-    std::vector<size_t> indicestorm;
-    std::unique_ptr<std::mutex[]> locks(new std::mutex[ret.first.size()]);
-    const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
-    auto &constituents = ret.second;
-    auto &ids= ret.first;
-    OMP_PFOR
-    for(size_t i = 0; i < ret.first.size(); ++i) {
-        const auto oid = ret.first[i];
-        assert(oid < result.names_.size());
-        const minispan<RegT> span(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_);
-        auto [hits, counts, nper] = retidx.query_candidates(span, 5, size_t(-1), earlystop);
-        for(size_t j = 0; j < hits.size(); ++j) {
-            if(hits[j] == i) {
-                std::swap(hits.back(), hits[j]);
-                hits.pop_back();
-                break;
-            }
-        }
-        if(hits.empty()) continue;
-        std::vector<LSHDistType> vals(hits.size());
-        auto vp = vals.data();
-        for(const auto id: hits) {
-            assert(id < ids.size());
-            *vp++ = mult * compare(opts, result, oid, ids[id]);
-        }
-        auto mv = std::min_element(vals.data(), vp);
-        auto pos = mv - vals.data();
-        auto cluster_id = hits[pos];
-        auto &rep = ids[cluster_id];
-        if(mv != vp && mult * *mv > opts.min_similarity_ && result.cardinalities_[oid] < result.cardinalities_[rep]) {
-            auto cluster_id = hits.at(pos);
-            auto &cv = constituents.at(cluster_id);
-            {
-                std::lock_guard<std::mutex> lock(locks[cluster_id]);
-                cv.push_back(oid);
-                cv.insert(cv.end(), ret.second[i].begin(), ret.second[i].end());
-            }
-            {
-                std::lock_guard<std::mutex> lock2(locks[i]);
-                ret.second[i].clear();
-            }
-            OMP_CRITICAL
-            {
-                indicestorm.push_back(i);
-            }
-        }
-    }
-    DBG_ONLY(std::fprintf(stderr, "Removing %zu indices out of %zu\n", indicestorm.size(), ret.first.size());)
-    for(const auto id: indicestorm) {
-        std::swap(ret.first[id], ret.first.back()), ret.first.pop_back();
-        std::swap(ret.second[id], ret.second.back()), ret.second.pop_back();
-    }
-    DBG_ONLY(std::fprintf(stderr, "%zu clusters after %gs\n", ret.first.size(), std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - ts).count());)
-}
-#endif
 
 
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &retidx, const Dashing2DistOptions &opts, const SketchingResult &result)

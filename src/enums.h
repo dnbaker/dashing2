@@ -108,6 +108,9 @@ struct Dashing2Options;
 
 std::string to_suffix(const Dashing2Options &opts);
 void checked_fwrite(std::FILE *fp, const void *src, const size_t nb);
+inline void checked_fwrite(const void *ptr, const size_t itemsize, const size_t nitems, std::FILE *fp) {
+    checked_fwrite(fp, ptr, itemsize * nitems);
+}
 std::pair<std::FILE *, int> xopen(const std::string &path);
 
 extern uint64_t XORMASK;

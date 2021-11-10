@@ -218,8 +218,7 @@ int cmp_main(int argc, char **argv) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }
     opts.filterset(fsarg);
-    if(nbytes_for_fastdists == 0.5)
-        opts.sketchsize_ += opts.sketchsize_ & 1; // Ensure that sketch size is a multiple of 2 if using nibbles
+    // Ensure we pad the number of registers to a multiple of 64 bits.
     opts.bed_parse_normalize_intervals_ = normalize_bed;
     opts.downsample(downsample_frac);
     Dashing2DistOptions distopts(opts, ok, of, nbytes_for_fastdists, truncate_mode, topk_threshold, similarity_threshold, cmpout, exact_kmer_dist, refine_exact, nLSH);
