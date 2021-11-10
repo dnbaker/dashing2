@@ -246,12 +246,8 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         }
         std::fclose(fp);
     }
-    size_t sigvecsize64 = ss * nitems;
-    if(opts.sketch_compressed()) {
-        const size_t regsper64 = sizeof(uint64_t) / opts.fd_level_;
-        sigvecsize64 = (sigvecsize64 + regsper64 - 1) / regsper64;
-    }
-    // File size before signatures:
+    const int sigshift = opts.sigshift();
+    const size_t sigvecsize64 = nitems * ss >> sigshift;
     ret.signatures_.resize(sigvecsize64);
     if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));
@@ -282,7 +278,6 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     if(opts.kmer_result_ == FULL_MMER_SET) {
         ret.kmerfiles_.resize(ret.destination_files_.size());
     }
-    const int sigshift = opts.sigshift();
     OMP_PFOR_DYN
     for(size_t i = 0; i < nitems; ++i) {
         int tid = 0;

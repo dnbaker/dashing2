@@ -96,10 +96,6 @@ struct OptSketcher {
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads);
 
 FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Options &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel, size_t seqs_per_batch) {
-
-    if(std::min(opts.compressed_a_, opts.compressed_b_) <= 0.L) {
-        THROW_EXCEPTION(std::invalid_argument("fastx sketchbyseq does not yet support pre-set SetSketch parameters."));
-    }
     gzFile ifp;
     kseq_t *myseq = kseqs ? &kseqs[OMP_ELSE(omp_get_thread_num(), 0)]: (kseq_t *)std::calloc(sizeof(kseq_t), 1);
     size_t batch_index = 0;

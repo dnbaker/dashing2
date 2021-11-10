@@ -5,6 +5,7 @@ from collections import namedtuple
 ParsedSignatureMatrix = namedtuple("ParsedSignatureMatrix", 'nseqs, cardinalities, signatures')
 ParsedKmerMatrix = namedtuple("ParsedKmerMatrix", 'k,w,canon,alphabet,sketchsize,seed,kmers')
 
+
 def parse_knn(path, idsize=4, dstsize=4):
     '''
 
@@ -50,7 +51,10 @@ def parse_binary_signatures(path):
     dat = np.memmap(path, np.uint8) # Map whole file
     nseqs, sketchsize = map(int, dat[:16].view(np.uint64))
     cardinalities = dat[16:16 + (8 * nseqs)].view(np.float64)
-    signatures = dat[16 + (8 * nseqs):].view(np.float64).reshape(-1, sketchsize)
+    signatures = dat[16 + (8 * nseqs):].view(np.float64).reshape(nseqs, -1)
+    sigmul = sketchsize / signatures.shape[1]
+    if sigmul != 1.:
+        signatures = signatures.view({2: np.uint32, 1: np.uint64, 4: np.uint16, 8: np.uint8}[int(sigmul)])
     return ParsedSignatureMatrix(nseqs, cardinalities, signatures)
 
 

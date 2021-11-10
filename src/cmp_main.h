@@ -106,11 +106,8 @@ struct Dashing2DistOptions: public Dashing2Options {
         if(sketch_compressed_set) {
             if(this->kmer_result_ != FULL_SETSKETCH)
                 THROW_EXCEPTION(std::invalid_argument("Sketch compressed is only available for FullSetSketch."));
-            if(fd_level_ < 1.)
-                THROW_EXCEPTION(std::invalid_argument("Cannot index nibble-sized registers currently. This may change."));
-            if(fd_level_ > 2.)
-                THROW_EXCEPTION(std::invalid_argument("Only permitting setsketch of 1 or 2 bytes per register."));
             if(this->compressed_b_ < 1.L) THROW_EXCEPTION(std::invalid_argument("base must be >= 1."));
+            if(this->compressed_a_ <= 0.L) THROW_EXCEPTION(std::invalid_argument("offset a must be > 0."));
         }
     }
 };

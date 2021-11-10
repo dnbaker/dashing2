@@ -606,8 +606,8 @@ class SetSketch {
     minvt_t<ResT> lowkh_;
     std::vector<FT> lbetas_; // Cache Beta values * 1. / a
     mutable double mycard_ = -1.;
-    static ResT *allocate(size_t n) {
-        n = (n << 1) - 1;
+    static ResT *allocate(size_t num_sigs) {
+        size_t n = (num_sigs << 1) - 1;
         ResT *ret = nullptr;
         static constexpr size_t ALN =
 #if __AVX512F__
@@ -618,11 +618,16 @@ class SetSketch {
             16;
 #endif
 #if __cplusplus >= 201703L && defined(_GLIBCXX_HAVE_ALIGNED_ALLOC)
-        if((ret = static_cast<ResT *>(std::aligned_alloc(ALN, n * sizeof(ResT)))) == nullptr)
+        const size_t mem_needed = n * sizeof(ResT);
+        const size_t mem_requested = mem_needed + (mem_needed % ALN ? ALN - mem_needed % ALN: 0);
+        if((ret = static_cast<ResT *>(std::aligned_alloc(ALN, mem_requested))) == nullptr)
 #else
         if(posix_memalign((void **)&ret, ALN, n * sizeof(ResT)))
 #endif
+        {
+            std::fprintf(stderr, "Failed to allocate with nsigs = %zu, nalloc = %zu, sizef(ResT) == %zu, ALN = %zu\n", num_sigs, n, sizeof(ResT), ALN);
             throw std::bad_alloc();
+        }
         return ret;
     }
     FT getbeta(size_t idx) const {
