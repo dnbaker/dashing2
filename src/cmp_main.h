@@ -58,10 +58,10 @@ struct Dashing2DistOptions: public Dashing2Options {
     bool refine_exact_ = false;
     size_t cmp_batch_size_ = 16;
     unsigned int nLSH = 2;
-    bool sketch_compressed_set;
     Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false, bool refine_exact=false, int nlshsubs=3):
         Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact), nLSH(nlshsubs)
     {
+        set_sketch_compressed();
         if(nbytes_for_fastdists < 0) nbytes_for_fastdists = sizeof(RegT);
         if(std::fmod(nbytes_for_fastdists, 1.)) {
             if(nbytes_for_fastdists != 0.5) THROW_EXCEPTION(std::runtime_error("Can only do 1, 2, 4, 8, or 0.5 bytes per register"));
@@ -75,8 +75,7 @@ struct Dashing2DistOptions: public Dashing2Options {
             exact_kmer_dist_ = true;
         if(outfile_path_.empty() || outfile_path_ == "-") outfile_path_ = "/dev/stdout";
         if(nLSH < 1) nLSH = 1;
-        sketch_compressed_set = this->sketch_compressed();
-        if(sketch_compressed_set) {
+        if(this->sketch_compressed_set) {
             if(size_t rem = opts.sketchsize_ % sizeof(RegT) / opts.fd_level_; rem != 0) {
                 opts.sketchsize_ += sizeof(RegT) / opts.fd_level_ - rem;
                 std::fprintf(stderr, "Sketchsize is not %zu-bit register multiple; padding the number of registers to fit. New number of registers: %zu\n", sizeof(RegT) * 8, opts.sketchsize_);

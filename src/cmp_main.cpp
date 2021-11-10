@@ -214,6 +214,7 @@ int cmp_main(int argc, char **argv) {
     opts.by_chrom_ = by_chrom;
     opts.compressed_a_ = compressed_a;
     opts.compressed_b_ = compressed_b;
+    opts.set_sketch_compressed();
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }

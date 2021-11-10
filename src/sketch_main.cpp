@@ -111,6 +111,7 @@ int sketch_main(int argc, char **argv) {
     opts.compressed_a_ = compressed_a;
     opts.compressed_b_ = compressed_b;
     opts.fd_level_ = nbytes_for_fastdists;
+    opts.set_sketch_compressed();
     if(hpcompress) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }
