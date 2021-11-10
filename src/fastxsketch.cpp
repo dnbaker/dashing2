@@ -5,6 +5,7 @@
 
 //#include <optional>
 namespace dashing2 {
+using namespace variation;
 
 
 void FastxSketchingResult::print() {
@@ -176,7 +177,9 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
             if(opts.sketch_compressed()) {
                 cfss.reserve(nt);
                 for(size_t i = 0; i < nt; ++i) {
-                    if(opts.fd_level_ == 1.) {
+                    if(opts.fd_level_ == .5) {
+                        cfss.emplace_back(NibbleSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                    } else if(opts.fd_level_ == 1.) {
                         cfss.emplace_back(ByteSetS(ss, opts.compressed_b_, opts.compressed_a_));
                     } else if(opts.fd_level_ == 2.) {
                         cfss.emplace_back(ShortSetS(ss, opts.compressed_b_, opts.compressed_a_));
@@ -243,12 +246,8 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         }
         std::fclose(fp);
     }
-    size_t sigvecsize64 = ss * nitems;
-    if(opts.sketch_compressed()) {
-        const size_t regsper64 = sizeof(uint64_t) / opts.fd_level_;
-        sigvecsize64 = (sigvecsize64 + regsper64 - 1) / regsper64;
-    }
-    // File size before signatures:
+    const int sigshift = opts.sigshift();
+    const size_t sigvecsize64 = nitems * ss >> sigshift;
     ret.signatures_.resize(sigvecsize64);
     if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));
@@ -279,7 +278,6 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     if(opts.kmer_result_ == FULL_MMER_SET) {
         ret.kmerfiles_.resize(ret.destination_files_.size());
     }
-    const int sigshift = (opts.fd_level_ == 1. ? 3: opts.fd_level_ == 2. ? 2: opts.fd_level_ == 4. ? 1: opts.fd_level_ == 0.5 ? 4: opts.fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
     OMP_PFOR_DYN
     for(size_t i = 0; i < nitems; ++i) {
         int tid = 0;
@@ -574,13 +572,29 @@ do {\
             if(opts.sketch_compressed()) {
                 std::array<long double, 4> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_), static_cast<long double>(opts.sketchsize_)};
                 checked_fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
-                checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
+                if(opts.fd_level_ == 0.5) {
+                    const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
+                    for(size_t i = 0; i < opts.sketchsize_; i += 2) {
+                        uint8_t reg = (srcptr[i] << 4) | srcptr[i + 1];
+                        checked_fwrite(ptr, sizeof(reg), 1, ofp);
+                    }
+                } else {
+                    checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
+                }
             } else {
                 ::write(::fileno(ofp), ptr, regsize * ss);
             }
             std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {
-                std::copy(ptr, ptr + (ss >> sigshift), &ret.signatures_[mss >> sigshift]);
+                if(opts.fd_level_ != .5) {
+                    std::copy(ptr, ptr + (ss >> sigshift), &ret.signatures_[mss >> sigshift]);
+                } else {
+                    const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
+                    uint8_t *destptr = (uint8_t *)&ret.signatures_[mss >> sigshift];
+                    for(size_t i = 0; i < opts.sketchsize_; i += 2) {
+                        *destptr++ = (srcptr[i] << 4) | srcptr[i + 1];
+                    }
+                }
             }
             if(ids && ret.kmers_.size())
                 std::copy(ids, ids + ss, &ret.kmers_[mss]);

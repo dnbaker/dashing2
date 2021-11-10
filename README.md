@@ -3,7 +3,7 @@
 Dashing2 is the second version of the Dashing sequence sketching and comparison system.
 
 There have been several major changes, but you can still can get a quick start to compare a group of sequence collections [here](#quickstart).
-
+For instructions on parsing, see [Parsing](#parsing-code) below.
 [Installation instructions](#installation) can be found below.
 
 ### New Features

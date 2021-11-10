@@ -114,8 +114,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             checked_fwrite(&k, sizeof(k), 1, ofp);
             checked_fwrite(&w, sizeof(w), 1, ofp);
         }
-        checked_fwrite(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), ofp) != re
-            THROW_EXCEPTION(std::runtime_error("Failed to write lengths of sequences to disk.\n"));
+        checked_fwrite(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), ofp);
         offset = 0;
         for(size_t i = 0; i < result.nperfile_.size(); ++i) {
             if(result.nperfile_[i]) {
