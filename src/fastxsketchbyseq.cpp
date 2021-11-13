@@ -297,14 +297,14 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 if(isop)    sketchers.opss->update(x);
                 else if(isctr) sketchers.ctr->add(x);
                 else if(isfs) sketchers.fss->update(x);
-                else if(iscfss) std::visit([&x](auto &sketch) [[always_inline]] {sketch.update(x);}, *sketchers.cfss);
+                else if(iscfss) std::visit([&x](auto &sketch) __attribute__((always_inline)) {sketch.update(x);}, *sketchers.cfss);
             };
             auto nofsfunc = [&](auto x) __attribute__((always_inline)) {
                 x = maskfn(x);
                 if(isop) sketchers.opss->update(x);
                 else if(isctr) sketchers.ctr->add(x);
                 else if(isfs) sketchers.fss->update(x);
-                else if(iscfss) std::visit([&x](auto &sketch) [[always_inline]] {sketch.update(x);}, *sketchers.cfss);
+                else if(iscfss) std::visit([&x](auto &sketch) __attribute__((always_inline)) {sketch.update(x);}, *sketchers.cfss);
             };
             if(opts.fs_) {
                 sketchers.for_each(fsfunc, seqp, seql);
