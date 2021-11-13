@@ -3,6 +3,7 @@
 #include "hash.h"
 #include "bonsai/encoder.h"
 #include "fmt/format.h"
+#include "FastxParser.hpp"
 
 namespace dashing2 {
 template<typename Key, typename V, typename Hash>
@@ -21,6 +22,15 @@ int contain_usage() {
     return EXIT_FAILURE;
 }
 
+INLINE flat_hash_map<uint64_t, uint64_t> & operator+=(flat_hash_map<uint64_t, uint64_t> &lhs, const flat_hash_map<uint64_t, uint64_t> &rhs) {
+    for(const auto &pair: rhs) {
+        auto lit = lhs.find(pair.first);
+        if(lit != lhs.end()) lit->second += pair.second;
+        else lhs.emplace(pair.first, pair.second);
+    }
+    return lhs;
+}
+
 std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::vector<std::string> input_files, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer) {
     std::vector<flat_hash_map<uint64_t, uint64_t>> res(input_files.size());
     //KSeqHolder kseqs(nthreads);
@@ -33,16 +43,74 @@ std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::sco
             auto kmeridit = kmer2ids.find(kmer);
             if(kmeridit == kmer2ids.end()) return;
             auto it = myres.find(kmer);
-            if(it == myres.end()) it = myres.emplace(kmer, 1).first;
+            if(it == myres.end()) myres.emplace(kmer, 1);
             else ++it->second;
         };
         auto path = input_files[i].data();
         if(eenc.k() <= eenc.nremperres64()) {
-            eenc.for_each(func, path);
+            bns::Encoder<bns::score::Lex, uint64_t> mye(eenc);
+            mye.for_each(func, path);
         } else {
-            renc.for_each_hash(func, path);
+            bns::RollingHasher<uint64_t> myr(renc);
+            myr.for_each_hash(func, path);
         }
     }
+    return res;
+}
+
+template<typename T>
+void par_reduce(T *x, size_t n) {
+    const unsigned int ln = static_cast<int>(std::ceil(std::log2(n)));
+    for(size_t i = 0; i < ln; ++i) {
+        const size_t step_size = size_t(1) << i;
+        const size_t sweep_size = (i + 1) << 1;
+        const size_t nsweeps = (n + (sweep_size - 1)) / sweep_size;
+        OMP_PFOR
+        for(size_t j = 0; j < nsweeps; ++j) {
+            if(const size_t lh = j * sweep_size, rh = lh + step_size; rh < n)
+                x[lh] += x[rh];
+        }
+    }
+}
+
+std::vector<flat_hash_map<uint64_t, uint64_t>> get_results_sf(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::string input_file, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer, const int nthreads) {
+    std::vector<flat_hash_map<uint64_t, uint64_t>> res(nthreads);
+    std::vector<std::string> sf({input_file});
+    std::vector<std::thread> threads;
+    fastx_parser::FastxParser<fastx_parser::ReadSeq> parser(sf, nthreads, 1);
+    parser.start();
+    for(size_t i = 0; i < size_t(nthreads); ++i) {
+        threads.emplace_back([&,i]() {
+            bns::Encoder<bns::score::Lex, uint64_t> mye(eenc);
+            bns::RollingHasher<uint64_t> myr(renc);
+            auto rg = parser.getReadGroup();
+            auto &myres = res[i];
+            auto func = [minkmer,maxkmer,&kmer2ids,&myres](auto kmer) {
+                kmer = maskfn(kmer);
+                if(kmer < minkmer || kmer > maxkmer) return;
+                auto kmeridit = kmer2ids.find(kmer);
+                if(kmeridit == kmer2ids.end()) return;
+                auto it = myres.find(kmer);
+                if(it == myres.end()) myres.emplace(kmer, 1);
+                else ++it->second;
+            };
+            const bool use_direct_encoding = mye.k() <= mye.nremperres64();
+            for(;;) {
+                if(!parser.refill(rg)) break;
+                for(auto &seq: rg) {
+                    if(use_direct_encoding) {
+                        mye.for_each(func, seq.seq.data(), seq.seq.size());
+                    } else {
+                        myr.for_each_hash(func, seq.seq.data(), seq.seq.size());
+                    }
+                }
+            }
+        });
+    }
+    for(auto &t: threads) t.join();
+    parser.stop();
+    par_reduce(res.data(), res.size());
+    res.resize(1);
     return res;
 }
 
@@ -63,6 +131,7 @@ int contain_main(int argc, char **argv) {
             break;
         }
     }
+    nthreads = std::max(nthreads, 1);
 #ifdef _OPENMP
     if(nthreads > 1) omp_set_num_threads(nthreads);
 #endif
@@ -130,20 +199,28 @@ int contain_main(int argc, char **argv) {
         maxkmer = std::max(maxkmer, pair.first);
         minkmer = std::min(minkmer, pair.first);
     }
-    std::vector<flat_hash_map<uint64_t, uint64_t>> res = get_results(e64, rh64, streamfiles, kmer2ids, maxkmer, minkmer);
-    std::vector<float> coverage_mat(nitems * streamfiles.size());
-    std::vector<float> coverage_stats(nitems * streamfiles.size());
+    std::vector<flat_hash_map<uint64_t, uint64_t>> res;
+    if(nthreads > 1 && nq < size_t(nthreads)) {
+        for(const auto &sf: streamfiles) {
+            auto v = get_results_sf(e64, rh64, sf, kmer2ids, maxkmer, minkmer, nthreads);
+            res.emplace_back(std::move(v.front()));
+        }
+    } else {
+        res = get_results(e64, rh64, streamfiles, kmer2ids, maxkmer, minkmer);
+    }
+    std::vector<float> coverage_mat(nitems * streamfiles.size() * 2);
+    float *const coverage_stats = coverage_mat.data() + (nitems * streamfiles.size());
+    const double ssiv = 1. / sketchsize;
     OMP_PFOR_DYN
     for(size_t i = 0; i < res.size(); ++i) {
-        std::unique_ptr<uint32_t[]> matches(new uint32_t[nitems]);
-        std::unique_ptr<uint32_t[]> matchsums(new uint32_t[nitems]);
+        std::unique_ptr<uint32_t[]> matches(new uint32_t[nitems]());
+        std::unique_ptr<uint32_t[]> matchsums(new uint32_t[nitems]());
         for(const auto &[key, value]: res[i]) {
             for(const auto refid: kmer2ids.at(key)) {
                 ++matches[refid];
                 matchsums[refid] += value;
             }
         }
-        const double ssiv = 1. / sketchsize;
         const auto cmatptr = &coverage_mat[nitems * i];
         const auto cstatsptr = &coverage_stats[nitems * i];
         for(size_t j = 0; j < nitems; ++j) {
@@ -156,7 +233,6 @@ int contain_main(int argc, char **argv) {
     std::FILE *ofp = outpath ? bfopen(outpath, "w"): stdout;
     if(binary_output) {
         std::fwrite(coverage_mat.data(), sizeof(float), coverage_mat.size(), ofp);
-        std::fwrite(coverage_stats.data(), sizeof(float), coverage_mat.size(), ofp);
     } else {
         fmt::print(ofp, "#Dashing2 contain - a list of coverage %%s for the set of references, + mean coverage levels.\n"
                         "#Each matrix entry consists of <coverage%%:mean depth of coverage>\n"
@@ -168,10 +244,24 @@ int contain_main(int argc, char **argv) {
             fmt::print(ofp, streamfiles[i]);
             const float *cmatptr = &coverage_mat[nitems * i];
             const float *cstatsptr = &coverage_stats[nitems * i];
-            for(size_t j = 0; j < nitems; ++j) {
-                assert(cmatptr + j < &*coverage_mat.end());
-                assert(cstatsptr + j < &*coverage_stats.end());
-                fmt::print(ofp, "\t{:0.8g}%:{}", 100.f * cmatptr[j], cstatsptr[j]);
+            size_t j = 0;
+#if __AVX512F__
+            for(;nitems - j >= 16;j += 16) {
+                const __m512 matd = _mm512_mul_ps(_mm512_loadu_ps(cmatptr + j), _mm512_set1_ps(100.f));
+                const __m512 statd = _mm512_loadu_ps(cstatsptr + j);
+                fmt::print("\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}",
+                           matd[0], statd[0], matd[1], statd[1], matd[2], statd[2], matd[3], statd[3], matd[4], statd[4], matd[5], statd[5], matd[6], statd[6], matd[7], statd[7], matd[8], statd[8], matd[9], statd[9], matd[10], statd[10], matd[11], statd[11], matd[12], statd[12], matd[13], statd[13], matd[14], statd[14], matd[15], statd[15]);
+            }
+#elif __AVX2__
+            for(;nitems - j >= 8;j += 8) {
+                const __m256 matd = _mm256_mul_ps(_mm256_loadu_ps(cmatptr + j), _mm256_set1_ps(100.f));
+                const __m256 statd = _mm256_loadu_ps(cstatsptr + j);
+                fmt::print("\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}",
+                           matd[0], statd[0], matd[1], statd[1], matd[2], statd[2], matd[3], statd[3], matd[4], statd[4], matd[5], statd[5], matd[6], statd[6], matd[7], statd[7]);
+            }
+#endif
+            for(;j < nitems; ++j) {
+                fmt::print(ofp, "\t{:0.6g}%:{}", 100.f * cmatptr[j], cstatsptr[j]);
             }
             std::fputc('\n', ofp);
         }
