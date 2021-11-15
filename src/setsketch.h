@@ -980,7 +980,7 @@ struct EByteSetS: public SetSketch<uint8_t, double> {
     EByteSetS(IT nreg, double b=DEFAULT_B, double a=DEFAULT_A): SetSketch<uint8_t, double>(nreg, b, a, QV) {}
     template<typename...Args> EByteSetS(Args &&...args): SetSketch<uint8_t, double>(std::forward<Args>(args)...) {}
 };
-CFDeclare(UintSetS, 1.0000000109723500835L, 19.77882586L, 0xFFFFFFFEuL, uint32_t, double);
+CFDeclare(UintSetS, 1.0000000109723500835L, 19.77882586L, 0xFFFFFFFEuL, uint32_t, long double);
 #undef CFDeclare
 
 template<typename FT=double>
