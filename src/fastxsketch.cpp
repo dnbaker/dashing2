@@ -178,13 +178,13 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                 cfss.reserve(nt);
                 for(size_t i = 0; i < nt; ++i) {
                     if(opts.fd_level_ == .5) {
-                        cfss.emplace_back(NibbleSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                        cfss.emplace_back(NibbleSetS(opts.count_threshold_, ss, opts.compressed_b_, opts.compressed_a_));
                     } else if(opts.fd_level_ == 1.) {
-                        cfss.emplace_back(ByteSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                        cfss.emplace_back(ByteSetS(opts.count_threshold_, ss, opts.compressed_b_, opts.compressed_a_));
                     } else if(opts.fd_level_ == 2.) {
-                        cfss.emplace_back(ShortSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                        cfss.emplace_back(ShortSetS(opts.count_threshold_, ss, opts.compressed_b_, opts.compressed_a_));
                     } else if(opts.fd_level_ == 4.) {
-                        cfss.emplace_back(UintSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                        cfss.emplace_back(UintSetS(opts.count_threshold_, ss, opts.compressed_b_, opts.compressed_a_));
                     }
                 }
             } else {
