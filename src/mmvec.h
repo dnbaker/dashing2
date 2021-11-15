@@ -235,7 +235,7 @@ public:
         if(::fstat(fd, &st)) throw std::runtime_error("Failed to fsize");
         return st.st_size;
     }
-    ~vector() noexcept(false) {
+    ~vector() {
         // shrink to fit, then flush to disk if necessary
         if(path_.empty()) return;
         if(ram_.size() && capacity_ < countthreshold()) {
@@ -245,25 +245,35 @@ public:
             if(::truncate(path(), offset_ + capacity_ * sizeof(T))) {
                 struct stat st;
                 ::stat(path(), &st);
-                throw std::runtime_error("Failed to resize "s + path_ + "via ::truncate to size " + std::to_string(offset_ + capacity_ * sizeof(T)) + " from " + std::to_string(st.st_size) + __FILE__ + ", " + __PRETTY_FUNCTION__);
+                const std::string msg = ("Failed to resize "s + path_ + "via ::truncate to size " + std::to_string(offset_ + capacity_ * sizeof(T)) + " from " + std::to_string(st.st_size) + __FILE__ + ", " + __PRETTY_FUNCTION__);
+                std::fprintf(stderr, "%s\n", msg.data());
+                std::exit(EXIT_FAILURE);
             }
 #ifndef NDEBUG
             std::fprintf(stderr, "Capacity is < threshold, so we need to flush the data in RAM to the file.\n");
 #endif
             std::error_code ec;
             ms_.map(path_, offset_, sizeof(T) * capacity_, ec);
-            if(ec) throw std::system_error(ec);
+            if(ec) {
+                std::fprintf(stderr, "Failed to map resized file before flushing to disk. System error: %s\n", std::system_error(ec).what());
+                std::exit(EXIT_FAILURE);
+            }
             //std::fprintf(stderr, "Flushing to file with %zu as offset.\n", offset_);
             std::copy(ram_.begin(), ram_.end(), (T *)ms_.data());
         } else if(capacity_ > 0 && capacity_ > size_) {
             const bool wasopen = ms_.is_open();
             if(wasopen) ms_.unmap();
-            if(::truncate(path(), offset_ + (size_ * sizeof(T))))
-                throw std::runtime_error("Failed to truncate to shrink_to_fit");
+            if(::truncate(path(), offset_ + (size_ * sizeof(T)))) {
+                std::fprintf(stderr, "Failed to truncate for shrink_to_fit in mmvec destructor.\n");
+                std::exit(EXIT_FAILURE);
+            }
             if(wasopen) {
                 std::error_code ec;
                 ms_.map(path(), offset_, size_ * sizeof(T), ec);
-                if(ec) throw std::runtime_error(ec.message());
+                if(ec) {
+                    std::fprintf(stderr, "Failed to map resized file before flushing to disk. System error: %s\n", std::system_error(ec).what());
+                    std::exit(EXIT_FAILURE);
+                }
             }
             capacity_ = size_;
         }

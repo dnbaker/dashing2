@@ -258,8 +258,7 @@ void write_container(const T &vec, std::string path) {
     std::FILE *ifp = bfopen(path.data(), "wb");
     if(!ifp)
         THROW_EXCEPTION(std::runtime_error(std::string("Failed to open path '") + path + "' for reading"));
-    static constexpr size_t vnb = sizeof(std::decay_t<decltype(*vec.begin())>);
-    std::fwrite(vec.data(), vnb, nb, ifp);
+    checked_fwrite(vec.data(), sizeof(std::decay_t<decltype(*vec.begin())>), nb, ifp);
     std::fclose(ifp);
 }
 int wsketch_main(int argc, char **argv) {

@@ -3,6 +3,7 @@
 #define DASHING2_OPTIONS_H__
 #include <enums.h>
 #include <getopt.h>
+#include "dedup_core.h"
 
 namespace dashing2 {
 #define LO_ARG(LONG, SHORT) {LONG, required_argument, 0, SHORT},
@@ -20,7 +21,6 @@ enum OptArg {
     OPTARG_CMPOUT,
     OPTARG_BINARY_OUTPUT,
     OPTARG_FASTCMP,
-    OPTARG_REGBYTES,
     OPTARG_BBIT_SIGS,
     OPTARG_EXACT_KMER_DIST,
     OPTARG_ISZ,
@@ -47,6 +47,12 @@ enum OptArg {
     OPTARG_NLSH,
     OPTARG_ENTROPYMIN,
     OPTARG_SIGRAMLIMIT,
+    OPTARG_MAXCAND,
+    OPTARG_SETSKETCH_AB,
+    OPTARG_FASTCMPBYTES,
+    OPTARG_FASTCMPSHORTS,
+    OPTARG_FASTCMPWORDS,
+    OPTARG_FASTCMPNIBBLES,
     OPTARG_DUMMY
 };
 
@@ -59,16 +65,21 @@ enum OptArg {
     LO_ARG("distout", OPTARG_CMPOUT)\
     LO_ARG("cmp-outfile", OPTARG_CMPOUT)\
     LO_ARG("outprefix", OPTARG_OUTPREF)\
+    LO_ARG("prefix", OPTARG_OUTPREF)\
     LO_ARG("topk", 'K')\
     LO_ARG("similarity-threshold", 'T')\
     LO_ARG("fastcmp", OPTARG_FASTCMP)\
+    LO_ARG("regsize", OPTARG_FASTCMP)\
     LO_ARG("countsketch-size", 'c')\
+    LO_ARG("countmin-size", 'c')\
     LO_ARG("window-size", 'w')\
     LO_ARG("kmer-length", 'k')\
     LO_ARG("outfile", 'o')\
     LO_ARG("count-threshold", 'm')\
     LO_ARG("threshold", 'm')\
     LO_FLAG("binary-output", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
+    LO_FLAG("emit-binary", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
+    LO_FLAG("binary", OPTARG_BINARY_OUTPUT, of, OutputFormat::MACHINE_READABLE) \
     LO_FLAG("bagminhash", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\
     LO_FLAG("prob", 'P', sketch_space, SPACE_PSET)\
     LO_FLAG("probs", 'P', sketch_space, SPACE_PSET)\
@@ -84,6 +95,7 @@ enum OptArg {
     /*LO_FLAG("exact-kmer-dist", OPTARG_EXACT_KMER_DIST, exact_kmer_dist, true)*/\
     LO_FLAG("bbit-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
     LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
+    LO_FLAG("intersection-size", OPTARG_ISZ, measure, INTERSECTION)\
     LO_FLAG("mash-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("symmetric-containment", OPTARG_SYMCONTAIN, measure, SYMMETRIC_CONTAINMENT)\
@@ -98,10 +110,16 @@ enum OptArg {
     LO_FLAG("seq", 'G', res, FULL_MMER_SEQUENCE)\
     LO_FLAG("128bit", '2', use128, true)\
     LO_FLAG("long-kmers", '2', use128, true)\
-    LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_FLAG("phylip", OPTARG_PHYLIP, ok, OutputKind::PHYLIP)\
-    LO_ARG("regbytes", OPTARG_REGBYTES)\
+    LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
+    LO_FLAG("asymmetric", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
+    LO_FLAG("square", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
+    LO_ARG("regbytes", OPTARG_FASTCMP)\
     /*LO_ARG("set", 'H')*/\
+    {"fastcmp-nibbles", no_argument, 0, OPTARG_FASTCMPNIBBLES},\
+    {"fastcmp-bytes", no_argument, 0, OPTARG_FASTCMPBYTES},\
+    {"fastcmp-shorts", no_argument, 0, OPTARG_FASTCMPSHORTS},\
+    {"fastcmp-words", no_argument, 0, OPTARG_FASTCMPWORDS},\
     {"save-kmers", no_argument, 0, 's'},\
     {"save-kmercounts", no_argument, 0, 'N'},\
     {"hp-compress", no_argument, 0, OPTARG_HPCOMPRESS},\
@@ -121,6 +139,7 @@ enum OptArg {
     {"protein14", no_argument, 0, OPTARG_PROTEIN14},\
     {"downsample", required_argument, 0, OPTARG_DOWNSAMPLE_FRACTION},\
     {"cache", no_argument, 0, 'W'},\
+    {"cache-sketches", no_argument, 0, 'W'},\
     {"no-canon", no_argument, 0, 'C'},\
     {"set", no_argument, 0, OPTARG_SET},\
     {"exact-kmer-dist", no_argument, 0, OPTARG_EXACT_KMER_DIST},\
@@ -136,13 +155,24 @@ enum OptArg {
     {"entmin", no_argument, 0, OPTARG_ENTROPYMIN},\
     {"by-chrom", no_argument, (int *)&by_chrom, 1},\
     {"sketch-size-l2", required_argument, 0, 'L'},\
-    {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT}
+    {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT},\
+    {"maxcand", required_argument, 0, OPTARG_MAXCAND},\
+    {"setsketch-ab", required_argument, 0, OPTARG_SETSKETCH_AB}
 
 
 
 #define TOPK_FIELD case 'K': {ok = OutputKind::KNN_GRAPH; topk_threshold = std::atoi(optarg); break;}
 #define SIMTHRESH_FIELD case 'T': {ok = OutputKind::NN_GRAPH_THRESHOLD; similarity_threshold = std::atof(optarg); break;}
-#define GREEDY_FIELD case OPTARG_GREEDY: {ok = OutputKind::DEDUP; similarity_threshold = std::atof(optarg); break;}
+#define GREEDY_FIELD case OPTARG_GREEDY: {\
+    char *eptr;\
+    ok = OutputKind::DEDUP; similarity_threshold = std::strtod(optarg, &eptr);\
+    for(;*eptr;++eptr) {\
+        if((*eptr | 32) == 'e') {exhaustive_dedup = true;}\
+        if((*eptr | 32) == 'f') {fasta_dedup = true;}\
+    }\
+    break;\
+}
+
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
 #define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atof(optarg);\
             if(nbytes_for_fastdists != 8. && nbytes_for_fastdists != 4. && nbytes_for_fastdists != 2. && nbytes_for_fastdists != 1. && nbytes_for_fastdists != .5){\
@@ -151,7 +181,7 @@ enum OptArg {
             }\
             break;\
             }
-#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN20; canon = false; std::fprintf(stderr, "Parsing 20-character amino acod sequences\n"); break;} \
+#define PROT_FIELD case OPTARG_PROTEIN: {rht = bns::PROTEIN20; canon = false; std::fprintf(stderr, "Parsing 20-character amino acid sequences\n"); break;} \
     case OPTARG_PROTEIN6: {rht = bns::PROTEIN_6; canon = false; std::fprintf(stderr, "Parsing amino acid sequences with 6-letter compressed alphabet.\n"); break;}\
     case OPTARG_PROTEIN14: {rht = bns::PROTEIN14; canon = false; std::fprintf(stderr, "Parsing amino acid sequences with 14-letter compressed alphabet.\n"); break;}\
     case OPTARG_PROTEIN8: {rht = bns::PROTEIN8; canon = false; std::fprintf(stderr, "Using 3-bit protein encoding\n"); break;}
@@ -179,7 +209,6 @@ enum OptArg {
         case 'F': ffile = optarg; break;\
         case 'Q': qfile = optarg; ok = PANEL; break;\
         case OPTARG_BED_NORMALIZE: normalize_bed = true; break;\
-        case OPTARG_REGBYTES: nbytes_for_fastdists = std::atof(optarg); break;\
         case 'o': outfile = optarg; break;\
         case 'c': cssize = std::strtoull(optarg, nullptr, 10); break;\
         case 'k': k = std::atoi(optarg); break;\
@@ -217,6 +246,37 @@ enum OptArg {
         }\
         case OPTARG_SIGRAMLIMIT: {\
             MEMSIGTHRESH = std::strtoull(optarg, nullptr, 10);\
+        } break;\
+        case OPTARG_MAXCAND: {\
+            maxcand_global = std::atoi(optarg);\
+            if(maxcand_global < 0) {std::fprintf(stderr, "Warning: maxcand_global < 0. This defaults to heuristics for selecting the number of candidates. This may be in error.\n");}\
+        } break;\
+        case OPTARG_SETSKETCH_AB: {\
+            char *e;\
+            compressed_a = std::strtold(optarg, &e);\
+            compressed_b = std::strtold(e + 1, nullptr);\
+            if(std::min(compressed_a, compressed_b) <= 0.) THROW_EXCEPTION(std::invalid_argument("Compressed A and B parameters must be greater than 0."));\
+            std::fprintf(stderr, "setsketch ab: %Lg, %Lg\n", compressed_a, compressed_b);\
+        } break;\
+        case OPTARG_FASTCMPSHORTS: {\
+            compressed_a = sketch::setsketch::ShortSetS::DEFAULT_A;\
+            compressed_b = sketch::setsketch::ShortSetS::DEFAULT_B;\
+            nbytes_for_fastdists = 2.;\
+        } break;\
+        case OPTARG_FASTCMPBYTES: {\
+            compressed_a = sketch::setsketch::ByteSetS::DEFAULT_A;\
+            compressed_b = sketch::setsketch::ByteSetS::DEFAULT_B;\
+            nbytes_for_fastdists = 1.;\
+        } break;\
+        case OPTARG_FASTCMPNIBBLES: {\
+            compressed_a = sketch::setsketch::NibbleSetS::DEFAULT_A;\
+            compressed_b = sketch::setsketch::NibbleSetS::DEFAULT_B;\
+            nbytes_for_fastdists = .5;\
+        } break;\
+        case OPTARG_FASTCMPWORDS: {\
+            compressed_a = sketch::setsketch::UintSetS::DEFAULT_A;\
+            compressed_b = sketch::setsketch::UintSetS::DEFAULT_B;\
+            nbytes_for_fastdists = 4.;\
         } break;
 
 
@@ -249,7 +309,7 @@ static constexpr const char *siglen =
         "For example, --spacing 0,1x2,0 is equivalent to 0,1,1,0.\n"\
         "-2/--128bit/long-kmers: Use 128-bit k-mer hashes instead of 64-bit\n"\
         "-m/--threshold/--count-threshold <arg>: Set a count threshold for inclusion. Default: 0. If > 1, this will only sketch k-mers with count >= <arg>\n"\
-        "\nFastx Alphabet:\n"\
+        "\n\nFastx Alphabet:\n"\
         "Dashing2 sketches DNA be default. This can be changed with the following flags; this will disable canonicalization.\n"\
         "--enable-protein: Use 20 character amino acid alphabet.\n"\
         "--protein14: Use 14 character amino acid alphabet.\n"\
@@ -261,14 +321,14 @@ static constexpr const char *siglen =
         "        Otherwise, this changes the hash function applied to k-mers when generated sorted hash sets. This makes it easy to decode quickly, but we can still get good bottom-k estimates using these hashes\n"\
         "        the xor value for u64 kmers (unless --long-kmers is enabled) is the Wang 64-bit hash of the seed.\n"\
         "        u128 kmers (--long-kmers) have the same lower 64 bits, but the upper 64 bits are the Wang 64-bit hash of the u64 xor value.\n"\
-        "\nPathsOptions\n\n"\
+        "\n\nPathsOptions\n"\
         "By default, dashing2 reads positional arguments and sketches them. You may want to use flags instructing it\n"\
         "to read from paths in <file>. Additionally, you can put multiple files separated by spaces into a single line "\
         "to place them all into a single sketch instead.\n"\
         "-F/--ffile: read paths from file in addition to positional arguments.\n"\
         "-Q/--qfile: read query paths from file; this is used for asymmetric queries (e.g., containment).\n"\
-        "If multiple files are space-delimited in a single line, they will be sketched jointly.\n"\
-        "K-mer Filtering\n\n"\
+        "If multiple files are space-delimited in a single line, they will be sketched jointly.\n\n"\
+        "K-mer Filtering\n"\
         "If there are a set of common k-mers or artefactual sequence, you can specify --filterset to skip k-mers in this file when sketching other files.\n"\
         "By default, this converts it into a sorted hash set and skips k-mers which are found in the set.\n"\
         "`--filterset [path]` yields this.\n"\
@@ -283,6 +343,11 @@ static constexpr const char *siglen =
         "e.g. - instead of -S12 in Dashing, you would specify -S 4096\n"\
         "For convenience, we offer another argument to specify the size in log2.\n"\
         "-L/--sketch-size-l2: Set sketchsize to 2^<arg>. Must be > 0 and < 64\n"\
+        "--cache/--cache-sketches: Save sketches to disk instead of re-computing each time.\n"\
+        "\tDependent option:\n"\
+        "\t                 --outprefix: specifies directory in which to save sketches instead of adjacent to the input files.\n"\
+        "\t                 aliases: --prefix.\n"\
+        "\t                 Note: You must have permission to write in the specified folder.\n"\
         "\nSketching modes\n\n"\
         "When sketching, there are several sketch options.\n"\
         "We use the SetSketch as the default sketch structure; This ignores multiplicities, except for filtering \n"\
@@ -306,11 +371,11 @@ static constexpr const char *siglen =
         "BagMinHash is most applicable for datasets where the absolute quantities of an event matter, rather than its fraction of the complete dataset.\n"\
         "-B/--multiset: Treats weighted sets as multisets.\n"\
         "        Aliases: --bagminhash, --bmh, --BMH\n"\
-        "It typically comes at 2-4x runtime cost over ProbMinHash, depending on sketch size.\n"\
+        "It typically comes at 2-4x runtime cost over ProbMinHash, depending on sketch size.\n\n"\
         "Weighted Sketching (Counting) Parameters -\n"\
-        "-c/--countsketch-size: Use Count-Sketch counting instead of exact counting, using <arg> as the size.\n    "\
+        "-c/--countmin-size/--countsketch-size: Use Count-Sketch counting instead of exact counting, using <arg> as the size.\n    "\
         "This allows you to avoid unbounded dictionary size at the cost of some approximation of the weighted sets\n"\
-        "(This only affects BagMinHash and ProbMinHash, and only for sequence data.\n"\
+        "This only affects BagMinHash and ProbMinHash, and is only relevant to sequence data.\n"\
         "\n\nExact Modes\n"\
         "You can also emit full k-mer sets, a count dictionary (key-count map), or a set of minimizer sequences\n"\
         "-H/--set: Full k-mer set. This generates a sorted hash set for k-mers in the data. If the parser is windowed (-w is fairly large), this could even be rather small.\n"\
@@ -328,19 +393,20 @@ static constexpr const char *siglen =
         "              Minimizer sequence will be homopolymer-compressed before emission. \n"\
         "              This makes the sequences insensitive to the lengths of minimizer stretches, which may simplify match finding\n"\
         "\n\nDistance Options (shared)\n"\
-        "--Exhaustive Distance Outputs--\n"\
+        "Exhaustive Distance Outputs--\n"\
         "The default output format is all-pairs upper-triangular.\n"\
         "We provide three other full matrix methods - \n"\
         "1. PHYLIP Upper Triangular distance matrix, enabled by --phylip.\n"\
         "2. Square distance matrix, enabled by --asymmetric-all-pairs\n"\
         "--asymmetric-all-pairs: emit square distance matrix\n"\
-        "Emits a full square distance matrix rather than upper-triangular.\n"\
+        "  Emits a full square distance matrix rather than upper-triangular.\n"\
+        "  Aliases: --asymmetric, --square\n"\
         "3. Rectangular matrix, enabled by -Q/-qfile\n"\
         "Use this if you want to compare a set of queries to a set of references rather than complete all-pairs. Note: -F must be provided, or reference files should be added as positional arguments\n"\
         "positional arguments and -F paths are treated as a reference set;\n"\
         "Paths provided in -Q/--qfile are are treated as a query set.\n"\
-        "The output shape then has |F| rows and |Q| columns, (F, Q) in row-major format\n"\
-        "--Sparse Distance Outputs--\n"\
+        "The output shape then has |F| rows and |Q| columns, (F, Q) in row-major format\n\n"\
+        "Sparse Distance Outputs--\n"\
         "We provide several sparse distance options - \n"\
         "    1. topk, -- only the top-k nearest neighbors are emitted for each item\n"\
         "    2. thresholded, -- only the similarities > threshold are emitted\n"\
@@ -366,41 +432,51 @@ static constexpr const char *siglen =
         "Greedy HIT Clustering\n"\
         "This is enabled by a single parameter, --greedy <float (0-1]>, which determines the similarity threshold below which a new cluster is formed.\n"\
         "--greedy <float (0-1]> For greedy clustering by a given similarity threshold; this selects representative sequences or sequence sets.\n"\
-        "As this number approaches 1, the number and uniformity of clusters grows.\n"\
-        "For human-readable, this emits one line per cluster listing its constituents, ordered by similarity\n"\
-        "For machine-readable, this file consists of 2 64-bit integers (nclusters, nsets), followed by (nclusters + 1) 64-bit integers, followed by nsets 64-bit integers, identifying which sets belonged to which clusters.\n"\
-        "This is a vector in Compressed-Sparse notation.\n"\
-        "Example Python code:\n"\
-        "def parsef(fpath, d64=False):\n"\
-        "    import numpy as np;data = np.memmap(fpath)\n"\
-        "    nclusters, nsets = data[:16].view(np.uint64)[:2]\n"\
-        "    endp = 16 + 8 * nclusters\n"\
-        "    indptr = data[16:endp].view(np.uint64)\n"\
-        "    #  dashing2 uses 32-bit ids\n"\
-        "    #  dashing2-64 uses 64-bit ids\n"\
-        "    indicesdtype = np.uint64 if d64 else np.uint32\n"\
-        "    indices = data[endp:].view(indicesdtype)\n"\
-        "    return [indices[start:end] for start, end in zip(indptr[:-1],indptr[1:])]\n"\
+        "This uses an LSH index by default. \n"\
+        "    To compare all points to all clusters, add E to the end of the flag. (e.g., '--greedy 0.8E')"\
+        "    By default, this emits the names of the entities (sequence names, if --parse-by-seq, and filenames otherwise).\n"\
+        "    You may want to emit fasta-formatted output. You can do this by adding F to the end of the --greedy argument.\n"\
+        "    Example: '--greedy 0.8F' or '--greedy 0.8FE'.\n"\
+        "    This is only allowed for --parse-by-seq.\n"\
+        "  As this number approaches 1, the number and uniformity of clusters grows.\n"\
+        "  For human-readable, this emits one line per cluster listing its constituents, ordered by similarity\n"\
+        "  For machine-readable, this file consists of 2 64-bit integers (nclusters, nsets), followed by (nclusters + 1) 64-bit integers, followed by nsets 64-bit integers, identifying which sets belonged to which clusters.\n"\
+        "  This is a vector in Compressed-Sparse notation.\n"\
+        "  Python code for parsing the binary representation is available at https://github.com/dnbaker/dashing2/blob/main/python/parse.py.\n"\
         "Runtime Options --\n"\
         "By default, we compare items with full hash function registers; to trade accuracy for speed, these sketches can be compressed before comparisons.\n"\
-        "--fastcmp <arg>\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are logarithmically-compressed\n"\
-        "For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
-        "<arg> may be 8 (64 bits), 4 (32 bits), 2 (16 bits), 1 (8 bits), or .5 (4 bits)\n"\
-        "Results may even be somewhat stabilized by the use of smaller registers.\n"\
-        "      Dependent Option:\n"\
-        "          --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
-        "For minhash sketches (setsketch, probminhash, and bagminhash), this uses full registers instead of compressed.\n"\
-        "--refine-exact\tThis causes the candidate KNN graph to be refined to a final KNN graph using full distances.\tIf using sketches, then full hash registers are used.\nOtherwise, exact k-mer comparison functions are used.\n"\
+        "To truncate for faster comparisons, you can either select a register size to which to truncate to after generating full floating-point values, which will allow Dashing2 to use as much resolution as possible in a fixed number of bits.\n"\
+        "On the other hand, this means that initial sketching needs more memory.\n"\
+        "If you provide register values ahead of time, you can accumulate in smaller registers directly to reduce memory requirements.\n"\
+        "--fastcmp/--regsize <arg>\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are logarithmically-compressed\n"\
+        "  You can use this first approach with --fastcmp/--regsize. These are logarithmically compressed.\n"\
+        "  For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
+        "  <arg> may be 8 (64 bits), 4 (32 bits), 2 (16 bits), 1 (8 bits), or .5 (4 bits)\n"\
+        "  Results may even be somewhat stabilized by the use of smaller registers.\n"\
+        "\tDependent Options:\n"\
+        "\t          --setsketch-ab <float1>,<float2>\n"\
+        "\t            Example: --setsketch-ab 0.4,1.005\n"\
+        "\t            If you specify a, b before using this method, then SetSketches of --fastcmp size bytes will be generated directly, rather than truncating after sketching all items.\n"\
+        "\t            However, this is only supported for the SetSketch. (e.g., not for --bagminhash or --probminhash).\n"\
+        "\t            This can allow you to scale to larger collections.\n"\
+        "\t            We also provide several pre-set parameter values.\n"\
+        "\t          --fastcmp-bytes sets a and b to 20 and 1.2, and sets --fastcmp to 1\n"\
+        "\t          --fastcmp-shorts sets a and b to .06 and 1.0005, and sets --fastcmp to 2.\n"\
+        "\t          --fastcmp-words sets a and b to 19.77 and 1.0000000109723500835 and sets --fastcmp to 4.\n"\
+        "\t          --fastcmp-nibbles sets a and b to .0005 and 2.71828, and sets --fastcmp to .5\n"\
+        "\n"\
+        "If you instead want to truncate to the bottom-b bits of the signature --\n"\
+        "\t          --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
+        "The runtime is effectively equivalent to the setsketch.\n"\
         "\n\nDistance specifications\n"\
         "The default value emitted is similarity. For MinHash/HLL/SetSketch sketches, this is the fraction of shared registers.\n"\
         "This can be changed to a distance (--mash-distance) for k-mer similarity, where it can be used for hierarchical clustering.\n"\
         "--mash-distance/--poisson-distance\t Emit distances, as estimated by the Poisson model for k-mer distances.\n"\
         "--symmetric-containment\t Use symmetric containment as the distance. e.g., (|A & B| / min(|A|, |B|))\n"\
         "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
+        "--intersection-size/--intersection\t Emit the cardinality of the intersection between objects. IE, the number of k-mers shared between the two.\n"\
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
-        "--batch-size [16] \tFor rectangular distance calculation (symmetric all-pairs, asymmetric all-pairs, and query-reference), this batches computation so that memory requirements overlap for better cache-efficiency.\n"\
-        "                  \tBy default, this is 16. Increasing the batch size may yield substantial performance improvements, especially is the sketches are rather small.\n"\
         "LSH Options\n"\
         "There are a variety of heuristics in the LSH tables; however, the most important besides sketch size is the number of hash tables used.\n"\
         "--nLSH <int=2>\t\n"\
@@ -410,6 +486,14 @@ static constexpr const char *siglen =
         "Increase this number to pay more memory/time for higher accuracy.\n"\
         "Decrease this number for higher speed and lower accuracy.\n"\
         "This is ignored for exact sketching (--countdict or --set), where a single permutation is generated and a single hash table is used.\n"\
+        "--maxcand <int>\t Set the maximum number of candidates to fetch from the LSH index before evaluating distances against them.\n"\
+        "                  This is always used in --greedy mode.\n"\
+        "                  By default, this number is heuristically selected by the number of items in the index.\n"\
+        "                  If N <= 100000, uses max(N / 50, max(cbrt(N), 3)). Otherwise, uses (log(N)^3).\n"\
+        "                  Note: this is a maximum; if fewer items have matches, fewer will be reported.\n"\
+        "                  This option is ignored in --topk mode, as the number of samples is ceil(3.5 * <topk>).\n"\
+        "                  If set in --similarity-threshold mode, the number of items compared will be truncated to <maxcand> even if further samples are above the similarity threshold.\n"\
+        "                  This can prevent quadratic complexity for the (rare) case that all items are within threshold distaance of each other.\n"\
         "\nMetadata Options\n"\
         "If sketching, you can also choose to save k-mers (the IDs corresponding to the k-mer selected), or\n"\
         " and optionally save the counts for these k-mers\n"\

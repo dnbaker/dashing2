@@ -1,6 +1,7 @@
 #include "fastxsketch.h"
 
 namespace dashing2 {
+using namespace variation;
 using bns::InputType;
 
 
@@ -10,6 +11,7 @@ struct OptSketcher {
     std::unique_ptr<OPSetSketch> opss;
     std::unique_ptr<FullSetSketch> fss;
     std::unique_ptr<OrderMinHash> omh;
+    std::unique_ptr<VSetSketch> cfss;
     std::unique_ptr<Counter> ctr;
     bns::RollingHasher<uint64_t> rh_;
     bns::RollingHasher<u128_t> rh128_;
@@ -29,6 +31,7 @@ struct OptSketcher {
         else if(o.opss) opss.reset(new OPSetSketch(o.opss->size()));
         else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
+        else if(o.cfss) cfss.reset(new VSetSketch(*o.cfss));
         return *this;
     }
     OptSketcher(const OptSketcher &o): rh_(o.rh_), rh128_(o.rh128_), enc_(o.enc_), enc128_(o.enc128_), ence_(o.ence_), ence128_(o.ence128_), k_(o.k_), w_(o.w_), use128_(o.use128_) {
@@ -39,12 +42,22 @@ struct OptSketcher {
         else if(o.opss) opss.reset(new OPSetSketch(o.opss->size()));
         else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
+        else if(o.cfss) cfss.reset(new VSetSketch(*o.cfss));
     }
     OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), ence_(enc_.to_entmin64()), ence128_(enc_.to_entmin128()), k_(opts.k_), w_(opts.w_), use128_(opts.use128()) {
         input_mode(opts.input_mode());
         assert(opts.hashtype() == it_);
         if(opts.sspace_ == SPACE_EDIT_DISTANCE)
             omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
+        else if(opts.sketch_compressed_set) {
+            switch(int(opts.fd_level_ * 2.)) {
+                case 1: cfss.reset(new VSetSketch(NibbleSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
+                case 2: cfss.reset(new VSetSketch(ByteSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
+                case 4: cfss.reset(new VSetSketch(ShortSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
+                case 8: cfss.reset(new VSetSketch(UintSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
+                default: []() __attribute__((cold,noinline)) {THROW_EXCEPTION(std::invalid_argument("Unexpected fd_level."));}();
+            }
+        }
     }
     template<typename Func>
     void for_each(const Func &func, const char *s, size_t n) {
@@ -83,7 +96,6 @@ struct OptSketcher {
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads);
 
 FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Options &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel, size_t seqs_per_batch) {
-
     gzFile ifp;
     kseq_t *myseq = kseqs ? &kseqs[OMP_ELSE(omp_get_thread_num(), 0)]: (kseq_t *)std::calloc(sizeof(kseq_t), 1);
     size_t batch_index = 0;
@@ -118,11 +130,21 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
         kseq_destroy(ks);
         gzclose(fp);
     }, path);
-    if(::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs))
-        THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq"));
-    if(outpath.size()) ret.signatures_.assign(outpath);
+    if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
+        if(!bns::isfile(outpath)) {
+            DBG_ONLY(std::fprintf(stderr, "Creating outpath '%s'\n", outpath.data());)
+            std::FILE *fp = std::fopen(outpath.data(), "wb");
+            if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open path "s + outpath + " for writing"));
+            std::fclose(fp);
+        }
+        if(int rc = ::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs); rc) {
+            std::fprintf(stderr, "is outpath %s a file? %d\n", outpath.data(), bns::isfile(outpath));
+            THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq. rc: "s + std::to_string(rc)));
+        }
+        ret.signatures_.assign(outpath);
+    }
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
-        ret.signatures_.reserve(total_nseqs * opts.sketchsize_);
+        ret.signatures_.reserve(total_nseqs * opts.sketchsize_ >> opts.sigshift());
     }
 
     ret.cardinalities_.resize(total_nseqs);
@@ -154,7 +176,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
         gzbuffer(ifp, 1u << 17);
         kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
-            DBG_ONLY(std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);)
+            //DBG_ONLY(std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);)
             ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);
             const int off = (myseq->name.s[0] == '>');
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
@@ -187,10 +209,12 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     DBG_ONLY(std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);)
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
+    const int sigshift = opts.sigshift();
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
-        DBG_ONLY(std::fprintf(stderr, "old sig size %zu, cap %zu, new %zu\n", ret.signatures_.size(), ret.signatures_.capacity(), newsz * opts.sketchsize_);)
-        assert(oldsz * opts.sketchsize_ <= ret.signatures_.capacity());
-        ret.signatures_.resize(oldsz * opts.sketchsize_);
+        DBG_ONLY(std::fprintf(stderr, "old sig size %zu, cap %zu, new %zu\n", ret.signatures_.size(), ret.signatures_.capacity(), newsz * opts.sketchsize_ >> sigshift);)
+        assert(oldsz * (opts.sketchsize_ >> sigshift) <= ret.signatures_.capacity());
+        ret.signatures_.resize(oldsz * (opts.sketchsize_ >> sigshift));
+        DBG_ONLY(std::fprintf(stderr, "ret signature size: %zu\n", ret.signatures_.size());)
     }
     DBG_ONLY(std::fprintf(stderr, "mmer matrix size %zu. save kmers %d\n", ret.kmers_.size(), opts.save_kmers_);)
     DBG_ONLY(std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");)
@@ -201,7 +225,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-        DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)
+        //DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)
         auto &sketchers(sketchvec[tid]);
         sketchers.reset();
         const auto seqp = ret.sequences_[i].data();
@@ -266,19 +290,21 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             }
             ret.cardinalities_[i] = myseq.size();
         } else {
-            const bool isop = sketchers.opss.get(), isctr = sketchers.ctr.get(), isfs = sketchers.fss.get();
-            auto fsfunc = [&](auto x) {
+            const bool isop = sketchers.opss.get(), isctr = sketchers.ctr.get(), isfs = sketchers.fss.get(), iscfss = sketchers.cfss.get();
+            auto fsfunc = [&](auto x) __attribute__((always_inline)) {
                 x = maskfn(x);
                 if(opts.fs_->in_set(x)) return;
                 if(isop)    sketchers.opss->update(x);
                 else if(isctr) sketchers.ctr->add(x);
                 else if(isfs) sketchers.fss->update(x);
+                else if(iscfss) std::visit([&x](auto &sketch) __attribute__((always_inline)) {sketch.update(x);}, *sketchers.cfss);
             };
-            auto nofsfunc = [&](auto x) {
+            auto nofsfunc = [&](auto x) __attribute__((always_inline)) {
                 x = maskfn(x);
                 if(isop) sketchers.opss->update(x);
                 else if(isctr) sketchers.ctr->add(x);
                 else if(isfs) sketchers.fss->update(x);
+                else if(iscfss) std::visit([&x](auto &sketch) __attribute__((always_inline)) {sketch.update(x);}, *sketchers.cfss);
             };
             if(opts.fs_) {
                 sketchers.for_each(fsfunc, seqp, seql);
@@ -294,14 +320,16 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                         sketchers.ctr->finalize(*sketchers.opss, opts.count_threshold_);
                         ptr = sketchers.opss->data();
                         ret.cardinalities_[i] = sketchers.opss->getcard();
-                    } else {
+                    } else if(sketchers.fss) {
                         sketchers.ctr->finalize(*sketchers.fss, opts.count_threshold_);
                         ptr = sketchers.fss->data();
                         ret.cardinalities_[i] = sketchers.fss->getcard();
+                    } else if(sketchers.cfss) {
+                        std::visit([&](auto &sketch) {sketchers.ctr->finalize(sketch, opts.count_threshold_); ptr = (RegT *)sketch.data();ret.cardinalities_[i] = sketch.getcard();}, *sketchers.cfss);
                     }
                 } else {
-                    ptr = sketchers.opss ? sketchers.opss->data(): sketchers.fss->data();
-                    ret.cardinalities_[i] = sketchers.opss ? sketchers.opss->getcard(): sketchers.fss->getcard();
+                    ptr = sketchers.opss ? sketchers.opss->data(): sketchers.fss ? sketchers.fss->data(): (RegT *)getdata(*sketchers.cfss);
+                    ret.cardinalities_[i] = sketchers.opss ? sketchers.opss->getcard(): sketchers.fss ? sketchers.fss->getcard(): getcard(*sketchers.cfss);
                     if(ret.cardinalities_[i] < 10 * opts.sketchsize_) {
                         flat_hash_set<uint64_t> ids;
                         ids.reserve(opts.sketchsize_);
@@ -316,9 +344,9 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                         }
                         ret.cardinalities_[i] = ids.size();
                     }
-                    kmer_ptr = sketchers.opss ? sketchers.opss->ids().data(): sketchers.fss->ids().data();
+                    kmer_ptr = sketchers.opss ? sketchers.opss->ids().data(): sketchers.fss ? sketchers.fss->ids().data(): (const uint64_t *)nullptr;
                     kmercounts.resize(opts.sketchsize_);
-                    if(sketchers.opss) {
+                    if(sketchers.opss && sketchers.opss->idcounts().size()) {
                         auto &idc = sketchers.opss->idcounts();
                         std::copy(idc.begin(), idc.end(), kmercounts.begin());
                     } else if(sketchers.fss->idcounts().size()) {
@@ -345,7 +373,15 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     std::copy(sketchers.pmh->idcounts().begin(), sketchers.pmh->idcounts().end(), kmercounts.begin());
                 }
             } else THROW_EXCEPTION(std::runtime_error("Not yet implemented?"));
-            std::copy(ptr, ptr + opts.sketchsize_, &ret.signatures_[i * opts.sketchsize_]);
+            if(!sketchers.cfss || opts.fd_level_ != 0.5) {
+                std::copy(ptr, ptr + (opts.sketchsize_ >> sigshift), &ret.signatures_[i * (opts.sketchsize_ >> sigshift)]);
+            } else {
+                const uint8_t *const srcptr = std::get<NibbleSetS>(*sketchers.cfss).data();
+                uint8_t *destptr = (uint8_t *)&ret.signatures_[i * opts.sketchsize_ >> sigshift];
+                for(size_t i = 0; i < opts.sketchsize_; i += 2) {
+                    *destptr++ = (srcptr[i] << 4) | srcptr[i + 1];
+                }
+            }
             if(kmer_ptr && ret.kmers_.size()) {
                 //std::fprintf(stderr, "Copying k-mers out, kmers size %zu, idx = %zu\n", ret.kmers_.size(), i * opts.sketchsize_);
                 std::copy(kmer_ptr, kmer_ptr + opts.sketchsize_, &ret.kmers_[i * opts.sketchsize_]);

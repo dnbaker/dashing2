@@ -47,14 +47,11 @@ static constexpr inline bool distance(Measure msr) {
 struct Dashing2DistOptions: public Dashing2Options {
     OutputKind output_kind_;
     OutputFormat output_format_;
-    double fd_level_; // Determines the number of bytes to which the minhash sketches are compressed
-    int truncation_method_ = 0;
     // If <= 0, uses setsketch to compress before distances
     // If 1 (> 0), generates b-bit signatures and truncates
     int num_neighbors_ = -1; // Only emits top-"nn" neighbors
     double min_similarity_ = -1.; // Only emit similarities which are above min_similarity_ if nonnegative
     mutable void *compressed_ptr_ = nullptr;
-    mutable long double compressed_b_ = -1.L, compressed_a_ = -1.L;
     mutable Measure measure_ = SIMILARITY;
     std::string outfile_path_;
     mutable bool exact_kmer_dist_ = false;
@@ -64,11 +61,12 @@ struct Dashing2DistOptions: public Dashing2Options {
     Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false, bool refine_exact=false, int nlshsubs=3):
         Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact), nLSH(nlshsubs)
     {
+        set_sketch_compressed();
         if(nbytes_for_fastdists < 0) nbytes_for_fastdists = sizeof(RegT);
         if(std::fmod(nbytes_for_fastdists, 1.)) {
-            if(nbytes_for_fastdists != 0.5) throw std::runtime_error("Can only do 1, 2, 4, 8, or 0.5 bytes per register");
+            if(nbytes_for_fastdists != 0.5) THROW_EXCEPTION(std::runtime_error("Can only do 1, 2, 4, 8, or 0.5 bytes per register"));
         } else if(int(nbytes_for_fastdists) & (int(nbytes_for_fastdists - 1)))
-            throw std::runtime_error("Can't compress sketches to non-power of 2 register size. Should be < sizeof(RegT)");
+            THROW_EXCEPTION(std::runtime_error("Can't compress sketches to non-power of 2 register size. Should be < sizeof(RegT)"));
         fd_level_ = nbytes_for_fastdists;
         truncation_method_ = truncate_method;
         num_neighbors_ = nneighbors;
@@ -77,12 +75,24 @@ struct Dashing2DistOptions: public Dashing2Options {
             exact_kmer_dist_ = true;
         if(outfile_path_.empty() || outfile_path_ == "-") outfile_path_ = "/dev/stdout";
         if(nLSH < 1) nLSH = 1;
+        if(this->sketch_compressed_set) {
+            if(size_t rem = opts.sketchsize_ % sizeof(RegT) / opts.fd_level_; rem != 0) {
+                opts.sketchsize_ += sizeof(RegT) / opts.fd_level_ - rem;
+                std::fprintf(stderr, "Sketchsize is not %zu-bit register multiple; padding the number of registers to fit. New number of registers: %zu\n", sizeof(RegT) * 8, opts.sketchsize_);
+            }
+            const size_t mul = 8 / nbytes_for_fastdists;
+            if(const size_t rem = opts.sketchsize_ % size_t(8 / nbytes_for_fastdists); rem) {
+                std::fprintf(stderr, "When sketching compressed, always pad to 64-bit sets.\n");
+                opts.sketchsize_ += mul - rem;
+            }
+        }
         validate();
     }
+    bool truncate_mode() const {return truncation_method_;}
     void validate() const {
         Dashing2Options::validate();
         if(num_neighbors_ > 0 && min_similarity_ > 0.) {
-            throw std::invalid_argument("invalid: nn > 0 and minsim > 0. Pick either top-k or minimum similarity. (Can't do both.)");
+            THROW_EXCEPTION(std::invalid_argument("invalid: nn > 0 and minsim > 0. Pick either top-k or minimum similarity. (Can't do both.)"));
         }
         if((sspace_ == SPACE_PSET || sspace_ == SPACE_EDIT_DISTANCE) && measure_ == INTERSECTION) {
             std::fprintf(stderr, "Can't estimate intersection sizes for ProbMinHash due to the implicit normalization. Reverting to similarity\n");
@@ -91,6 +101,12 @@ struct Dashing2DistOptions: public Dashing2Options {
         if((sspace_ == SPACE_EDIT_DISTANCE) && measure_ != SIMILARITY && measure_ != M_EDIT_DISTANCE) {
             std::fprintf(stderr, "Edit distance LSH, but measure is not similarity. Switching to edit distance so that it is well defined\n");
              measure_ = M_EDIT_DISTANCE;
+        }
+        if(sketch_compressed_set) {
+            if(this->kmer_result_ != FULL_SETSKETCH)
+                THROW_EXCEPTION(std::invalid_argument("Sketch compressed is only available for FullSetSketch."));
+            if(this->compressed_b_ < 1.L) THROW_EXCEPTION(std::invalid_argument("base must be >= 1."));
+            if(this->compressed_a_ <= 0.L) THROW_EXCEPTION(std::invalid_argument("offset a must be > 0."));
         }
     }
 };

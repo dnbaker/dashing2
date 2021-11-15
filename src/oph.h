@@ -1,9 +1,9 @@
 #pragma once
 #include "btree/map.h"
 #include "enums.h"
-#include "sketch/hash.h"
 #include "sketch/div.h"
 #include "sketch/common.h"
+#include "hash.h"
 
 namespace dashing2 {
 
@@ -33,25 +33,37 @@ struct CEIAdd {
 };
 using sketch::hash::CEIXOR;
 using sketch::hash::CEIMul;
+#if USE_SIMPLE_REVHASH
 using BHasher = sketch::hash::CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>>;
+#else
+using BHasher = sketch::hash::WangHash;
+#endif
 struct DHasher {
     BHasher bh;
     uint64_t seed_;
     u128_t seed2_;
     DHasher(uint64_t x): seed_(std::mt19937_64(x)()), seed2_((u128_t(sketch::hash::WangHash::hash(x)) << 64) | seed_)
     {
-        assert(inverse(operator()(13u)) == 13);
-        assert(inverse(operator()(13337u)) == 13337);
+#ifndef NDEBUG
+        const uint64_t tmpv = 133348;
+        assert(bh.inverse(bh(tmpv)) == tmpv);
+        assert(inverse(operator()(tmpv)) == tmpv);
+#endif
     }
-    uint32_t operator()(uint32_t x) const {return bh(x ^ static_cast<uint32_t>(seed_));}
-    uint32_t operator()(int32_t x) const {return operator()(static_cast<uint32_t>(x));}
+    //uint32_t operator()(uint32_t x) const {return bh(x ^ static_cast<uint32_t>(seed_));}
+    //uint32_t operator()(int32_t x) const {return operator()(static_cast<uint32_t>(x));}
+    template<typename IT, typename=std::enable_if_t<std::is_integral_v<IT> && !std::is_same_v<IT, uint64_t> && (sizeof(IT) <= 8)>>
+    uint64_t operator()(IT x) const {return bh(uint64_t(x) ^ seed_);}
     uint64_t operator()(uint64_t x) const {return bh(x ^ seed_);}
+    uint64_t operator()(int32_t x) const {return bh(x ^ seed_);}
     u128_t operator()(u128_t x) const {return bh(x ^ seed2_);}
+#if 0
     uint32_t inverse(uint32_t x) const {
         return static_cast<uint32_t>(seed_) ^ bh.inverse(x);
     }
     uint32_t inverse(int32_t x) const {return inverse(static_cast<uint32_t>(x));}
     uint64_t inverse(int64_t x) const {return inverse(static_cast<uint64_t>(x));}
+#endif
     uint64_t inverse(uint64_t x) const {
         return seed_ ^ bh.inverse(x);
     }

@@ -8,7 +8,7 @@
 #include <vector>
 #include "bonsai/encoder.h"
 #include "xxHash/xxh3.h"
-#include "./setsketch.h"
+#include "src/setsketch.h"
 #include "sketch/bmh.h"
 #include "counter.h"
 #include "oph.h"
@@ -113,6 +113,8 @@ public:
     uint64_t sampler_rng_;
     uint64_t sampler_threshold_;
     uint64_t seedseed_ = 0;
+    double fd_level_ = sizeof(RegT); // Determines the number of bytes to which the minhash sketches are compressed
+    int truncation_method_ = 0;
 
     // Whether to sketch multiset, set, or discrete probability distributions
 
@@ -120,6 +122,9 @@ public:
     DataType dtype_;
     bool use128_ = false;
     unsigned nthreads_;
+    mutable long double compressed_b_ = -1.L, compressed_a_ = -1.L;
+    bool fasta_dedup_ = false;
+    bool sketch_compressed_set;
 
     std::unique_ptr<FilterSet> fs_;
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false, KmerSketchResultType kres=ONE_PERM):
@@ -154,6 +159,7 @@ public:
     D2O2(kmer_result) D2O2(use128) D2O2(cache_sketches)
     D2O2(sketchsize) D2O2(cssize) D2O2(parse_by_seq)
     D2O2(count_threshold)
+    D2O2(fasta_dedup);
 #undef D2O
 #undef D2O2
     void downsample(double f) {
@@ -211,6 +217,18 @@ public:
     size_t nremperres128() const {return enc_.nremperres128();}
     uint64_t seedseed() const {return seedseed_;}
     Dashing2Options &seedseed(uint64_t seed) {seedseed_ = seed; seed_mask(seedseed_); return *this;}
+    bool sketch_compressed() const {
+        return std::min(compressed_a_, compressed_b_) > 0.L;
+        // Note: this always returns True after make_compressed (cmp_main.{h,cpp}) if --fastcmp is less than 8.
+        // This is meant solely to be used during sketching
+    }
+    int sigshift() const {
+        if(!sketch_compressed_set) return 0;
+        return (fd_level_ == 1. ? 3: fd_level_ == 2. ? 2: fd_level_ == 4. ? 1: fd_level_ == 0.5 ? 4: fd_level_ == 8 ? 0: -1) + (sizeof(RegT) == 16);
+    }
+    void set_sketch_compressed() {
+        sketch_compressed_set = this->sketch_compressed();
+    }
 };
 
 static INLINE bool endswith(std::string lhs, std::string rhs) {

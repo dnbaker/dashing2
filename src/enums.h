@@ -1,9 +1,7 @@
 #pragma once
 #include <string>
 #include "sketch/macros.h"
-#if WANGHASH_EXTRA
 #include "sketch/hash.h"
-#endif
 
 namespace dashing2 {
 
@@ -40,6 +38,7 @@ enum SketchSpace {
 enum CountingType {
     EXACT_COUNTING,
     COUNTSKETCH_COUNTING,
+    COUNTMIN_COUNTING, // Default
     // Add or substract each item to its assigned bucket using a random variable seeded by the key
     // Usually estimates higher-hitter featuers well
     // Pseudocode:
@@ -48,13 +47,12 @@ enum CountingType {
     // This reduces the sample space at some inexactness, but the biggest elements will remain the biggest
 
     //Not implemented, but we may expand this:
-    COUNTMIN_COUNTING,
     CQF_COUNTING // Not implemen
 };
 
 #define THROW_EXCEPTION(...) do {\
         auto exception__ = __VA_ARGS__;\
-        std::cerr << "Exception " << exception__.what() << " from " << std::this_thread::get_id() << '\n';\
+        std::cerr << "Exception " << exception__.what() << " from thread " << std::this_thread::get_id() << '\n';\
         throw exception__;\
     } while(0)
 
@@ -110,6 +108,9 @@ struct Dashing2Options;
 
 std::string to_suffix(const Dashing2Options &opts);
 void checked_fwrite(std::FILE *fp, const void *src, const size_t nb);
+inline void checked_fwrite(const void *ptr, const size_t itemsize, const size_t nitems, std::FILE *fp) {
+    checked_fwrite(fp, ptr, itemsize * nitems);
+}
 std::pair<std::FILE *, int> xopen(const std::string &path);
 
 extern uint64_t XORMASK;
@@ -117,20 +118,22 @@ extern u128_t XORMASK2;
 
 INLINE uint64_t maskfn(uint64_t x) {
     x ^= XORMASK;
-#if WANGHASH_EXTRA
     x = sketch::hash::WangHash::hash(x);
-#endif
     return x;
 }
 INLINE uint64_t invmaskfn(uint64_t x) {
-#if WANGHASH_EXTRA
-    x = sketch::hash::WangHash().inverse(x);
-#endif
-    x ^= XORMASK;
+    return sketch::hash::WangHash().inverse(x) ^ XORMASK;
+}
+INLINE u128_t maskfn(u128_t x) {
+    x ^= XORMASK2;
+    x = sketch::hash::WangHash::hash(uint64_t(x)) | (u128_t(sketch::hash::WangHash::hash(uint64_t(x >> 64))) << 64);
     return x;
 }
-INLINE u128_t maskfn(u128_t x) {return x ^ XORMASK2;}
-INLINE u128_t invmaskfn(u128_t x) {return x ^ XORMASK2;}
+INLINE u128_t invmaskfn(u128_t x) {
+    auto lower = sketch::hash::WangHash().inverse(uint64_t(x));
+    auto upper = u128_t(sketch::hash::WangHash().inverse(uint64_t(x >> 64))) << 64;
+    return (lower | upper) ^ XORMASK2;
+}
 void seed_mask(uint64_t); // This function sets the seeds
 
 

@@ -3,7 +3,7 @@
 Dashing2 is the second version of the Dashing sequence sketching and comparison system.
 
 There have been several major changes, but you can still can get a quick start to compare a group of sequence collections [here](#quickstart).
-
+For instructions on parsing, see [Parsing](#parsing-code) below.
 [Installation instructions](#installation) can be found below.
 
 ### New Features
@@ -271,3 +271,9 @@ export D2_CACHE_SIZE=67108864
 ```
 
 As an aside, these sketches are stored contiguously to reduce fragmentation compared to Dashing1.
+
+
+## Parsing code
+
+For parsing binary output (--binary-output/--emit-binary), we provide [Python code](https://github.com/dnbaker/dashing2/blob/main/python/parse.py) for parsing into NumPy/SciPy matrices.
+This can save on processing time, and it avoids differences due to formatting/parsing loss.

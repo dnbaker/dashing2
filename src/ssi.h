@@ -54,6 +54,7 @@ public:
     using id_type = IdT;
     size_t m() const {return m_;}
     size_t size() const {return total_ids_;}
+    size_t size(size_t total_ids) {return total_ids_ = total_ids;}
     size_t ntables() const {return packed_maps_.size();}
     template<typename IT, typename Alloc, typename OIT, typename OAlloc>
     SetSketchIndex(size_t m, const std::vector<IT, Alloc> &nperhashes, const std::vector<OIT, OAlloc> &nperrows): m_(m) {
@@ -84,7 +85,7 @@ public:
     SetSketchIndex(size_t m, bool densified=false): m_(m) {
         total_ids_ = 0;
         uint64_t rpr = 1;
-        const size_t nrpr = densified ? m: size_t(ilog2(sketch::integral::roundup(m)));
+        const size_t nrpr = densified ? m: size_t(ilog2(integral::roundup(m)));
         regs_per_reg_.reserve(nrpr);
         packed_maps_.reserve(nrpr);
         for(;rpr <= m_;) {
@@ -158,7 +159,6 @@ public:
         if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
         if(starting_idx == size_t(-1) || starting_idx > regs_per_reg_.size()) starting_idx = regs_per_reg_.size();
         const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
-        //std::fprintf(stderr, "Inserting id = %zu\n", my_id);
         const size_t n_subtable_lists = regs_per_reg_.size();
         ska::flat_hash_map<IdT, uint32_t> rset;
         std::vector<IdT> passing_ids;
@@ -250,7 +250,7 @@ public:
         }
     }
     template<typename Sketch>
-    size_t update(const Sketch &item) {
+    size_t update_mt(const Sketch &item) {
         if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
         const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
         if(is_bottomk_only_) {
@@ -258,9 +258,35 @@ public:
             return my_id;
         }
         const size_t n_subtable_lists = regs_per_reg_.size();
-        //std::fprintf(stderr, "Starting update\n");
         for(size_t i = 0; i < n_subtable_lists; ++i) {
-            //std::fprintf(stderr, "Accessing subtable %zu/%zu. mutexes size: %zu\n", i, n_subtable_lists, mutexes_.size());
+            auto &subtab = packed_maps_[i];
+            std::vector<std::mutex> *mptr = nullptr;
+            if(mutexes_.size() > i) mptr = &mutexes_[i];
+            const size_t nsubs = subtab.size();
+            OMP_PFOR
+            for(size_t j = 0; j < nsubs; ++j) {
+                KeyT myhash = hash_index(item, i, j);
+                auto &subsub = subtab[j];
+                std::optional<std::lock_guard<std::mutex>> lock(mptr ? std::optional<std::lock_guard<std::mutex>>((*mptr)[j]): std::optional<std::lock_guard<std::mutex>>());
+                auto it = subsub.find(myhash);
+                if(it == subsub.end()) subsub.emplace(myhash, std::vector<IdT>{static_cast<IdT>(my_id)});
+                else it->second.push_back(my_id);
+            }
+        }
+        return my_id;
+    }
+    static constexpr size_t DEFAULT_ID = size_t(0xFFFFFFFFFFFFFFFF);
+    template<typename Sketch>
+    size_t update(const Sketch &item, size_t my_id = DEFAULT_ID) {
+        if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
+        if(my_id == DEFAULT_ID)
+            my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
+        if(is_bottomk_only_) {
+            insert_bottomk(item, my_id);
+            return my_id;
+        }
+        const size_t n_subtable_lists = regs_per_reg_.size();
+        for(size_t i = 0; i < n_subtable_lists; ++i) {
             auto &subtab = packed_maps_[i];
             std::vector<std::mutex> *mptr = nullptr;
             if(mutexes_.size() > i) mptr = &mutexes_[i];
@@ -274,17 +300,23 @@ public:
         }
         return my_id;
     }
+    INLINE KeyT hashmem256(const uint64_t *x) const {
+        hash::CEHasher ceh;
+        uint64_t v[4];
+        std::memcpy(&v, x, sizeof(v));
+        return hash::WangHash::hash(ceh(v[0]) ^ (ceh(v[1]) * ceh(v[2]) - v[3]));
+    }
     INLINE KeyT hashmem128(const uint64_t *x) const {
         uint64_t v[2];
         std::memcpy(&v, x, sizeof(v));
-        v[0] = sketch::hash::WangHash::hash(v[0]);
-        v[1] = sketch::hash::WangHash::hash(v[1] ^ v[0]);
+        v[0] = hash::WangHash::hash(v[0]);
+        v[1] = hash::WangHash::hash(v[1] ^ v[0]);
         return v[0] ^ v[1];
     }
     INLINE KeyT hashmem64(const uint64_t *x) const {
         uint64_t v;
         std::memcpy(&v, x, sizeof(v));
-        v = sketch::hash::WangHash::hash(v);
+        v = hash::WangHash::hash(v);
         return v;
     }
     INLINE KeyT hashmem32(const uint32_t *x) const {
@@ -319,6 +351,7 @@ public:
             case 4: ret =  hashmem32((const uint32_t *)&x); break;
             case 8: ret =  hashmem64((const uint64_t *)&x); break;
             case 16: ret =  hashmem128((const uint64_t *)&x); break;
+            case 32: ret =  hashmem256((const uint64_t *)&x); break;
             default: ret = XXH3_64bits(&x, n * sizeof(T));
         }
         return ret;
@@ -380,12 +413,10 @@ public:
             items_per_row.push_back(passing_ids.size());
         } else {
             for(std::ptrdiff_t i = starting_idx;--i >= 0 && rset.size() < maxcand;) {
-                //std::fprintf(stderr, "Getting maps at %zu\n", i);
                 auto &m = packed_maps_[i];
                 const size_t nsubs = m.size();
                 const size_t items_before = passing_ids.size();
                 for(size_t j = 0; j < nsubs; ++j) {
-                    //std::fprintf(stderr, "%zu/%zu\n", j, nsubs);
                     KeyT myhash = hash_index(item, i, j);
                     auto it = m[j].find(myhash);
                     if(it != m[j].end()) {
