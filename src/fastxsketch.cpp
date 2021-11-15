@@ -536,21 +536,19 @@ do {\
             const size_t opsssz = opss.size();
             auto &cret = ret.cardinalities_[myind];
             if(opsssz) {
-                //std::fprintf(stderr, "Encode for the opset sketch, %zu is the size for tid %d\n", opss.size(), tid);
                 assert(opss.size() > unsigned(tid));
                 assert(opss.at(tid).total_updates() == 0);
                 auto p = &opss[tid];
                 perf_for_substrs([p](auto hv) {p->update(hv);});
-                //std::fprintf(stderr, "Encode for the opset sketch. card now: %g, %zu updates\n", opss[tid].getcard(), opss[tid].total_updates());
                 assert(ret.cardinalities_.size() > i);
                 cret = p->getcard();
             } else {
-                //std::fprintf(stderr, "Encode for the set sketch\n");
                 if(opts.sketch_compressed_set) {
                     std::visit([&](auto &x) {
-                        perf_for_substrs([&x](auto hv) {x.update(hv);});
+                        perf_for_substrs([&x](auto hv) {
+                            x.update(hv);
+                        });
                         cret = x.cardinality();
-                        //std::fprintf(stderr, "cret: %g\n", cret);
                     }, cfss.at(tid));
                 } else {
                     perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
@@ -563,7 +561,6 @@ do {\
             const uint32_t *counts = nullptr;
             // Update this and VSetSketch above to filter down
             const RegT *ptr = opsssz ? opss[tid].data(): fss.size() ? fss[tid].data(): getdata(cfss[tid]);
-            const size_t regsize = opsssz  || fss.size() ? sizeof(RegT): size_t(opts.fd_level_);
             assert(ptr);
             if(opts.save_kmers_)
                 ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
@@ -582,7 +579,7 @@ do {\
                     checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
                 }
             } else {
-                ::write(::fileno(ofp), ptr, regsize * ss);
+                ::write(::fileno(ofp), ptr, std::max(opsssz, fss.size()) * ss);
             }
             std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {

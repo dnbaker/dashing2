@@ -715,6 +715,14 @@ public:
     }
     double harmean(const SetSketch<ResT, FT> *ptr=static_cast<const SetSketch<ResT, FT> *>(nullptr)) const {
         static std::unordered_map<FT, std::vector<FT>> powers;
+        if constexpr(sizeof(ResT) >= 4) {
+            ska::flat_hash_map<ResT, uint32_t> counts;
+            if(ptr) {
+                for(size_t i = 0; i < m_; ++i)
+                    ++counts[std::max(data_[i], ptr->data()[i])];
+            } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
+            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [b=b_](long double s, const std::pair<ResT, uint32_t> &reg) {return std::fma(reg.second, std::pow(b, -static_cast<ptrdiff_t>(reg.first)), s);});
+        }
         auto it = powers.find(b_);
         if(it == powers.end()) {
             it = powers.emplace(b_, std::vector<FT>()).first;
@@ -737,7 +745,7 @@ public:
                     ++counts[std::max(data_[i], ptr->data()[i])];
             } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
             auto &ptable = it->second;
-            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [&ptable](long double s, std::pair<ResT, uint32_t> reg) {return std::fma(reg.second, ptable[reg.first], s);});
+            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [&ptable](long double s, const std::pair<ResT, uint32_t> &reg) {return std::fma(reg.second, ptable[reg.first], s);});
         }
     }
     double jaccard_by_ix(const SetSketch<ResT, FT> &o) const {
@@ -896,8 +904,8 @@ public:
     bool check_can_update(const uint64_t id) const {
         return getlim(id) < this->explim();
     }
-    template<typename IT, typename OFT, typename=typename std::enable_if<std::is_integral<IT>::value && std::is_floating_point<OFT>::value>::type>
-    void update(const uint64_t id, OFT) {update(id);}
+    template<typename IT, typename OFT, typename=typename std::enable_if<std::is_arithmetic<OFT>::value>::type>
+    void update(const IT id, OFT) {update(id);}
     void trim_potentials() {
         const auto lim = this->explim();
         for(auto it = potentials_.begin(), eit = potentials_.end(); it != eit; ++it) {
@@ -945,7 +953,7 @@ struct CF##desttype: CountFilteredSetSketch<RT, FT> {\
 CFDeclare(NibbleSetS, 2.7182818284590452354L, 5e-4L, 14u, uint8_t, double);
 CFDeclare(SmallNibbleSetS, 4L, 1e-6L, 14u, uint8_t, double);
 CFDeclare(ByteSetS, 1.2, 20., 254u, uint8_t, double);
-CFDeclare(ShortSetS, 1.0005, .06, 65534u, uint16_t, double);
+CFDeclare(ShortSetS, 1.0005, .06, 65534u, uint16_t, long double);
 struct WideShortSetS: public SetSketch<uint16_t, long double> {
     static constexpr long double DEFAULT_B = 1.0004;
     static constexpr long double DEFAULT_A = .06;
@@ -972,7 +980,7 @@ struct EByteSetS: public SetSketch<uint8_t, double> {
     EByteSetS(IT nreg, double b=DEFAULT_B, double a=DEFAULT_A): SetSketch<uint8_t, double>(nreg, b, a, QV) {}
     template<typename...Args> EByteSetS(Args &&...args): SetSketch<uint8_t, double>(std::forward<Args>(args)...) {}
 };
-CFDeclare(UintSetS, 1.0000000109723500835L, 19.77882586L, 0xFFFFFFFEuL, uint32_t, long double);
+CFDeclare(UintSetS, 1.0000000109723500835L, 19.77882586L, 0xFFFFFFFEuL, uint32_t, double);
 #undef CFDeclare
 
 template<typename FT=double>

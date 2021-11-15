@@ -100,7 +100,9 @@ std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer
             ret += std::to_string(opts.cssize_);
     }
     if(opts.sspace_ == SPACE_SET && opts.sketch_compressed()) {
-        ret += ".a=" + std::to_string(opts.compressed_a_) + ".b=" + std::to_string(opts.compressed_b_) + ".fd=" + std::to_string(opts.fd_level_);
+        char buf[256];
+        auto l = std::sprintf(buf, ".a=%0.16Lg.b=%0.16Lg.fd=%0.16Lg", opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_));
+        ret += std::string(buf, l);
     }
     ret += ".";
     if(opts.kmer_result_ <= FULL_SETSKETCH)
