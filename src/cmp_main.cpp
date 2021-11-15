@@ -292,7 +292,7 @@ size_t default_batchsize(size_t &batch_size, const Dashing2DistOptions &opts) {
 #endif
             batch_size = std::max(size_t(expl2csz / opts.sketchsize_ / opts.fd_level_), size_t(1));
         } else {
-            batch_size = 1;
+            batch_size = opts.nthreads_;
         }
     }
     if(batch_size > std::max(opts.nthreads_, 1u)) {
