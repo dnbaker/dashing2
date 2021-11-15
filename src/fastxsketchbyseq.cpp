@@ -51,10 +51,10 @@ struct OptSketcher {
             omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
         else if(opts.sketch_compressed_set) {
             switch(int(opts.fd_level_ * 2.)) {
-                case 1: cfss.reset(new VSetSketch(NibbleSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
-                case 2: cfss.reset(new VSetSketch(ByteSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
-                case 4: cfss.reset(new VSetSketch(ShortSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
-                case 8: cfss.reset(new VSetSketch(UintSetS(opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
+                case 1: cfss.reset(new VSetSketch(NibbleSetS(opts.count_threshold_, opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
+                case 2: cfss.reset(new VSetSketch(ByteSetS(opts.count_threshold_, opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
+                case 4: cfss.reset(new VSetSketch(ShortSetS(opts.count_threshold_, opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
+                case 8: cfss.reset(new VSetSketch(UintSetS(opts.count_threshold_, opts.sketchsize_, opts.compressed_b_, opts.compressed_a_))); break;
                 default: []() __attribute__((cold,noinline)) {THROW_EXCEPTION(std::invalid_argument("Unexpected fd_level."));}();
             }
         }
@@ -107,7 +107,11 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
             DBG_ONLY(std::fprintf(stderr, "Using OPSS\n");)
             sketcher.opss.reset(new OPSetSketch(opts.sketchsize_));
             if(opts.count_threshold_ > 0) sketcher.opss->set_mincount(opts.count_threshold_);
-        } else sketcher.fss.reset(new FullSetSketch(opts.count_threshold_, opts.sketchsize_, opts.save_kmers_, opts.save_kmercounts_));
+        } else if(!opts.sketch_compressed_set)
+            sketcher.fss.reset(new FullSetSketch(opts.count_threshold_, opts.sketchsize_, opts.save_kmers_, opts.save_kmercounts_));
+        else {
+            assert(sketcher.cfss);
+        }
     } else if(opts.sspace_ == SPACE_MULTISET) {
             DBG_ONLY(std::fprintf(stderr, "Using BMH\n");)
         sketcher.bmh.reset(new BagMinHash(opts.sketchsize_, opts.save_kmers_, opts.save_kmercounts_));

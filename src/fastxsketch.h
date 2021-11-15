@@ -56,10 +56,10 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &res, Dashing2Opti
 std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer=false);
 
 namespace variation {
-using sketch::setsketch::ByteSetS;
-using sketch::setsketch::NibbleSetS;
-using sketch::setsketch::ShortSetS;
-using sketch::setsketch::UintSetS;
+using ByteSetS = sketch::setsketch::CFByteSetS;
+using NibbleSetS = sketch::setsketch::CFNibbleSetS;
+using ShortSetS = sketch::setsketch::CFShortSetS;
+using UintSetS = sketch::setsketch::CFUintSetS;
 using VSetSketch = std::variant<NibbleSetS, ByteSetS, ShortSetS, UintSetS>;
 
 INLINE const RegT *getdata(VSetSketch &o) {
