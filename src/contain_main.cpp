@@ -95,8 +95,7 @@ std::vector<flat_hash_map<uint64_t, uint64_t>> get_results_sf(bns::Encoder<bns::
                 else ++it->second;
             };
             const bool use_direct_encoding = mye.k() <= mye.nremperres64();
-            for(;;) {
-                if(!parser.refill(rg)) break;
+            do {
                 for(auto &seq: rg) {
                     if(use_direct_encoding) {
                         mye.for_each(func, seq.seq.data(), seq.seq.size());
@@ -104,7 +103,7 @@ std::vector<flat_hash_map<uint64_t, uint64_t>> get_results_sf(bns::Encoder<bns::
                         myr.for_each_hash(func, seq.seq.data(), seq.seq.size());
                     }
                 }
-            }
+            } while(parser.refill(rg));
         });
     }
     for(auto &t: threads) t.join();
