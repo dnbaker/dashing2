@@ -47,7 +47,7 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
 }
 
 template<typename T, size_t chunk_size = 65536>
-size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
+size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss) {
     T *const origptr = ptr;
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
         gzFile fp = gzopen(path.data(), "rb");
@@ -80,8 +80,14 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
             return 0;
         }
         size_t expected_bytes = st.st_size - 8;
+        const size_t expected_sketch_nb = ss * sizeof(T);
+        if(expected_bytes != expected_sketch_nb) {
+            std::fprintf(stderr, "Expected %zu bytes of sketch, found %zu\n", expected_sketch_nb, expected_bytes);
+        }
         size_t nb = std::fread(ptr, 1, expected_bytes, fp);
         if(nb != expected_bytes) {
+            std::fprintf(stderr, "Read %zu bytes instead of %zu for file %s\n", nb, expected_bytes, path.data());
+            perror("Error reading.");
             THROW_EXCEPTION(std::runtime_error("Error in reading from file"));
         }
         sz = expected_bytes / sizeof(T);
@@ -331,17 +337,20 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                             THROW_EXCEPTION(std::runtime_error("File corrupted - ifp should be at eof."));
                         }
                         std::fclose(ifp);
-                    } else if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
-                        std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
-                        goto perform_sketch;
+                    } else {
+                        assert(mss + ss <= ret.signatures_.size() || !std::fprintf(stderr, "mss %zu, ss %zu, sig size %zu\n", mss, ss, ret.signatures_.size()));
+                        if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind], ss) == 0) {
+                            std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
+                            goto perform_sketch;
+                        }
                     }
                     //ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
                     DBG_ONLY(std::fprintf(stderr, "Sketch was loaded from %s and has card %g\n", destination.data(), ret.cardinalities_[myind]);)
                 }
                 if(ret.kmers_.size())
-                    load_copy(destkmer, &ret.kmers_[mss], &ret.cardinalities_[myind]);
+                    load_copy(destkmer, &ret.kmers_[mss], &ret.cardinalities_[myind], ss);
                 if(ret.kmercounts_.size())
-                    load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind]);
+                    load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind], ss);
             } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                 DBG_ONLY(std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());)
             }
@@ -579,7 +588,7 @@ do {\
                     checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
                 }
             } else {
-                ::write(::fileno(ofp), ptr, std::max(opsssz, fss.size()) * ss);
+                checked_fwrite(ofp, ptr, ss * sizeof(RegT));
             }
             std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {
