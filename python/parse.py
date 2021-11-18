@@ -146,4 +146,12 @@ def parse_binary_rectmat(path, fpath, qpath):
     return np.memmap(path, np.float32).reshape(nref, nquery)
 
 
+def parse_binary_contain(path):
+    rawdata = np.memmap(path, dtype=np.float32)
+    nref, nqueries = map(int, rawdata[:4].view(np.uint64))
+    coverage_fractions = rawdata[4:4 + nref * nqueries].reshape(nqueries, nref)
+    meandepth = rawdata[4 + nref * nqueries:].reshape(nqueries, nref)
+    return {"nref": nref, "nqueries": nqueries, "coverage_matrix": coverage_fractions, "depth_matrix": meandepth}
+
+
 __all__ = ["parse_knn", "parse_binary_signatures", "ParsedSignatureMatrix", "parse_binary_kmers", "ParsedKmerMatrix", "alphabetcvt", "pairwise_equality_compare", "parse_binary_clustering", "parse_binary_distmat", "parse_binary_rectmat"]
