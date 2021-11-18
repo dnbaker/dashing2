@@ -47,7 +47,7 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
 }
 
 template<typename T, size_t chunk_size = 65536>
-size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
+size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss) {
     T *const origptr = ptr;
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
         gzFile fp = gzopen(path.data(), "rb");
@@ -80,8 +80,14 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality) {
             return 0;
         }
         size_t expected_bytes = st.st_size - 8;
+        const size_t expected_sketch_nb = ss * sizeof(T);
+        if(expected_bytes != expected_sketch_nb) {
+            std::fprintf(stderr, "Expected %zu bytes of sketch, found %zu\n", expected_sketch_nb, expected_bytes);
+        }
         size_t nb = std::fread(ptr, 1, expected_bytes, fp);
         if(nb != expected_bytes) {
+            std::fprintf(stderr, "Read %zu bytes instead of %zu for file %s\n", nb, expected_bytes, path.data());
+            perror("Error reading.");
             THROW_EXCEPTION(std::runtime_error("Error in reading from file"));
         }
         sz = expected_bytes / sizeof(T);
@@ -178,13 +184,13 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                 cfss.reserve(nt);
                 for(size_t i = 0; i < nt; ++i) {
                     if(opts.fd_level_ == .5) {
-                        cfss.emplace_back(NibbleSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                        cfss.emplace_back(NibbleSetS(opts.count_threshold_, ss, opts.compressed_b_, opts.compressed_a_));
                     } else if(opts.fd_level_ == 1.) {
-                        cfss.emplace_back(ByteSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                        cfss.emplace_back(ByteSetS(opts.count_threshold_, ss, opts.compressed_b_, opts.compressed_a_));
                     } else if(opts.fd_level_ == 2.) {
-                        cfss.emplace_back(ShortSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                        cfss.emplace_back(ShortSetS(opts.count_threshold_, ss, opts.compressed_b_, opts.compressed_a_));
                     } else if(opts.fd_level_ == 4.) {
-                        cfss.emplace_back(UintSetS(ss, opts.compressed_b_, opts.compressed_a_));
+                        cfss.emplace_back(UintSetS(opts.count_threshold_, ss, opts.compressed_b_, opts.compressed_a_));
                     }
                 }
             } else {
@@ -331,17 +337,20 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                             THROW_EXCEPTION(std::runtime_error("File corrupted - ifp should be at eof."));
                         }
                         std::fclose(ifp);
-                    } else if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind]) == 0) {
-                        std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
-                        goto perform_sketch;
+                    } else {
+                        assert(mss + ss <= ret.signatures_.size() || !std::fprintf(stderr, "mss %zu, ss %zu, sig size %zu\n", mss, ss, ret.signatures_.size()));
+                        if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind], ss) == 0) {
+                            std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
+                            goto perform_sketch;
+                        }
                     }
                     //ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
                     DBG_ONLY(std::fprintf(stderr, "Sketch was loaded from %s and has card %g\n", destination.data(), ret.cardinalities_[myind]);)
                 }
                 if(ret.kmers_.size())
-                    load_copy(destkmer, &ret.kmers_[mss], &ret.cardinalities_[myind]);
+                    load_copy(destkmer, &ret.kmers_[mss], &ret.cardinalities_[myind], ss);
                 if(ret.kmercounts_.size())
-                    load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind]);
+                    load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind], ss);
             } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                 DBG_ONLY(std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());)
             }
@@ -536,21 +545,19 @@ do {\
             const size_t opsssz = opss.size();
             auto &cret = ret.cardinalities_[myind];
             if(opsssz) {
-                //std::fprintf(stderr, "Encode for the opset sketch, %zu is the size for tid %d\n", opss.size(), tid);
                 assert(opss.size() > unsigned(tid));
                 assert(opss.at(tid).total_updates() == 0);
                 auto p = &opss[tid];
                 perf_for_substrs([p](auto hv) {p->update(hv);});
-                //std::fprintf(stderr, "Encode for the opset sketch. card now: %g, %zu updates\n", opss[tid].getcard(), opss[tid].total_updates());
                 assert(ret.cardinalities_.size() > i);
                 cret = p->getcard();
             } else {
-                //std::fprintf(stderr, "Encode for the set sketch\n");
                 if(opts.sketch_compressed_set) {
                     std::visit([&](auto &x) {
-                        perf_for_substrs([&x](auto hv) {x.update(hv);});
+                        perf_for_substrs([&x](auto hv) {
+                            x.update(hv);
+                        });
                         cret = x.cardinality();
-                        //std::fprintf(stderr, "cret: %g\n", cret);
                     }, cfss.at(tid));
                 } else {
                     perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
@@ -563,7 +570,6 @@ do {\
             const uint32_t *counts = nullptr;
             // Update this and VSetSketch above to filter down
             const RegT *ptr = opsssz ? opss[tid].data(): fss.size() ? fss[tid].data(): getdata(cfss[tid]);
-            const size_t regsize = opsssz  || fss.size() ? sizeof(RegT): size_t(opts.fd_level_);
             assert(ptr);
             if(opts.save_kmers_)
                 ids = opsssz ? opss[tid].ids().data(): fss[tid].ids().data();
@@ -582,7 +588,7 @@ do {\
                     checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
                 }
             } else {
-                ::write(::fileno(ofp), ptr, regsize * ss);
+                checked_fwrite(ofp, ptr, ss * sizeof(RegT));
             }
             std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {

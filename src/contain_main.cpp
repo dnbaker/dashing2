@@ -73,19 +73,17 @@ void par_reduce(T *x, size_t n) {
     }
 }
 
-std::vector<flat_hash_map<uint64_t, uint64_t>> get_results_sf(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::string input_file, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer, const int nthreads) {
+flat_hash_map<uint64_t, uint64_t> get_results_sf(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::string input_file, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer, const int nthreads) {
     std::vector<flat_hash_map<uint64_t, uint64_t>> res(nthreads);
-    std::vector<std::string> sf({input_file});
+    std::vector<std::string> sf;
+    for_each_substr([&sf](const auto &x) {sf.push_back(x);}, input_file);
     std::vector<std::thread> threads;
     fastx_parser::FastxParser<fastx_parser::ReadSeq> parser(sf, nthreads, 1);
+    const bool use_direct_encoding = eenc.k() <= eenc.nremperres64();
     parser.start();
     for(size_t i = 0; i < size_t(nthreads); ++i) {
         threads.emplace_back([&,i]() {
-            bns::Encoder<bns::score::Lex, uint64_t> mye(eenc);
-            bns::RollingHasher<uint64_t> myr(renc);
-            auto rg = parser.getReadGroup();
-            auto &myres = res[i];
-            auto func = [minkmer,maxkmer,&kmer2ids,&myres](auto kmer) {
+            auto func = [minkmer,maxkmer,&kmer2ids,&myres=res[i]](auto kmer) __attribute__((always_inline)) {
                 kmer = maskfn(kmer);
                 if(kmer < minkmer || kmer > maxkmer) return;
                 auto kmeridit = kmer2ids.find(kmer);
@@ -94,31 +92,41 @@ std::vector<flat_hash_map<uint64_t, uint64_t>> get_results_sf(bns::Encoder<bns::
                 if(it == myres.end()) myres.emplace(kmer, 1);
                 else ++it->second;
             };
-            const bool use_direct_encoding = mye.k() <= mye.nremperres64();
-            do {
-                for(auto &seq: rg) {
-                    if(use_direct_encoding) {
-                        mye.for_each(func, seq.seq.data(), seq.seq.size());
-                    } else {
-                        myr.for_each_hash(func, seq.seq.data(), seq.seq.size());
-                    }
+            bns::Encoder<bns::score::Lex, uint64_t> mye(eenc);
+            bns::RollingHasher<uint64_t> myr(renc);
+            for(auto rg = parser.getReadGroup();parser.refill(rg);) {
+                if(use_direct_encoding) {
+                    for(const auto &seq: rg) mye.for_each(func, seq.seq.data(), seq.seq.size());
+                } else {
+                    for(const auto &seq: rg) myr.for_each_hash(func, seq.seq.data(), seq.seq.size());
                 }
             } while(parser.refill(rg));
         });
     }
     for(auto &t: threads) t.join();
     parser.stop();
+    if(nthreads > 1) {
+        OMP_ONLY(omp_set_num_threads(nthreads));
+    }
     par_reduce(res.data(), res.size());
-    res.resize(1);
-    return res;
+    OMP_ONLY(omp_set_num_threads(1));
+    return std::move(res.front());
 }
+
+#ifdef __AVX2__
+INLINE void interleave_256_ps(__m256 &lhs, __m256 &rhs) {
+    const __m256i select = _mm256_setr_epi32(0, 4, 1, 5, 2, 6, 3, 7);
+    lhs = _mm256_permutevar8x32_ps(_mm256_permute2f128_ps(lhs, rhs, 0b00100000), select);
+    rhs = _mm256_permutevar8x32_ps(_mm256_permute2f128_ps(lhs, rhs, 0b00110001), select);
+}
+#endif
 
 int contain_main(int argc, char **argv) {
     int nthreads = 1;
     bool binary_output = false;
     char *outpath = 0;
     std::vector<std::string> streamfiles;
-    for(int c;(c = getopt(argc, argv, "h?p:")) >= 0;) switch(c) {
+    for(int c;(c = getopt(argc, argv, "bh?p:o:F:")) >= 0;) switch(c) {
         case 'h': case '?': return contain_usage();
         case 'p': nthreads = std::max(std::atoi(optarg), 1); break;
         case 'b': binary_output = true; break;
@@ -131,9 +139,6 @@ int contain_main(int argc, char **argv) {
         }
     }
     nthreads = std::max(nthreads, 1);
-#ifdef _OPENMP
-    if(nthreads > 1) omp_set_num_threads(nthreads);
-#endif
     auto diff = argc - optind;
     if(diff == 0) return contain_usage();
     std::string databasefile = argv[optind];
@@ -172,7 +177,6 @@ int contain_main(int argc, char **argv) {
     bns::Encoder<bns::score::Lex, uint64_t> e64(sp, nullptr, canon);
     bns::RollingHasher<uint64_t> rh64(k, canon, rht, w);
     flat_hash_map<uint64_t, std::vector<uint64_t>> kmer2ids;
-    dashing2::flat_hash_map<uint64_t, uint32_t> fhs;
     for(size_t i = 0; i < nitems; ++i) {
         uint64_t *ptr = ((uint64_t *)dbptr + 3 + sketchsize * i);
         assert((const char *)ptr < &db.data()[db.size()]);
@@ -180,13 +184,8 @@ int contain_main(int argc, char **argv) {
         #pragma omp simd
 #endif
         for(size_t j = 0; j < sketchsize; ++j) {
-            const uint64_t v = ptr[j];
-            kmer2ids[v].push_back(i);
-            auto it = fhs.find(v);
-            if(it == fhs.end()) fhs.emplace(v, 1u);
-            else ++it->second;
+            kmer2ids[ptr[j]].push_back(i);
         }
-        fhs.clear();
     }
     // We can quickly filter out k-mers by using min/max k-mers
     // to eliminate anything > or <
@@ -201,8 +200,7 @@ int contain_main(int argc, char **argv) {
     std::vector<flat_hash_map<uint64_t, uint64_t>> res;
     if(nthreads > 1 && nq < size_t(nthreads)) {
         for(const auto &sf: streamfiles) {
-            auto v = get_results_sf(e64, rh64, sf, kmer2ids, maxkmer, minkmer, nthreads);
-            res.emplace_back(std::move(v.front()));
+            res.emplace_back(get_results_sf(e64, rh64, sf, kmer2ids, maxkmer, minkmer, nthreads));
         }
     } else {
         res = get_results(e64, rh64, streamfiles, kmer2ids, maxkmer, minkmer);
@@ -212,26 +210,32 @@ int contain_main(int argc, char **argv) {
     const double ssiv = 1. / sketchsize;
     OMP_PFOR_DYN
     for(size_t i = 0; i < res.size(); ++i) {
-        std::unique_ptr<uint32_t[]> matches(new uint32_t[nitems]());
-        std::unique_ptr<uint32_t[]> matchsums(new uint32_t[nitems]());
+        uint32_t *matches = static_cast<uint32_t *>(std::calloc(nitems * 2, sizeof(uint32_t)));
+        uint32_t *matchsums = matches + nitems;
         for(const auto &[key, value]: res[i]) {
-            for(const auto refid: kmer2ids.at(key)) {
+            for(const auto refid: kmer2ids[key]) {
                 ++matches[refid];
                 matchsums[refid] += value;
             }
         }
         const auto cmatptr = &coverage_mat[nitems * i];
         const auto cstatsptr = &coverage_stats[nitems * i];
+#ifdef _OPENMP
+        #pragma omp simd
+#endif
         for(size_t j = 0; j < nitems; ++j) {
             if(matches[j]) {
                 cmatptr[j] = ssiv * matches[j];
                 cstatsptr[j] = matchsums[j] / matches[j];
             }
         }
+        std::free(matches);
     }
     std::FILE *ofp = outpath ? bfopen(outpath, "w"): stdout;
     if(binary_output) {
-        std::fwrite(coverage_mat.data(), sizeof(float), coverage_mat.size(), ofp);
+        uint64_t tmparr[2] {nitems, res.size()};
+        checked_fwrite(tmparr, sizeof(tmparr), 1, ofp);
+        checked_fwrite(coverage_mat.data(), sizeof(float), coverage_mat.size(), ofp);
     } else {
         fmt::print(ofp, "#Dashing2 contain - a list of coverage %%s for the set of references, + mean coverage levels.\n"
                         "#Each matrix entry consists of <coverage%%:mean depth of coverage>\n"
@@ -253,10 +257,12 @@ int contain_main(int argc, char **argv) {
             }
 #elif __AVX2__
             for(;nitems - j >= 8;j += 8) {
-                const __m256 matd = _mm256_mul_ps(_mm256_loadu_ps(cmatptr + j), _mm256_set1_ps(100.f));
-                const __m256 statd = _mm256_loadu_ps(cstatsptr + j);
+                __m256 matd = _mm256_mul_ps(_mm256_loadu_ps(cmatptr + j), _mm256_set1_ps(100.f));
+                __m256 statd = _mm256_loadu_ps(cstatsptr + j);
+                interleave_256_ps(matd, statd);
                 fmt::print("\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}",
-                           matd[0], statd[0], matd[1], statd[1], matd[2], statd[2], matd[3], statd[3], matd[4], statd[4], matd[5], statd[5], matd[6], statd[6], matd[7], statd[7]);
+                        matd[0], matd[1], matd[2], matd[3], matd[4], matd[5], matd[6], matd[7], statd[0], statd[1], statd[2], statd[3], statd[4], statd[5], statd[6], statd[7]
+                );
             }
 #endif
             for(;j < nitems; ++j) {
