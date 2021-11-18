@@ -100,7 +100,7 @@ flat_hash_map<uint64_t, uint64_t> get_results_sf(bns::Encoder<bns::score::Lex, u
                 } else {
                     for(const auto &seq: rg) myr.for_each_hash(func, seq.seq.data(), seq.seq.size());
                 }
-            } while(parser.refill(rg));
+            }
         });
     }
     for(auto &t: threads) t.join();
