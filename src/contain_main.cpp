@@ -113,6 +113,15 @@ flat_hash_map<uint64_t, uint64_t> get_results_sf(bns::Encoder<bns::score::Lex, u
     return std::move(res.front());
 }
 
+
+#ifdef __AVX512F__
+INLINE void interleave_512_ps(__m512 &lhs, __m512 &rhs) {
+    const __m512 lhret = _mm512_permutex2var_ps(lhs, _mm512_setr_epi32(0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23), rhs);
+    const __m512 rhret = _mm512_permutex2var_ps(lhs, _mm512_setr_epi32(8, 24, 9, 9 + 16, 10, 10 + 16, 11, 11 + 16, 12, 12 + 16, 13, 13 + 16, 14, 14 + 16, 15, 15 + 16), rhs);
+    lhs = lhret;
+    rhs = rhret;
+}
+#endif
 #ifdef __AVX2__
 INLINE void interleave_256_ps(__m256 &lhs, __m256 &rhs) {
     const __m256i select = _mm256_setr_epi32(0, 4, 1, 5, 2, 6, 3, 7);
@@ -250,10 +259,18 @@ int contain_main(int argc, char **argv) {
             size_t j = 0;
 #if __AVX512F__
             for(;nitems - j >= 16;j += 16) {
-                const __m512 matd = _mm512_mul_ps(_mm512_loadu_ps(cmatptr + j), _mm512_set1_ps(100.f));
-                const __m512 statd = _mm512_loadu_ps(cstatsptr + j);
+                __m512 matd = _mm512_mul_ps(_mm512_loadu_ps(cmatptr + j), _mm512_set1_ps(100.f));
+                __m512 statd = _mm512_loadu_ps(cstatsptr + j);
+#ifndef NO_INTERLEAVE
+                interleave_512_ps(matd, statd);
+#endif
                 fmt::print("\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}",
-                           matd[0], statd[0], matd[1], statd[1], matd[2], statd[2], matd[3], statd[3], matd[4], statd[4], matd[5], statd[5], matd[6], statd[6], matd[7], statd[7], matd[8], statd[8], matd[9], statd[9], matd[10], statd[10], matd[11], statd[11], matd[12], statd[12], matd[13], statd[13], matd[14], statd[14], matd[15], statd[15]);
+#if NO_INTERLEAVE
+                           matd[0], statd[0], matd[1], statd[1], matd[2], statd[2], matd[3], statd[3], matd[4], statd[4], matd[5], statd[5], matd[6], statd[6], matd[7], statd[7], matd[8], statd[8], matd[9], statd[9], matd[10], statd[10], matd[11], statd[11], matd[12], statd[12], matd[13], statd[13], matd[14], statd[14], matd[15], statd[15]
+#else
+                           matd[0], matd[1], matd[2], matd[3], matd[4], matd[5], matd[6], matd[7], matd[8], matd[9], matd[10], matd[11], matd[12], matd[13], matd[14], matd[15], statd[0], statd[1], statd[2], statd[3], statd[4], statd[5], statd[6], statd[7], statd[8], statd[9], statd[10], statd[11], statd[12], statd[13], statd[14], statd[15]
+#endif
+                );
             }
 #elif __AVX2__
             for(;nitems - j >= 8;j += 8) {
