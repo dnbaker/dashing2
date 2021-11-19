@@ -214,8 +214,10 @@ int contain_main(int argc, char **argv) {
     } else {
         res = get_results(e64, rh64, streamfiles, kmer2ids, maxkmer, minkmer);
     }
-    std::vector<float> coverage_mat(nitems * streamfiles.size() * 2);
-    float *const coverage_stats = coverage_mat.data() + (nitems * streamfiles.size());
+    const size_t tablesize = nitems * streamfiles.size();
+    const size_t table2size = tablesize * 2;
+    std::vector<float, sketch::Allocator<float>> coverage_mat(table2size);
+    float *const coverage_stats = coverage_mat.data() + tablesize;
     const double ssiv = 1. / sketchsize;
     OMP_PFOR_DYN
     for(size_t i = 0; i < res.size(); ++i) {
@@ -246,6 +248,7 @@ int contain_main(int argc, char **argv) {
         checked_fwrite(tmparr, sizeof(tmparr), 1, ofp);
         checked_fwrite(coverage_mat.data(), sizeof(float), coverage_mat.size(), ofp);
     } else {
+        // TODO: Parallize results formatting
         fmt::print(ofp, "#Dashing2 contain - a list of coverage %%s for the set of references, + mean coverage levels.\n"
                         "#Each matrix entry consists of <coverage%%:mean depth of coverage>\n"
                         "##References:");
@@ -261,15 +264,9 @@ int contain_main(int argc, char **argv) {
             for(;nitems - j >= 16;j += 16) {
                 __m512 matd = _mm512_mul_ps(_mm512_loadu_ps(cmatptr + j), _mm512_set1_ps(100.f));
                 __m512 statd = _mm512_loadu_ps(cstatsptr + j);
-#ifndef NO_INTERLEAVE
                 interleave_512_ps(matd, statd);
-#endif
                 fmt::print("\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}",
-#if NO_INTERLEAVE
-                           matd[0], statd[0], matd[1], statd[1], matd[2], statd[2], matd[3], statd[3], matd[4], statd[4], matd[5], statd[5], matd[6], statd[6], matd[7], statd[7], matd[8], statd[8], matd[9], statd[9], matd[10], statd[10], matd[11], statd[11], matd[12], statd[12], matd[13], statd[13], matd[14], statd[14], matd[15], statd[15]
-#else
                            matd[0], matd[1], matd[2], matd[3], matd[4], matd[5], matd[6], matd[7], matd[8], matd[9], matd[10], matd[11], matd[12], matd[13], matd[14], matd[15], statd[0], statd[1], statd[2], statd[3], statd[4], statd[5], statd[6], statd[7], statd[8], statd[9], statd[10], statd[11], statd[12], statd[13], statd[14], statd[15]
-#endif
                 );
             }
 #elif __AVX2__
