@@ -130,6 +130,8 @@ enum OptArg {
     {"one-perm", no_argument, 0, 'Z'},\
     {"oph", no_argument, 0, 'Z'},\
     {"doph", no_argument, 0, 'Z'},\
+    {"full", no_argument, 0, OPTARG_FULL_SETSKETCH},\
+    {"full-setsketch", no_argument, 0, OPTARG_FULL_SETSKETCH},\
     {"normalize-intervals", no_argument, 0, OPTARG_BED_NORMALIZE},\
     {"protein", no_argument, 0, OPTARG_PROTEIN},\
     {"protein20", no_argument, 0, OPTARG_PROTEIN},\
@@ -251,6 +253,8 @@ enum OptArg {
             maxcand_global = std::atoi(optarg);\
             if(maxcand_global < 0) {std::fprintf(stderr, "Warning: maxcand_global < 0. This defaults to heuristics for selecting the number of candidates. This may be in error.\n");}\
         } break;\
+        case OPTARG_FULL_SETSKETCH: \
+            res = FULL_SETSKETCH;sketch_space = SPACE_SET; break;\
         case OPTARG_SETSKETCH_AB: {\
             char *e;\
             compressed_a = std::strtold(optarg, &e);\
@@ -352,26 +356,28 @@ static constexpr const char *siglen =
         "When sketching, there are several sketch options.\n"\
         "We use the SetSketch as the default sketch structure; This ignores multiplicities, except for filtering \n"\
         "SetSketching -\n"\
-        "1. FullSetSketch (the default), sketches in set space. Multiplicities are not considered.\n"\
-        "This uses increasing exponential random variates, and is more reliable but slower than the One-Permutation.\n"\
-        "2. One-Permutation (stochastically-averaged) SetSketch.\n"\
+        "1. One-Permutation (stochastically-averaged) SetSketch.\n"\
+        "This is the default mode.\n"\
         "-Z/--doph/--oneperm/--oneperm-setsketch: \n"\
         "Stochastically-averaged setsketch. This is faster at sketching, but has a small probability of failure which grows with sketch size. Big one-permutation sketches may perform poorly.\n"\
         "This is faster to sketch, equal speed to compare; it may fail if the sketch size is too large;\n"\
         "If sketchsize is significantly smaller than the entities being processed, this should work;\n"\
         "This should perform similarly to default setsketch behavior, but has better behaviors with large sketches and small sets\n"\
+        "2. FullSetSketch (the default), sketches in set space. Multiplicities are not considered.\n"\
+        "--full/--full-setsketch to enable.\n"\
+        "This uses increasing exponential random variates, and is more reliable but slower than the One-Permutation.\n"\
         "Weighted Sketching -\n"\
         "We provide to weighted sketching algorithms -- BagMinHash and ProbMinHash\n"\
-        "BagMinHash is an LSH for the weighted Jaccard similarity, which treats k-mer counts as weighted sets.\n"\
-        "ProbMinHash is an LSH for the probability Jaccard index, which normalizes observations by total counts, yielding a discrete probability distribution for each collection.\n"\
         "Both require counting for sequence data, but do not for input methods with counting already performed, e.g. BigWig.\n"\
+        "ProbMinHash is an LSH for the probability Jaccard index, which normalizes observations by total counts, yielding a discrete probability distribution for each collection.\n"\
         "ProbMinHash is most applicable for datasets where sampling fractions are important, such as expression or splicing counts.\n"\
         "--prob: Sketch k-mers into ProbMinHash. Treats weighted sets as discrete probability distributions.\n"\
         "        Aliases: --pminhash, --probs, --pmh, --PMH\n"\
+        "BagMinHash is an LSH for the weighted Jaccard similarity, which treats k-mer counts as weighted sets.\n"\
         "BagMinHash is most applicable for datasets where the absolute quantities of an event matter, rather than its fraction of the complete dataset.\n"\
         "-B/--multiset: Treats weighted sets as multisets.\n"\
         "        Aliases: --bagminhash, --bmh, --BMH\n"\
-        "It typically comes at 2-4x runtime cost over ProbMinHash, depending on sketch size.\n\n"\
+        "Its construction time typically comes at 2-10x runtime cost over ProbMinHash, depending on sketch size.\n\n"\
         "Weighted Sketching (Counting) Parameters -\n"\
         "-c/--countmin-size/--countsketch-size: Use Count-Sketch counting instead of exact counting, using <arg> as the size.\n    "\
         "This allows you to avoid unbounded dictionary size at the cost of some approximation of the weighted sets\n"\
