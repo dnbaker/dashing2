@@ -206,7 +206,7 @@ Clustering: This can be used for spectral clustering community detection algorit
 
 
 
-**Use 4 -- Protein sequence similarity similarity**
+**Use 4 -- Protein sequence similarity search**
 
 The feature `--parse-by-seq` allows us to sketch and compute similarities between collections of sequences in a single file;
 in particular, this is useful for sequence files of protein sequences.
@@ -236,6 +236,18 @@ This is particularly useful if the result is Jaccard or top-k thresholded, allow
 There's also `dashing2 wsketch`, which can be used for hashing weighted sets for comparisons.
 This is for the case where there are a set of integral identifiers for sketching.
 See `dashing2 wsketch --help` for usage and examples.
+
+
+**Use 6: Grouping sequences by edit distance**
+
+To use OrderMinHash, parsing must by by sequence. Further, --edit-distance tells Dashing2 to use edit distance LSH. --compute-edit-distance instructs dashing2 to compute edit distance between candidate neighbors instead
+of only comparing the sketches (the LSH register values themselves).
+
+Use this to generate K-Nearest Neighbor graphs for edit distance.
+
+```
+dashing2 sketch -p8 --cmpout knn.edit-distance.tbl -k7 --parse-by-seq --edit-distance --compute-edit-distance input.fasta
+```
 
 
 ### Installation
