@@ -452,9 +452,10 @@ case v: {\
 #define CORRECT_RES(res, measure, lhc, rhc)\
             if(measure == SYMMETRIC_CONTAINMENT) \
                 res = res / std::min(lhc, rhc);\
-            else if(measure == POISSON_LLR || measure == SIMILARITY)\
+            else if(measure == POISSON_LLR || measure == SIMILARITY){ \
                 res = res / (lhc + rhc - res);\
-            else if(measure == CONTAINMENT) res /= lhc;\
+                if(measure == POISSON_LLR) res = sim2dist(res);\
+            } else if(measure == CONTAINMENT) res /= lhc;\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
