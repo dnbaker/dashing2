@@ -478,7 +478,7 @@ static constexpr const char *siglen =
         "\n\nDistance specifications\n"\
         "The default value emitted is similarity. For MinHash/HLL/SetSketch sketches, this is the fraction of shared registers.\n"\
         "This can be changed to a distance (--mash-distance) for k-mer similarity, where it can be used for hierarchical clustering.\n"\
-        "--mash-distance/--poisson-distance\t Emit distances, as estimated by the Poisson model for k-mer distances.\n"\
+        "--mash-distance/--poisson-distance/--distance\t Emit distances, as estimated by the Poisson model for k-mer distances.\n"\
         "--symmetric-containment\t Use symmetric containment as the distance. e.g., (|A & B| / min(|A|, |B|))\n"\
         "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
         "--intersection-size/--intersection\t Emit the cardinality of the intersection between objects. IE, the number of k-mers shared between the two.\n"\
