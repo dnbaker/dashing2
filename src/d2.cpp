@@ -133,6 +133,11 @@ int printmin_main(int argc, char **argv) {
     uint32_t k, w;
     checked_fread(&k, 1, sizeof(k), ifp);
     checked_fread(&w, 1, sizeof(k), ifp);
+    uint32_t dtype;
+    checked_fread(&dtype, 1, sizeof(dtype), ifp);
+    // uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8);
+    const bool canon = (dtype >> 8) & 1;
+    const bns::RollingHashingType rht = dtype & 0xff;
     std::vector<uint32_t> lengths(nseqs);
     for(size_t i = 0; i < nseqs; ++i) {
         double v;

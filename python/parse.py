@@ -5,6 +5,23 @@ from collections import namedtuple
 ParsedSignatureMatrix = namedtuple("ParsedSignatureMatrix", 'nseqs, cardinalities, signatures')
 ParsedKmerMatrix = namedtuple("ParsedKmerMatrix", 'k,w,canon,alphabet,sketchsize,seed,kmers')
 
+alphabet_dict = {0: 'DNA',
+ 1: 'PROTEIN',
+ 2: 'PROTEIN20',
+ 3: 'PROTEIN_3BIT',
+ 4: 'PROTEIN_14',
+ 5: 'PROTEIN_6',
+ 6: 'DNA2',
+ 7: 'DNAC',
+ 'DNA': 0,
+ 'PROTEIN': 1,
+ 'PROTEIN20': 2,
+ 'PROTEIN_3BIT': 3,
+ 'PROTEIN_14': 4,
+ 'PROTEIN_6': 5,
+ 'DNA2': 6,
+ 'DNAC': 7}
+
 
 def parse_knn(path, idsize=4, dstsize=4):
     '''
@@ -159,11 +176,13 @@ def parse_minimizer_sequence_set(path):
     import numpy as np
     dat = np.memmap(path, dtype=np.uint8)
     nseqs = int(dat[:8].view(np.uint64))
-    k, w = map(int, dat[8:16].view(np.uint32))
+    k, w, dt = map(int, dat[8:16].view(np.uint32))
+    alphabet = alphabet_dict[dt & 0xff]
+    canon = bool(dt & 256)
     cards = dat[16:16 + (8 * nseqs)].view(np.float64)
     indptr = np.cumsum(np.hstack([[0], cards]).astype(np.uint64))
     lo = dat[16 + (8 * nseqs):].view(np.uint64)
-    return {"nseqs": nseqs, "k": k, "w": w, "seqs": [lo[indptr[i]:indptr[i + 1]] for i in range(nseqs)]}
+    return {"canon": canon, "alphabet": alphabet, "nseqs": nseqs, "k": k, "w": w, "seqs": [lo[indptr[i]:indptr[i + 1]] for i in range(nseqs)]}
 
 
 __all__ = ["parse_knn", "parse_binary_signatures", "ParsedSignatureMatrix", "parse_binary_kmers", "ParsedKmerMatrix", "alphabetcvt", "pairwise_equality_compare", "parse_binary_clustering", "parse_binary_distmat", "parse_binary_rectmat",
