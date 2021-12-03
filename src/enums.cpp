@@ -76,6 +76,11 @@ void checked_fwrite(std::FILE *const fp, const void *const ptr, const size_t nb)
     if(unlikely(lrc != static_cast<size_t>(nb)))
          throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered write of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead writing " + std::to_string(lrc) + " bytes");
 }
+void checked_fread(std::FILE *const fp, void *const ptr, const size_t nb) {
+    unsigned long long lrc = std::fread(static_cast<void *>(ptr), 1, nb, fp);
+    if(unlikely(lrc != static_cast<size_t>(nb)))
+         throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered read of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead reading " + std::to_string(lrc) + " bytes");
+}
 
 std::pair<std::FILE *, int> xopen(const std::string &path) {
     std::FILE *fp;

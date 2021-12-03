@@ -1,11 +1,13 @@
 #include "d2.h"
 #include <filesystem>
+#include "fmt/format.h"
 
 namespace dashing2 {
 int cmp_main(int argc, char **argv);
 int contain_main(int argc, char **argv);
 int wsketch_main(int argc, char **argv);
 int sketch_main(int argc, char **argv);
+int printmin_main(int argc, char **argv);
 std::string Dashing2Options::to_string() const {
     size_t m = 4096;
     std::string ret(m, '\0');
@@ -106,6 +108,63 @@ void Dashing2Options::validate() const {
     }
 }
 
+int printmin_main(int argc, char **argv) {
+    bool emit_fasta = false;
+    std::FILE *ofp = stdout;
+    if(auto it = std::find_if(argv, argv + argc, [](auto x) {return !(std::strcmp(x, "-h") && std::strcmp(x, "--help"));}); it != argv + argc) {
+        goto usage;
+    }
+    for(int c;(c = getopt(argc, argv, "f:o:h:")) >=0;) {switch(c) {
+        case 'f':
+            emit_fasta = true; break;
+        case 'o': ofp = std::fopen(optarg, "w"); if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + optarg));
+                break;
+        case 'h':
+            usage:
+            std::fprintf(stderr, "Usage: -f: emit fasta. Default - emits tabular result.\n-o: Write to file instead of stdout.\n");
+            return 1;
+    }}
+    buffer_to_blksize(ofp);
+    if(optind == argc) THROW_EXCEPTION(std::invalid_argument("Required: one positional argument for printmin_main"));
+    std::string inpath = argv[optind];
+    std::FILE *ifp = std::fopen(inpath.data(), "r");
+    size_t nseqs;
+    checked_fread(&nseqs, 1, sizeof(nseqs), ifp);
+    uint32_t k, w;
+    checked_fread(&k, 1, sizeof(k), ifp);
+    checked_fread(&w, 1, sizeof(k), ifp);
+    std::vector<uint32_t> lengths(nseqs);
+    for(size_t i = 0; i < nseqs; ++i) {
+        double v;
+        checked_fread(&v, 1, sizeof(v), ifp);
+        lengths[i] = v;
+    }
+    bns::Spacer sp(k, w);
+    size_t id = 0;
+    std::string kmerstr;
+    for(const auto L: lengths) {
+        if(emit_fasta) {
+            size_t minid = 0;
+            for(size_t i = 0; i < L; ++i) {
+                uint64_t item;
+                checked_fread(&item, 1, sizeof(item), ifp);
+                fmt::print(ofp, ">MinimizerSequence{}-Minimizer#{}\n{}\n", id, minid++, sp.to_string(item));
+                fmt::print(ofp, "{}", sp.to_string(item));
+            }
+            ++id;
+        } else {
+            fmt::print(ofp, "MinimizerSequence{}", id++);
+            for(size_t i = 0; i < L; ++i) {
+                uint64_t item;
+                checked_fread(&item, 1, sizeof(item), ifp);
+                fmt::print(ofp, " {}", sp.to_string(item));
+            }
+            fmt::print(ofp, "\n");
+        }
+    }
+    return 0;
+}
+
 bool entmin = false;
 
 } // dashing2
@@ -121,6 +180,8 @@ int main_usage() {
     std::fprintf(stderr, "\twsketch: Takes a tuple of [1-3] input binary files [(u32 or u64), (float or double), (u32 or u64)] and performs weighted minhash sketching.\n"
                          "Three files are treated as Compressed Sparse Row (CSR)-format, where the third file contains indptr values, specifying the lengths of consecutive runs of pairs in the first two files corresponding to each row.\n"
                          "wsketch is for sketching binary files which have already been summed, whereas sketch is for parsing and sketching (from Fast{qa}, BED, BigWig)\n");
+    std::fprintf(stderr, "\n\nMiscellania:\n");
+    std::fprintf(stderr, "printmin: Emit minimizer sequence sets in human-readable form.\n");
     return 1;
 }
 using namespace dashing2;
@@ -139,6 +200,9 @@ int main(int argc, char **argv) {
             return wsketch_main(argc - 1, argv + 1);
         if(std::strcmp(argv[1], "contain") == 0)
             return contain_main(argc - 1, argv + 1);
+        if(std::strcmp(argv[1], "printmin") == 0) {
+            return printmin_main(argc - 1, argv + 1);
+        }
     }
     return main_usage();
 }

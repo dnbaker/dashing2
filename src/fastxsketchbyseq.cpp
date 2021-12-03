@@ -415,15 +415,25 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
         ret.nperfile_.resize(oldnpf + seqminsz);
         OMP_PFOR
         for(size_t i = 0; i < seqminsz; ++i) {
-            //std::fprintf(stderr, "Copying out items from %zu/%zu\n", i, seqminsz);
-            const auto &x(seqmins[i]);
+            auto &x(seqmins[i]);
+            if(opts.use128_) {
+                auto ptr = (u128_t *)x.data();
+                for(size_t K = 0; K < (x.size() >> 1); ++K) {
+                    u128_t item;
+                    std::memcpy(&item, ptr + K, sizeof(item));
+                    item = invmaskfn(item);
+                    std::memcpy(ptr + K, &item, sizeof(item));
+                }
+            } else {
+                std::transform(x.begin(), x.end(), x.begin(), [](auto item) {return invmaskfn(item);});
+            }
             const OT *ptr = (const OT *)x.data();
             size_t xsz = x.size();
             if constexpr(sizeof(RegT) == 16) {
                 xsz >>= 1;
             }
             ret.nperfile_[oldnpf + i] = xsz;
-            std::copy(ptr, ptr + xsz, &ret.signatures_[offsets[i]]);
+            std::memcpy(&ret.signatures_[offsets[i]], ptr, sizeof(RegT) * xsz);
         }
     }
     lastindex = oldsz;
