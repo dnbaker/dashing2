@@ -100,7 +100,7 @@ enum OptArg {
     LO_FLAG("mash-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("symmetric-containment", OPTARG_SYMCONTAIN, measure, SYMMETRIC_CONTAINMENT)\
-    LO_FLAG("containment", OPTARG_CONTAIN, measure, SYMMETRIC_CONTAINMENT)\
+    LO_FLAG("containment", OPTARG_CONTAIN, measure, Measure::CONTAINMENT)\
     LO_FLAG("poisson-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("compute-edit-distance", OPTARG_MASHDIST, measure, M_EDIT_DISTANCE)\
     LO_FLAG("multiset", OPTARG_DUMMY, sketch_space, SPACE_MULTISET)\

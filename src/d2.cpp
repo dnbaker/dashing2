@@ -6,6 +6,7 @@ int cmp_main(int argc, char **argv);
 int contain_main(int argc, char **argv);
 int wsketch_main(int argc, char **argv);
 int sketch_main(int argc, char **argv);
+int printmin_main(int argc, char **argv);
 std::string Dashing2Options::to_string() const {
     size_t m = 4096;
     std::string ret(m, '\0');
@@ -121,6 +122,8 @@ int main_usage() {
     std::fprintf(stderr, "\twsketch: Takes a tuple of [1-3] input binary files [(u32 or u64), (float or double), (u32 or u64)] and performs weighted minhash sketching.\n"
                          "Three files are treated as Compressed Sparse Row (CSR)-format, where the third file contains indptr values, specifying the lengths of consecutive runs of pairs in the first two files corresponding to each row.\n"
                          "wsketch is for sketching binary files which have already been summed, whereas sketch is for parsing and sketching (from Fast{qa}, BED, BigWig)\n");
+    std::fprintf(stderr, "\n\nMiscellania:\n");
+    std::fprintf(stderr, "printmin: Emit minimizer sequence sets in human-readable form.\n");
     return 1;
 }
 using namespace dashing2;
@@ -139,6 +142,9 @@ int main(int argc, char **argv) {
             return wsketch_main(argc - 1, argv + 1);
         if(std::strcmp(argv[1], "contain") == 0)
             return contain_main(argc - 1, argv + 1);
+        if(std::strcmp(argv[1], "printmin") == 0) {
+            return printmin_main(argc - 1, argv + 1);
+        }
     }
     return main_usage();
 }

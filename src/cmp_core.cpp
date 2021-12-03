@@ -398,14 +398,14 @@ case v: {\
             auto triple = std::make_tuple(alpha, beta, mu);
             //std::fprintf(stderr, "Triple: %Lg apha, %Lg beta, %Lg mu\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple));
             ret = std::max(1.L - (std::get<0>(triple) + std::get<1>(triple)), 0.L);
-            if(opts.measure_ == INTERSECTION)
-                ret *= mu;
-            else if(opts.measure_ == CONTAINMENT)
-                ret = (ret * mu) / lhcard;
-            else if(opts.measure_ == SYMMETRIC_CONTAINMENT)
-                ret = (ret * mu) / std::min(lhcard, rhcard);
-            else if(opts.measure_ == POISSON_LLR)
-                ret = sim2dist(ret);
+            switch(opts.measure_) {
+                case INTERSECTION: ret *= mu; break;
+                case CONTAINMENT: ret  = ret * mu / lhcard; break;
+                case SYMMETRIC_CONTAINMENT:
+                    ret = (ret * mu) / std::min(lhcard, rhcard); break;
+                case POISSON_LLR: ret = sim2dist(ret); break;
+                default: ;
+            }
         }
     } else if(opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE)) {
         //std::fprintf(stderr, "Return exact distance for edit distance between sequences\n");
@@ -422,10 +422,11 @@ case v: {\
             eq = (1. - alpha - beta);
             if(eq <= 0.)
                 return opts.measure_ != POISSON_LLR ? 0.: std::numeric_limits<double>::max();
-            ucard = std::max(lhcard + rhcard / (2.L - alpha - beta), 0.L);
+            ucard = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
             LSHDistType isz = ucard * eq, sim = eq;
             ret = opts.measure_ == SIMILARITY ? sim
                 : opts.measure_ == INTERSECTION ? isz
+                : opts.measure_ == CONTAINMENT ? isz / rhcard
                 : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
                 : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));

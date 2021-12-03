@@ -113,6 +113,8 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
             const uint32_t k = opts.k_, w = opts.w_;
             checked_fwrite(&k, sizeof(k), 1, ofp);
             checked_fwrite(&w, sizeof(w), 1, ofp);
+            uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8);
+            checked_fwrite(&dtype, sizeof(dtype), 1, ofp);
         }
         checked_fwrite(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), ofp);
         offset = 0;
