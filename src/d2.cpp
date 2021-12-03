@@ -136,8 +136,13 @@ int printmin_main(int argc, char **argv) {
     uint32_t dtype;
     checked_fread(&dtype, 1, sizeof(dtype), ifp);
     // uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8);
+#if 0
     const bool canon = (dtype >> 8) & 1;
-    const bns::RollingHashingType rht = dtype & 0xff;
+#endif
+    const bns::RollingHashingType rht = static_cast<bns::RollingHashingType>(dtype & 0xff);
+    if(rht != bns::InputType::DNA) {
+        THROW_EXCEPTION(std::runtime_error("Not yet implemented: minimizer sequence printing for non-DNA alphabets"));
+    }
     std::vector<uint32_t> lengths(nseqs);
     for(size_t i = 0; i < nseqs; ++i) {
         double v;
