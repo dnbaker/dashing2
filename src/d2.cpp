@@ -159,7 +159,6 @@ int printmin_main(int argc, char **argv) {
                 uint64_t item;
                 checked_fread(&item, 1, sizeof(item), ifp);
                 fmt::print(ofp, ">MinimizerSequence{}-Minimizer#{}\n{}\n", id, minid++, sp.to_string(item));
-                fmt::print(ofp, "{}", sp.to_string(item));
             }
             ++id;
         } else {
