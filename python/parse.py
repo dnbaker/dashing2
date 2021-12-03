@@ -176,12 +176,12 @@ def parse_minimizer_sequence_set(path):
     import numpy as np
     dat = np.memmap(path, dtype=np.uint8)
     nseqs = int(dat[:8].view(np.uint64))
-    k, w, dt = map(int, dat[8:16].view(np.uint32))
+    k, w, dt = map(int, dat[8:20].view(np.uint32))
     alphabet = alphabet_dict[dt & 0xff]
     canon = bool(dt & 256)
-    cards = dat[16:16 + (8 * nseqs)].view(np.float64)
+    cards = dat[20:20 + (8 * nseqs)].view(np.float64)
     indptr = np.cumsum(np.hstack([[0], cards]).astype(np.uint64))
-    lo = dat[16 + (8 * nseqs):].view(np.uint64)
+    lo = dat[20 + (8 * nseqs):].view(np.uint64)
     return {"canon": canon, "alphabet": alphabet, "nseqs": nseqs, "k": k, "w": w, "seqs": [lo[indptr[i]:indptr[i + 1]] for i in range(nseqs)]}
 
 

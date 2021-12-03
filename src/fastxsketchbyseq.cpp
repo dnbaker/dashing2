@@ -141,7 +141,11 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
             if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open path "s + outpath + " for writing"));
             std::fclose(fp);
         }
-        if(int rc = ::truncate(outpath.data(), 16 + sizeof(double) * total_nseqs); rc) {
+        size_t offset = 16 + sizeof(double) * total_nseqs;
+        if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
+            offset = 20 + sizeof(double) * total_nseqs;
+        }
+        if(int rc = ::truncate(outpath.data(), offset); rc) {
             std::fprintf(stderr, "is outpath %s a file? %d\n", outpath.data(), bns::isfile(outpath));
             THROW_EXCEPTION(std::runtime_error("Failed to resize signature file for fastx2sketch_byseq. rc: "s + std::to_string(rc)));
         }

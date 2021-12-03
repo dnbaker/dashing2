@@ -1,6 +1,5 @@
 #include "d2.h"
 #include <filesystem>
-#include "fmt/format.h"
 
 namespace dashing2 {
 int cmp_main(int argc, char **argv);
@@ -106,72 +105,6 @@ void Dashing2Options::validate() const {
         std::fprintf(stderr, "Warning: entropy minimization is not supported for spaced seeds or rolling hashers; falling back to random minimization.\n");
         entmin = false;
     }
-}
-
-int printmin_main(int argc, char **argv) {
-    bool emit_fasta = false;
-    std::FILE *ofp = stdout;
-    if(auto it = std::find_if(argv, argv + argc, [](auto x) {return !(std::strcmp(x, "-h") && std::strcmp(x, "--help"));}); it != argv + argc) {
-        goto usage;
-    }
-    for(int c;(c = getopt(argc, argv, "fo:h")) >=0;) {switch(c) {
-        case 'f':
-            emit_fasta = true; break;
-        case 'o': ofp = std::fopen(optarg, "w"); if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + optarg));
-                break;
-        case 'h':
-            usage:
-            std::fprintf(stderr, "Usage: -f: emit fasta. Default - emits tabular result.\n-o: Write to file instead of stdout.\n");
-            return 1;
-    }}
-    buffer_to_blksize(ofp);
-    if(optind == argc) THROW_EXCEPTION(std::invalid_argument("Required: one positional argument for printmin_main"));
-    std::string inpath = argv[optind];
-    std::FILE *ifp = std::fopen(inpath.data(), "r");
-    size_t nseqs;
-    checked_fread(&nseqs, 1, sizeof(nseqs), ifp);
-    uint32_t k, w;
-    checked_fread(&k, 1, sizeof(k), ifp);
-    checked_fread(&w, 1, sizeof(k), ifp);
-    uint32_t dtype;
-    checked_fread(&dtype, 1, sizeof(dtype), ifp);
-    // uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8);
-#if 0
-    const bool canon = (dtype >> 8) & 1;
-#endif
-    const bns::RollingHashingType rht = static_cast<bns::RollingHashingType>(dtype & 0xff);
-    if(rht != bns::InputType::DNA) {
-        THROW_EXCEPTION(std::runtime_error("Not yet implemented: minimizer sequence printing for non-DNA alphabets"));
-    }
-    std::vector<uint32_t> lengths(nseqs);
-    for(size_t i = 0; i < nseqs; ++i) {
-        double v;
-        checked_fread(&v, 1, sizeof(v), ifp);
-        lengths[i] = v;
-    }
-    bns::Spacer sp(k, w);
-    size_t id = 0;
-    std::string kmerstr;
-    for(const auto L: lengths) {
-        if(emit_fasta) {
-            size_t minid = 0;
-            for(size_t i = 0; i < L; ++i) {
-                uint64_t item;
-                checked_fread(&item, 1, sizeof(item), ifp);
-                fmt::print(ofp, ">MinimizerSequence{}-Minimizer#{}\n{}\n", id, minid++, sp.to_string(item));
-            }
-            ++id;
-        } else {
-            fmt::print(ofp, "MinimizerSequence{}", id++);
-            for(size_t i = 0; i < L; ++i) {
-                uint64_t item;
-                checked_fread(&item, 1, sizeof(item), ifp);
-                fmt::print(ofp, " {}", sp.to_string(item));
-            }
-            fmt::print(ofp, "\n");
-        }
-    }
-    return 0;
 }
 
 bool entmin = false;
