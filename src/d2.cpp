@@ -114,7 +114,7 @@ int printmin_main(int argc, char **argv) {
     if(auto it = std::find_if(argv, argv + argc, [](auto x) {return !(std::strcmp(x, "-h") && std::strcmp(x, "--help"));}); it != argv + argc) {
         goto usage;
     }
-    for(int c;(c = getopt(argc, argv, "f:o:h:")) >=0;) {switch(c) {
+    for(int c;(c = getopt(argc, argv, "fo:h")) >=0;) {switch(c) {
         case 'f':
             emit_fasta = true; break;
         case 'o': ofp = std::fopen(optarg, "w"); if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + optarg));
