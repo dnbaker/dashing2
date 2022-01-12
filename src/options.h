@@ -54,6 +54,7 @@ enum OptArg {
     OPTARG_FASTCMPWORDS,
     OPTARG_FASTCMPNIBBLES,
     OPTARG_FULL_SETSKETCH,
+    OPTARG_PAIRLIST,
     OPTARG_DUMMY
 };
 
@@ -160,7 +161,8 @@ enum OptArg {
     {"sketch-size-l2", required_argument, 0, 'L'},\
     {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT},\
     {"maxcand", required_argument, 0, OPTARG_MAXCAND},\
-    {"setsketch-ab", required_argument, 0, OPTARG_SETSKETCH_AB}
+    {"setsketch-ab", required_argument, 0, OPTARG_SETSKETCH_AB},\
+    {"pairlist", required_argument, 0, OPTARG_PAIRLIST}
 
 
 
@@ -282,7 +284,9 @@ enum OptArg {
             compressed_a = sketch::setsketch::UintSetS::DEFAULT_A;\
             compressed_b = sketch::setsketch::UintSetS::DEFAULT_B;\
             nbytes_for_fastdists = 4.;\
-        } break;
+        } break;\
+        case PAIRLIST: {\
+        }
 
 
 

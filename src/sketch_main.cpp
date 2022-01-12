@@ -49,6 +49,9 @@ int sketch_main(int argc, char **argv) {
     uint64_t seedseed = 0;
     size_t batch_size = 0;
     int nLSH = 2;
+#if 0
+    std::vector<std::pair<uint32_t, uint32_t>> compareids; // TODO: consider a sparse mode comparing only pairs of presented genomes.
+#endif
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
     std::string fsarg;
