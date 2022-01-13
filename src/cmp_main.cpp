@@ -170,15 +170,19 @@ int cmp_main(int argc, char **argv) {
     size_t batch_size = 0;
     bool fasta_dedup = false;
     std::string spacing;
+    std::vector<std::pair<uint32_t, uint32_t>> compareids; // TODO: consider a sparse mode comparing only pairs of presented genomes.
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     CMP_OPTS(cmp_long_options);
+    std::vector<std::string> paths;
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
         SHARED_FIELDS
         case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
     }}
     if(k < 0) k = nregperitem(rht, use128);
-    std::vector<std::string> paths(argv + optind, argv + argc);
+    if(compareids.empty()) {
+        paths.insert(paths.end(), argv + optind, argv + argc);
+    } else if(optind != argc) throw std::runtime_error("CLI paths must be empty to use pairlist mode.");
     std::unique_ptr<std::vector<std::string>> qup;
     if(nt < 0) {
         char *s = std::getenv("OMP_NUM_THREADS");

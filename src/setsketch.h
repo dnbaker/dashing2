@@ -586,6 +586,17 @@ public:
         }
         return ret;
     }
+    static INLINE long double ml_estimate(const long double lhcard, const long double rhcard, const size_t lt, const size_t gt, const size_t m) {
+        // SetSketch v3, section 4.1, eq (17)
+        // This requires cardinality estimates, but is supposedly more accurate than the standard setsketch simple estimator.
+        // We may integrate this into downstream tools.
+        const long double uvsum = lhcard + rhcard, u = lhcard / uvsum, v = rhcard / uvsum;
+        const size_t numeq = m - lt - gt;
+        const long double u2 = u * u, v2 = v * v;
+        const long double ut = u2 * (lt + numeq), vt = v2 * (gt + numeq);
+        const long double num = ut + vt - std::sqrt((ut - vt) * (ut - vt) + 4. * lt * gt * u2 * v2);
+        return num / (2.L * m * u * v);
+    }
 };
 template<typename ResT, typename FT>
 class SetSketch {

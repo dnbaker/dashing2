@@ -285,7 +285,27 @@ enum OptArg {
             compressed_b = sketch::setsketch::UintSetS::DEFAULT_B;\
             nbytes_for_fastdists = 4.;\
         } break;\
-        case PAIRLIST: {\
+        case OPTARG_PAIRLIST: {\
+            if(paths.size()) throw std::runtime_error("Expected empty paths list for pairlist command. Either provide pairlist or paths, not both.");\
+            flat_hash_map<std::string, uint32_t> pathids;\
+            std::ifstream ifs(optarg);\
+            for(std::string line;std::getline(ifs, line);) {\
+                auto spacepos = std::find_if(line.data(), line.data() + line.size(), [](auto x) {return std::isspace(x);});\
+                if(*spacepos == '\0') throw std::runtime_error("Expected two paths separated by a space in pairlist.");\
+                auto lhs = std::string(line.data(), spacepos - line.data());\
+                auto rhs = std::string(spacepos + 1, line.data() + line.size() - spacepos - 1);\
+                assert(!std::isspace(lhs.back()));\
+                assert(!std::isspace(lhs.front()));\
+                assert(!std::isspace(rhs.back()));\
+                assert(!std::isspace(rhs.front()));\
+                auto lit = pathids.find(lhs);\
+                if(lit == pathids.end()) pathids.emplace(lhs, pathids.size()).first;\
+                auto rit = pathids.find(rhs);\
+                if(rit == pathids.end()) pathids.emplace(rhs, pathids.size()).first;\
+                compareids.emplace_back(lit->second, rit->second);\
+            }\
+            for(auto &pair: pathids) paths.emplace_back(std::move(pair.first));\
+            break;\
         }
 
 

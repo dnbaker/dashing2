@@ -49,9 +49,7 @@ int sketch_main(int argc, char **argv) {
     uint64_t seedseed = 0;
     size_t batch_size = 0;
     int nLSH = 2;
-#if 0
     std::vector<std::pair<uint32_t, uint32_t>> compareids; // TODO: consider a sparse mode comparing only pairs of presented genomes.
-#endif
     Measure measure = SIMILARITY;
     std::ios_base::sync_with_stdio(false);
     std::string fsarg;
@@ -59,6 +57,7 @@ int sketch_main(int argc, char **argv) {
     bool normalize_bed = false;
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     std::string spacing;
+    std::vector<std::string> paths;
     SKETCH_OPTS
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:CNs2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
@@ -73,7 +72,9 @@ int sketch_main(int argc, char **argv) {
         if(s) nt = std::max(std::atoi(s), 1);
     }
     OMP_ONLY(omp_set_num_threads(nt));
-    std::vector<std::string> paths(argv + optind, argv + argc);
+    if(compareids.empty()) {
+        paths.insert(paths.end(), argv + optind, argv + argc);
+    } else if(optind != argc) throw std::runtime_error("CLI paths must be empty to use pairlist mode.");
     std::unique_ptr<std::vector<std::string>> qup;
     if(ffile.size()) {
         if(!bns::isfile(ffile)) THROW_EXCEPTION(std::runtime_error("No path found at "s + ffile));
