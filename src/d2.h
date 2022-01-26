@@ -290,7 +290,12 @@ private:
     }
 public:
     ~KSeqHolder() {
-        for(size_t i = 0; i < n_; free_item(kseqs_[i++]));
+        for(size_t i = 0; i < n_; ++i){
+#ifndef NDEBUG
+            std::fprintf(stderr, "Length of buffer %zu: %zu\n", i, kseqs_[i].seq.m);
+#endif
+            free_item(kseqs_[i]);
+        }
         std::free(kseqs_);
         kseqs_ = 0;
         n_ = 0;
