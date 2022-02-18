@@ -5,6 +5,7 @@
 #endif
 #include "enums.h"
 #include <memory>
+#include <atomic>
 #include <vector>
 #include "bonsai/encoder.h"
 #include "xxHash/xxh3.h"
@@ -13,6 +14,8 @@
 #include "counter.h"
 #include "oph.h"
 #include "filterset.h"
+
+#define COUNT_COMPARE_CALLS 1
 
 
 namespace dashing2 {
@@ -240,7 +243,7 @@ using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditio
 using FullSetSketch = sketch::setsketch::CountFilteredCSetSketch<RegT>;
 using OPSetSketch = LazyOnePermSetSketch<KmerSigT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
-using ProbMinHash = sketch::pmh2_t<RegT>;
+using ProbMinHash = sketch::pmh3_t<RegT>;
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
 template<typename T>
 INLINE auto total_weight(const T &x) {return x.total_weight();}
@@ -305,6 +308,9 @@ public:
 
 extern bool entmin;
 
+#if COUNT_COMPARE_CALLS
+extern std::atomic<uint64_t> compare_count;
+#endif
 } // namespace dashing2
 //std::vector<RegT> reduce(flat_hash_map<std::string, std::vector<RegT>> &map);
 

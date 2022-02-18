@@ -100,7 +100,7 @@ private:
     std::vector<flat_hash_map<T, uint32_t>> potentials_;
     double card_ = -1.;
 public:
-    LazyOnePermSetSketch(const LazyOnePermSetSketch &o): div_(o.div_) {
+    LazyOnePermSetSketch(const LazyOnePermSetSketch &o): hasher_(o.hasher_), div_(o.div_) {
         *this = o;
     }
     LazyOnePermSetSketch& operator=(const LazyOnePermSetSketch &o)

@@ -318,7 +318,14 @@ static inline long double g_b(long double b, long double arg) {
     return (1.L - std::pow(b, -arg)) / (1.L - 1.L / b);
 }
 
+#if COUNT_COMPARE_CALLS
+std::atomic<uint64_t> compare_count{0};
+#endif
+
 LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
+#if COUNT_COMPARE_CALLS
+    ++compare_count;
+#endif
     long double ret = std::numeric_limits<LSHDistType>::max();
     const long double lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const long double invdenom = 1.L / opts.sketchsize_;
@@ -649,13 +656,11 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
     for(size_t i = 0; i < nperhashes.size(); ++i) {
         const auto nh = nperhashes[i];
         auto &np = nperrows[i];
-        if(nh < 2) {
+        if(nh <= 2) {
             np = opts.sketchsize_ / nh;
         } else if(nh <= 4) {
             np = opts.sketchsize_ * 8 / nh;
-        } else if(nh <= 6) {
-            np = opts.sketchsize_  * 16 / nh;
-        } else np = opts.sketchsize_ * 32 / nh;
+        }
     }
     using SSI = SetSketchIndex<LSHIDType, LSHIDType>;
     SSI idx(opts.kmer_result_ < FULL_MMER_SET ? SSI(opts.sketchsize_, nperhashes, nperrows): SSI());

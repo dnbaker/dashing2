@@ -69,6 +69,7 @@ enum OptArg {
     LO_ARG("outprefix", OPTARG_OUTPREF)\
     LO_ARG("prefix", OPTARG_OUTPREF)\
     LO_ARG("topk", 'K')\
+    LO_ARG("top-k", 'K')\
     LO_ARG("similarity-threshold", 'T')\
     LO_ARG("fastcmp", OPTARG_FASTCMP)\
     LO_ARG("regsize", OPTARG_FASTCMP)\
@@ -445,7 +446,7 @@ static constexpr const char *siglen =
         "All of these are powered by the use of an LSH table built over the sketches, with the exception of exact mode (--countdict or --set), which use an LSH index built over their bottom-k hashes.\n"\
         "For details on LSH table parameters, see `LSH Options` below.\n"\
         "Top-K (K-Nearest-Neighbor) mode -- \n"\
-        "--topk <arg>\tMaximum number of nearest neighbors to list. If <arg> is greater than N - 1, pairwise distances are instead emitted.\n"\
+        "--topk/--top-k <arg>\tMaximum number of nearest neighbors to list. If <arg> is greater than N - 1, pairwise distances are instead emitted.\n"\
         "Thresholded Mode -- \n"\
         "--similarity-threshold <arg>\tMinimum fraction similarity for inclusion.\n\tIf this is enabled, only pairwise similarities over <arg> will be emitted.\n"\
         "Distance Output Options--\n"\
