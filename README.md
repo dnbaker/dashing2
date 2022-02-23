@@ -267,7 +267,7 @@ For these approaches, Dashing2 will use a bottom-k LSH index to generate candida
 
 You can instead generate a list of neighbors filtered by similarity threshold rather than choosing its top-k nearest neighbors.
 
-Simply `--topk <int>` for `--similarity-threshold <float>`.
+Simply replace `--topk <int>` with `--similarity-threshold <float>`.
 
 ### Installation
 
