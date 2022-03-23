@@ -139,6 +139,10 @@ read%-f: test/read%.fo $(FLIBOBJ)
 src/osfmt.o: fmt/src/os.cc
 	$(CXX) -I fmt/include $(OPT) $(WARNING) $< -c -o $@ $(EXTRA)
 
+
+%: src/%
+	cp $< $@
+
 mmtest: test/mmtest.cpp src/mmvec.h
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -o $@ $(LIB) $(EXTRA)
 

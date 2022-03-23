@@ -250,6 +250,25 @@ dashing2 sketch -p8 --cmpout knn.edit-distance.tbl -k7 --parse-by-seq --edit-dis
 ```
 
 
+**Use 7: Generate KNN graph using exact K-mer distances but using LSH pre-filtering.**
+
+You can do this for exact k-mer sets:
+
+```
+dashing2 sketch --cache-sketches -p8 -F input_sequence_set.txt -k31  -S1024 --set --topk 25 -o input_sequence_set.topk.tsv
+```
+
+Or for exact weighted k-mer sets:
+```
+dashing2 sketch --cache-sketches -p8 -F input_sequence_set.txt -k31  -S1024 --countdict --topk 25 -o input_sequence_set.topk.tsv
+```
+
+For these approaches, Dashing2 will use a bottom-k LSH index to generate candidates.
+
+You can instead generate a list of neighbors filtered by similarity threshold rather than choosing its top-k nearest neighbors.
+
+Simply replace `--topk <int>` with `--similarity-threshold <float>`.
+
 ### Installation
 
 The easiest way to get started is to download a statically-linked binary in the [dashing2-binaries](https://github.com/dnbaker/dashing2-binaries) repo.

@@ -304,6 +304,8 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     }
     loopint = 1;
     if(sub.joinable()) sub.join();
+    static constexpr size_t BUFSIZE = 131072;
+    static constexpr size_t BUFSIZEM1 = BUFSIZE - 1;
     if(const size_t dqs = datq.size(); dqs) {
         if(opts.output_format_ == HUMAN_READABLE) {
             auto &of = ofopt.value();
@@ -329,11 +331,13 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
             of.close(); // Flush and close, and then open a posix file
             auto off = fmt::file(outp, fmt::file::WRONLY | fmt::file::APPEND);
             for(const auto &buf: bufs) {
-                const size_t nblocks = (buf.size() + 131071) / 131072;
+                const size_t nblocks = (buf.size() + BUFSIZEM1) / BUFSIZE;
+                auto ptr = buf.data();
                 // Chunk the writing according to blocksize
                 for(size_t i = 0; i < nblocks; ++i) {
-                    const size_t n_in_block = (i == nblocks - 1) ? buf.size() & size_t(131071): size_t(131072);
-                    off.write(buf.data() + i * 131072, n_in_block);
+                    const size_t n_in_block = (i == nblocks - 1) ? buf.size() & BUFSIZEM1: BUFSIZE;
+                    off.write(ptr, n_in_block);
+                    ptr += BUFSIZE;
                 }
             }
         } else {
@@ -350,12 +354,12 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                    THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(pair.start()) + "-" + std::to_string(pair.stop()) + " to disk"));
 #else
                 const size_t nbytes = sizeof(float) * nwritten;
-                static constexpr size_t nfloats_per_block = 131072 / sizeof(float);
-                const ssize_t nblocks = (nbytes + 131071) >> 17;
+                static constexpr size_t nfloats_per_block = BUFSIZE / sizeof(float);
+                const ssize_t nblocks = (nbytes + BUFSIZEM1) >> 17;
                 for(ssize_t i = 0; i < nblocks - 1; ++i) {
-                    const ssize_t wrc = ::write(fd, pair.data() + i * nfloats_per_block, 131072ul);
-                    if(unlikely(wrc < ssize_t(131072)))
-                        throw std::runtime_error("Failed to POSIX write. Wrote "s + std::to_string(wrc) + " instead of 131072");
+                    const ssize_t wrc = ::write(fd, pair.data() + i * nfloats_per_block, BUFSIZE);
+                    if(unlikely(wrc < ssize_t(BUFSIZE)))
+                        throw std::runtime_error("Failed to POSIX write. Wrote "s + std::to_string(wrc) + " instead of " + std::to_string(BUFSIZE));
                 }
                 const ssize_t lon = (nwritten & 32767ul) * sizeof(float);
                 const ssize_t wrc = ::write(fd, pair.data() + (nblocks - 1) * nfloats_per_block, lon);
