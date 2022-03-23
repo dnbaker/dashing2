@@ -319,7 +319,7 @@ static inline long double g_b(long double b, long double arg) {
 }
 
 #if COUNT_COMPARE_CALLS
-std::atomic<long long int> compare_count{0};
+std::atomic<uint64_t> compare_count{0};
 #endif
 
 LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {

@@ -15,7 +15,7 @@
 #include "oph.h"
 #include "filterset.h"
 
-#define COUNT_COMPARE_CALLS 1
+#define COUNT_COMPARE_CALLS 0
 
 
 namespace dashing2 {
@@ -311,6 +311,7 @@ extern bool entmin;
 #if COUNT_COMPARE_CALLS
 extern std::atomic<uint64_t> compare_count;
 #endif
+
 } // namespace dashing2
 //std::vector<RegT> reduce(flat_hash_map<std::string, std::vector<RegT>> &map);
 

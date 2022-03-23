@@ -15,7 +15,10 @@ static option_struct name[] = {\
 
 
 void cmp_usage() {
-    std::fprintf(stderr, "dashing2 cmp usage is not written.\n");
+    std::fprintf(stderr, "dashing2 cmp <opts> [fastas... (optional)]\n"
+                         "We use only m-mers; if w <= k, however, this reduces to k-mers if the -w/--window-size is unspecified.\n"
+                         SHARED_DOC_LINES
+    );
 }
 void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std::vector<std::string> &paths) {
     DBG_ONLY(std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());)
