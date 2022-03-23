@@ -17,6 +17,7 @@ static option_struct name[] = {\
 void cmp_usage() {
     std::fprintf(stderr, "dashing2 cmp <opts> [fastas... (optional)]\n"
                          "We use only m-mers; if w <= k, however, this reduces to k-mers if the -w/--window-size is unspecified.\n"
+                         "--presketched\t To compute distances using a pre-sketched method (e.g., dashing2 sketch -o path), use this flag and pass in a single positional argument.\n"
                          SHARED_DOC_LINES
     );
 }
