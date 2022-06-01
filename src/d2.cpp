@@ -131,7 +131,7 @@ using namespace dashing2;
 
 int main(int argc, char **argv) {
     std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[0])));
-    for(char **s = argv; *s; cmd += std::string(" ") + *s++);
+    for(char **s = (argv + 1); *s; cmd += std::string(" ") + *s++);
     std::fprintf(stderr, "#Calling Dashing2 version %s with command '%s'\n", DASHING2_VERSION, cmd.data());
     if(argc > 1) {
         if(std::strcmp(argv[1], "sketch") == 0)
