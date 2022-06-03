@@ -658,7 +658,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         auto &np = nperrows[i];
         if(nh <= 2) {
             np = opts.sketchsize_ / nh;
-        } else if(nh <= 4) {
+        } else {
             np = opts.sketchsize_ * 8 / nh;
         }
     }
