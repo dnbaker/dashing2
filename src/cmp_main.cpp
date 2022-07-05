@@ -177,9 +177,10 @@ int cmp_main(int argc, char **argv) {
     std::vector<std::pair<uint32_t, uint32_t>> compareids; // TODO: consider a sparse mode comparing only pairs of presented genomes.
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
+    validate_options(argv);
     CMP_OPTS(cmp_long_options);
     std::vector<std::string> paths;
-    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
+    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:L:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
         SHARED_FIELDS
         case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
     }}

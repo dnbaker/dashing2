@@ -58,8 +58,9 @@ int sketch_main(int argc, char **argv) {
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     std::string spacing;
     std::vector<std::string> paths;
+    validate_options(argv);
     SKETCH_OPTS
-    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:CNs2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
+    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:L:CNs2BPWh?ZJGH", sketch_long_options, &option_index)) >= 0;) {
         switch(c) {
             SHARED_FIELDS
             case OPTARG_HELP: case '?': case 'h': sketch_usage(); return 1;
