@@ -307,6 +307,7 @@ public:
 
 
 extern bool entmin;
+extern int verbosity;
 
 #if COUNT_COMPARE_CALLS
 extern std::atomic<uint64_t> compare_count;

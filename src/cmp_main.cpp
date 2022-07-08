@@ -88,14 +88,23 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             fsizes[i] = nelem;
             csizes[i + 1] = csizes[i] + nelem;
         }
+        result.nqueries(paths.size());
         // It's even if the items are actually sketches
         // And there are the same number of them per file
         const bool even = opts.kmer_result_ <= FULL_SETSKETCH &&
                  std::all_of(fsizes.begin() + 1, fsizes.end(), [r=fsizes.front()](auto x) {return x == r;});
+        if(even) {
+            opts.sketchsize_ = fsizes.front();
+        }
         const size_t totalsize = csizes.back();
         result.signatures_.resize(totalsize); // Account for the size of the sketch registers
         if(even) {
+            if(totalsize % opts.sketchsize_) {
+                throw std::runtime_error(std::string("sanity check: totalsize should be divisible if we get here. Totalsize ") + std::to_string(totalsize) + ", " + std::to_string(opts.sketchsize_));
+            }
             result.cardinalities_.resize(totalsize / opts.sketchsize_);
+        } else {
+            std::fprintf(stderr, "Warning: uneven file sizes. This is expected for hash sets but not sketches.");
         }
         if(bns::isfile(pf + ".kmerhashes.u64")) {
             DBG_ONLY(std::fprintf(stderr, "Loading k-mer hashes, too\n");)
@@ -105,6 +114,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             DBG_ONLY(std::fprintf(stderr, "Loading k-mer counts, too\n");)
             result.kmercounts_.resize(result.signatures_.size());
         }
+        assert(paths.size() == result.cardinalities_.size());
         OMP_PFOR_DYN
         for(size_t i = 0; i < paths.size(); ++i) {
             auto &path = paths[i];
@@ -177,7 +187,7 @@ int cmp_main(int argc, char **argv) {
     std::vector<std::pair<uint32_t, uint32_t>> compareids; // TODO: consider a sparse mode comparing only pairs of presented genomes.
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
-    validate_options(argv);
+    validate_options(argv, std::vector<std::string>{{"presketched"}});
     CMP_OPTS(cmp_long_options);
     std::vector<std::string> paths;
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:L:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {

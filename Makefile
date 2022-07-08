@@ -66,7 +66,7 @@ dashing2-64: $(OBJ64) libBigWig.a
 
 
 dashing2-0: $(OBJ0) libBigWig.a $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a -UNDEBUG
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-v: $(OBJV) libBigWig.a $(wildcard src/*.h)

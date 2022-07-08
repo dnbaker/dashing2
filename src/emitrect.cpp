@@ -80,12 +80,14 @@ void batched_write(cfloatp &src, fmt::ostream &of, const size_t jend) {
     // Batched formatting provides a significant speed advantage
     const float *dat8end = src + (jend / 8) * 8;
     const float *datend = src + jend;
-    for(;src < dat8end; src += 8)
+    for(;src < dat8end; src += 8) {
         of.print(FMT8,
                  *src, src[1], src[2], src[3], src[4], src[5], src[6], src[7]);
+    }
 
-    for(;src < datend; ++src)
+    for(;src < datend; ++src) {
         of.print(FMT1, *src);
+    }
     of.print("\n");
 }
 
@@ -104,7 +106,7 @@ void batched_write(const float * &src, std::back_insert_iterator<fmt::memory_buf
 }
 
 void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result) {
-    const size_t ns = result.names_.size();
+    const size_t ns = result.names_.empty() ? result.nqueries(): result.names_.size();
     const std::string outp = opts.outfile_path_.empty() || opts.outfile_path_.front() == '-'
             ? "/dev/stdout"s: opts.outfile_path_;
     // Only make fmt::ostream if emitting in human-readable form
@@ -123,7 +125,6 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     }
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
     std::deque<QTup> datq;
-    volatile int loopint = 0;
     std::mutex datq_lock;
 #ifndef NDEBUG
     if(opts.output_format_ == MACHINE_READABLE) {
@@ -140,7 +141,10 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
             of.print("#Dashing2 {} Output\n", labelstr);
             of.print("#Dashing2Options: {}\n", opts.to_string());
             of.print("#Sources");
-            for(size_t i = 0; i < result.names_.size(); of.print("\t{}", result.names_[i++]));
+            const int64_t end = result.names_.empty() ? result.nqueries(): result.names_.size();
+            for(int64_t i = 0; i < end; ++i) {
+                result.names_.empty() ? of.print("\tE{}", i) : of.print("\t{}", result.names_[i]);
+            }
             of.print("\n");
         } else {
             of.print("{}\n", ns);
@@ -151,7 +155,8 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
      *  data in the datq which computation is done in parallel by other threads.
      *  If the queue is empty, it sleeps.
      */
-    const size_t nq = result.nqueries(), nf = ns - nq;
+    const size_t nq = result.nqueries(), nf = ns ? (ns - nq): 0;
+    volatile int loopint = 0;
     std::thread sub = std::thread([&](){
         while(loopint == 0) {
             if(datq.empty()) {
@@ -169,8 +174,12 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 auto &of = ofopt.value();
                 const float *datp = f.data();
                 for(size_t i = fs; i < fe; ++i) {
-                    auto &seqn = result.names_[i];
-                    std::string fn(seqn);
+                    std::string fn;
+                    if((result.names_.size() > i) && (!result.names_[i].empty())) {
+                        fn = result.names_[i];
+                    } else {
+                        fn = std::string("E") + std::to_string(i);
+                    }
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
                     of.print("{}", fn);
                     const size_t jend = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - i - 1;
@@ -319,7 +328,12 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 const auto fs = f.start(), fe = f.stop();
                 const float *datp = f.data();
                 for(size_t i = fs; i < fe; ++i) {
-                    std::string fn(result.names_[i]);
+                    std::string fn;
+                    if((result.names_.size() > i) && (!result.names_[i].empty())) {
+                        fn = result.names_[i];
+                    } else {
+                        fn = std::string("E") + std::to_string(i);
+                    }
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
                     format_to(biof, fn);
                     const size_t jend = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - i - 1;
