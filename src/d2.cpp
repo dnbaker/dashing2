@@ -108,6 +108,7 @@ void Dashing2Options::validate() const {
 }
 
 bool entmin = false;
+int verbosity = 0;
 
 } // dashing2
 

@@ -353,7 +353,6 @@ case v: {TYPE *ptr = static_cast<TYPE *>(opts.compressed_ptr_); equal_regs = ske
                 }
                 default: __builtin_unreachable();
             }
-            //std::fprintf(stderr, "%zu equal registers out of %zu\n", size_t(equal_regs), opts.sketchsize_);
         } else {
             switch(int(2. * opts.fd_level_)) {
 #define CASE_ENTRY(v, TYPE)\
@@ -395,15 +394,12 @@ case v: {\
                 alpha = g_b(b, alpha);
                 beta = g_b(b, beta);
             }
-            //std::fprintf(stderr, "alpha gt: %zu. beta gt: %zu, Alpha %Lg, Beta %Lg\n", res.first, res.second, alpha, beta);
-            VERBOSE_ONLY(std::fprintf(stderr, "Alpha: %Lg. Beta: %Lg\n", alpha, beta);)
             if(alpha + beta >= 1.) {
                 mu = lhcard + rhcard;
             } else {
                 mu = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
             }
             auto triple = std::make_tuple(alpha, beta, mu);
-            //std::fprintf(stderr, "Triple: %Lg apha, %Lg beta, %Lg mu\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple));
             ret = std::max(1.L - (std::get<0>(triple) + std::get<1>(triple)), 0.L);
             switch(opts.measure_) {
                 case INTERSECTION: ret *= mu; break;
@@ -415,7 +411,6 @@ case v: {\
             }
         }
     } else if(opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE)) {
-        //std::fprintf(stderr, "Return exact distance for edit distance between sequences\n");
         assert(result.sequences_.size() > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zu vs %zu/%zu)\n", result.sequences_.size(), i, j));
         return levenshteinSSE::levenshtein(result.sequences_[i], result.sequences_[j]);
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
@@ -425,10 +420,16 @@ case v: {\
             long double alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
+            assert((opts.sketchsize_ - (gtlt.first + gtlt.second)) == std::inner_product(lhsrc, lhsrc + opts.sketchsize_, rhsrc, size_t(0), std::plus<>(), std::equal_to<>()));
             lhcard = result.cardinalities_[i], rhcard = result.cardinalities_[j];
             eq = (1. - alpha - beta);
-            if(eq <= 0.)
+            if(eq <= 0.) {
                 return opts.measure_ != POISSON_LLR ? 0.: std::numeric_limits<double>::max();
+            }
+            static constexpr long double EPS = 1e-15;
+            if(eq <= EPS) {
+                eq = 0;
+            }
             ucard = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
             LSHDistType isz = ucard * eq, sim = eq;
             ret = opts.measure_ == SIMILARITY ? sim

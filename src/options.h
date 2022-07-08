@@ -163,7 +163,8 @@ enum OptArg {
     {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT},\
     {"maxcand", required_argument, 0, OPTARG_MAXCAND},\
     {"setsketch-ab", required_argument, 0, OPTARG_SETSKETCH_AB},\
-    {"pairlist", required_argument, 0, OPTARG_PAIRLIST}
+    {"pairlist", required_argument, 0, OPTARG_PAIRLIST},\
+    {"verbose", no_argument, 0, 'v'}
 
 
 
@@ -272,14 +273,22 @@ const std::vector<std::string> VALID_LONG_OPTION_STRINGS {{
     "threshold",
     "top-k",
     "topk",
+    "verbose",
     "window-size",
 }};
 
-static inline void validate_options(char **const opts) {
+// This function takes a vector of additional strings,
+// since subcommands may have special flags unique to them.
+// Add those strings to the second argument when validating those options.
+// For instance, --presketched exists on cmp but not sketch, and must be permitted for it but not sketch.
+static inline void validate_options(char **const opts, const std::vector<std::string>& extras={}) {
     for(char **ptr = opts; *ptr; ++ptr) {
         const int32_t len = std::strlen(*ptr);
         if(len > 2 && std::memcmp(*ptr, "--", 2) == 0) {
             const std::string flag((*ptr) + 2, (*ptr) + len);
+            if(std::find(std::cbegin(extras), std::cend(extras), flag) != std::cend(extras)) {
+                continue;
+            }
             if(std::find(std::cbegin(VALID_LONG_OPTION_STRINGS), std::cend(VALID_LONG_OPTION_STRINGS), flag) == std::cend(VALID_LONG_OPTION_STRINGS)) {
                 std::fprintf(stderr, "flag %s not found in expected set. See usage.\n", flag.data());
                 throw std::runtime_error(std::string("Flag ") + flag + " not found");
@@ -346,6 +355,7 @@ static inline void validate_options(char **const opts) {
         case 'B': sketch_space = SPACE_MULTISET; res = FULL_SETSKETCH; break;\
         case 'P': sketch_space = SPACE_PSET; res = FULL_SETSKETCH; break;\
         case 'Z': res = ONE_PERM; break;\
+        case 'v': ++verbosity; break;\
         case OPTARG_ISZ: measure = INTERSECTION; break;\
         case OPTARG_OUTPREF: {\
             outprefix = optarg; break;\

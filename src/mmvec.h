@@ -112,8 +112,9 @@ public:
     }
     size_t memthreshold() const {return memthreshold_;}
     size_t offset() const {return offset_ != size_t(-1) ? offset_: size_t(0);}
-    T *begin() {return data();}
-    T *end() {return data() + size_;}
+    T *begin() noexcept {return data();}
+    T *end() noexcept {return data() + size_;}
+    const T *end() const noexcept {return data() + size_;}
     T &operator[](size_t i) {return data()[i];}
     const T &operator[](size_t i) const {return data()[i];}
     T &at(size_t i) {
