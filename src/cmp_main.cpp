@@ -19,6 +19,10 @@ void cmp_usage() {
 }
 void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std::vector<std::string> &paths) {
     DBG_ONLY(std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());)
+    std::fprintf(stderr, "Loading results. Paths of size %zu", paths.size());
+    for(const auto& path: paths) {
+        std::fprintf(stderr, "Path %s/%zd\n", path.data(), &path - paths.data());
+    }
     auto &pf = paths.front();
     struct stat st;
     ::stat(pf.data(), &st);
@@ -72,6 +76,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         assert((st.st_size - offset) % sizeof(RegT) == 0);
         result.signatures_.assign(pf, offset, (st.st_size - offset) / sizeof(RegT));
     } else { // Else, we have to load sketches from each file
+        std::fprintf(stderr, "Parsing in data from file\n");
         result.nperfile_.resize(paths.size());
         auto &fsizes = result.nperfile_;
         std::vector<size_t> csizes(fsizes.size() + 1);
@@ -90,6 +95,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                  std::all_of(fsizes.begin() + 1, fsizes.end(), [r=fsizes.front()](auto x) {return x == r;});
         const size_t totalsize = csizes.back();
         result.signatures_.resize(totalsize); // Account for the size of the sketch registers
+        std::fprintf(stderr, "Resizing sigs to %zu for %zu paths and %zu total items\n", result.signatures_.size(), paths.size(), csizes.back());
         if(even) {
             result.cardinalities_.resize(totalsize / opts.sketchsize_);
         }
