@@ -326,6 +326,11 @@ LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &resu
 #if COUNT_COMPARE_CALLS
     ++compare_count;
 #endif
+    if(verbosity > 1) {
+        std::fprintf(stderr, "About to compare sketches %zd and %zd. names size is %zu, signatures size is %zu. kmer counts %zu, and %zu kmers. Cardinalities %zu\n", i, j, result.names_.size(), result.signatures_.size(), result.kmercounts_.size(), result.kmers_.size(), result.cardinalities_.size());
+    }
+#if 0
+#endif
     long double ret = std::numeric_limits<LSHDistType>::max();
     const long double lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const long double invdenom = 1.L / opts.sketchsize_;
