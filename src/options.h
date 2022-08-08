@@ -54,6 +54,7 @@ enum OptArg {
     OPTARG_FASTCMPWORDS,
     OPTARG_FASTCMPNIBBLES,
     OPTARG_FULL_SETSKETCH,
+    OPTARG_PAIRLIST,
     OPTARG_DUMMY
 };
 
@@ -68,6 +69,7 @@ enum OptArg {
     LO_ARG("outprefix", OPTARG_OUTPREF)\
     LO_ARG("prefix", OPTARG_OUTPREF)\
     LO_ARG("topk", 'K')\
+    LO_ARG("top-k", 'K')\
     LO_ARG("similarity-threshold", 'T')\
     LO_ARG("fastcmp", OPTARG_FASTCMP)\
     LO_ARG("regsize", OPTARG_FASTCMP)\
@@ -160,7 +162,140 @@ enum OptArg {
     {"sketch-size-l2", required_argument, 0, 'L'},\
     {"sig-ram-limit", required_argument, 0, OPTARG_SIGRAMLIMIT},\
     {"maxcand", required_argument, 0, OPTARG_MAXCAND},\
-    {"setsketch-ab", required_argument, 0, OPTARG_SETSKETCH_AB}
+    {"setsketch-ab", required_argument, 0, OPTARG_SETSKETCH_AB},\
+    {"pairlist", required_argument, 0, OPTARG_PAIRLIST},\
+    {"verbose", no_argument, 0, 'v'}
+
+
+
+const std::vector<std::string> VALID_LONG_OPTION_STRINGS {{
+    "128bit",
+    "BMH",
+    "PMH",
+    "asymmetric",
+    "asymmetric-all-pairs",
+    "bagminhash",
+    "bagminhash",
+    "batch-size",
+    "bbit-sigs",
+    "bed",
+    "bigwig",
+    "binary",
+    "binary-output",
+    "bmh",
+    "by-chrom",
+    "cache",
+    "cache-sketches",
+    "cmp-outfile",
+    "cmpout",
+    "compute-edit-distance",
+    "containment",
+    "count-threshold",
+    "countdict",
+    "countmin-size",
+    "countsketch-size",
+    "distance",
+    "distout",
+    "doph",
+    "downsample",
+    "edit-distance",
+    "edit-distance",
+    "emit-binary",
+    "enable-protein",
+    "entmin",
+    "exact-kmer-dist",
+    "exact-kmer-dist",
+    "fastcmp",
+    "fastcmp-bytes",
+    "fastcmp-nibbles",
+    "fastcmp-shorts",
+    "fastcmp-words",
+    "ffile",
+    "filterset",
+    "full",
+    "full-setsketch",
+    "greedy",
+    "help",
+    "hp-compress",
+    "intersection",
+    "intersection-size",
+    "kmer-length",
+    "leafcutter",
+    "long-kmers",
+    "mash-distance",
+    "maxcand",
+    "multiset",
+    "nLSH",
+    "nlsh",
+    "no-canon",
+    "normalize-intervals",
+    "one-perm",
+    "oneperm",
+    "oneperm-setsketch",
+    "oph",
+    "outfile",
+    "outprefix",
+    "pairlist",
+    "parse-by-seq",
+    "phylip",
+    "pmh",
+    "pminhash",
+    "poisson-distance",
+    "prefix",
+    "prob",
+    "probminhash",
+    "probs",
+    "protein",
+    "protein14",
+    "protein20",
+    "protein6",
+    "protein8",
+    "qfile",
+    "refine-exact",
+    "regbytes",
+    "regsize",
+    "save-kmercounts",
+    "save-kmers",
+    "seed",
+    "seq",
+    "set",
+    "set",
+    "set",
+    "setsketch-ab",
+    "sig-ram-limit",
+    "similarity-threshold",
+    "sketch-size-l2",
+    "sketchsize",
+    "spacing",
+    "square",
+    "symmetric-containment",
+    "threads",
+    "threshold",
+    "top-k",
+    "topk",
+    "verbose",
+    "window-size",
+}};
+
+// This function takes a vector of additional strings,
+// since subcommands may have special flags unique to them.
+// Add those strings to the second argument when validating those options.
+// For instance, --presketched exists on cmp but not sketch, and must be permitted for it but not sketch.
+static inline void validate_options(char **const opts, const std::vector<std::string>& extras={}) {
+    for(char **ptr = opts; *ptr; ++ptr) {
+        const int32_t len = std::strlen(*ptr);
+        if(len > 2 && std::memcmp(*ptr, "--", 2) == 0) {
+            const std::string flag((*ptr) + 2, (*ptr) + len);
+            if(std::find(std::cbegin(extras), std::cend(extras), flag) != std::cend(extras)) {
+                continue;
+            }
+            if(std::find(std::cbegin(VALID_LONG_OPTION_STRINGS), std::cend(VALID_LONG_OPTION_STRINGS), flag) == std::cend(VALID_LONG_OPTION_STRINGS)) {
+                std::fprintf(stderr, "flag %s not found in expected set. See usage.\n", flag.data());
+                throw std::runtime_error(std::string("Flag ") + flag + " not found");
+            }
+        }
+    }
+}
 
 
 
@@ -220,6 +355,7 @@ enum OptArg {
         case 'B': sketch_space = SPACE_MULTISET; res = FULL_SETSKETCH; break;\
         case 'P': sketch_space = SPACE_PSET; res = FULL_SETSKETCH; break;\
         case 'Z': res = ONE_PERM; break;\
+        case 'v': ++verbosity; break;\
         case OPTARG_ISZ: measure = INTERSECTION; break;\
         case OPTARG_OUTPREF: {\
             outprefix = optarg; break;\
@@ -282,7 +418,29 @@ enum OptArg {
             compressed_a = sketch::setsketch::UintSetS::DEFAULT_A;\
             compressed_b = sketch::setsketch::UintSetS::DEFAULT_B;\
             nbytes_for_fastdists = 4.;\
-        } break;
+        } break;\
+        case OPTARG_PAIRLIST: {\
+            if(paths.size()) throw std::runtime_error("Expected empty paths list for pairlist command. Either provide pairlist or paths, not both.");\
+            flat_hash_map<std::string, uint32_t> pathids;\
+            std::ifstream ifs(optarg);\
+            for(std::string line;std::getline(ifs, line);) {\
+                auto spacepos = std::find_if(line.data(), line.data() + line.size(), [](auto x) {return std::isspace(x);});\
+                if(*spacepos == '\0') throw std::runtime_error("Expected two paths separated by a space in pairlist.");\
+                auto lhs = std::string(line.data(), spacepos - line.data());\
+                auto rhs = std::string(spacepos + 1, line.data() + line.size() - spacepos - 1);\
+                assert(!std::isspace(lhs.back()));\
+                assert(!std::isspace(lhs.front()));\
+                assert(!std::isspace(rhs.back()));\
+                assert(!std::isspace(rhs.front()));\
+                auto lit = pathids.find(lhs);\
+                if(lit == pathids.end()) pathids.emplace(lhs, pathids.size()).first;\
+                auto rit = pathids.find(rhs);\
+                if(rit == pathids.end()) pathids.emplace(rhs, pathids.size()).first;\
+                compareids.emplace_back(lit->second, rit->second);\
+            }\
+            for(auto &pair: pathids) paths.emplace_back(std::move(pair.first));\
+            break;\
+        }
 
 
 
@@ -421,7 +579,7 @@ static constexpr const char *siglen =
         "All of these are powered by the use of an LSH table built over the sketches, with the exception of exact mode (--countdict or --set), which use an LSH index built over their bottom-k hashes.\n"\
         "For details on LSH table parameters, see `LSH Options` below.\n"\
         "Top-K (K-Nearest-Neighbor) mode -- \n"\
-        "--topk <arg>\tMaximum number of nearest neighbors to list. If <arg> is greater than N - 1, pairwise distances are instead emitted.\n"\
+        "--topk/--top-k <arg>\tMaximum number of nearest neighbors to list. If <arg> is greater than N - 1, pairwise distances are instead emitted.\n"\
         "Thresholded Mode -- \n"\
         "--similarity-threshold <arg>\tMinimum fraction similarity for inclusion.\n\tIf this is enabled, only pairwise similarities over <arg> will be emitted.\n"\
         "Distance Output Options--\n"\

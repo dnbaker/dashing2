@@ -66,7 +66,7 @@ dashing2-64: $(OBJ64) libBigWig.a
 
 
 dashing2-0: $(OBJ0) libBigWig.a $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJ0) -o $@ $(LIB) $(EXTRA) libBigWig.a -UNDEBUG
 dashing2-d: $(OBJDBG) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-v: $(OBJV) libBigWig.a $(wildcard src/*.h)
@@ -95,49 +95,53 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
 	# $(wildcard src/*.h)
 %.o: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto -O3
 %.o: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto -O3 -std=c11
 %.64o: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t"
 %.64o: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t" -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t" -std=c11
 %.0: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -O0
 %.0: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O0 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O0 -std=c11
 %.vo: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O3
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
 %.vo: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -O3 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
 %.lto: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto
 %.lto: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DNDEBUG -flto -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto -std=c11
 %.do: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -O0
 %.do: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -O0 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -O0 -std=c11
 %.sano: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -fsanitize=address -O1
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -fsanitize=address -O1
 %.sano: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -fsanitize=address -O1
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -fsanitize=address -O1
 %.gobj: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -pg -fno-lto -DNDEBUG
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -pg -fno-lto -DNDEBUG
 %.ldo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto
 %.ldo: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto -std=c11
 %.fo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
 %.fo: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG -std=c11
 %.ld64o: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 %.f64o: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(LIB) $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
 src/osfmt.o: fmt/src/os.cc
 	$(CXX) -I fmt/include $(OPT) $(WARNING) $< -c -o $@ $(EXTRA)
+
+
+%: src/%
+	cp $< $@
 
 mmtest: test/mmtest.cpp src/mmvec.h
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -o $@ $(LIB) $(EXTRA)

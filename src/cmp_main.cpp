@@ -15,7 +15,11 @@ static option_struct name[] = {\
 
 
 void cmp_usage() {
-    std::fprintf(stderr, "dashing2 cmp usage is not written.\n");
+    std::fprintf(stderr, "dashing2 cmp <opts> [fastas... (optional)]\n"
+                         "We use only m-mers; if w <= k, however, this reduces to k-mers if the -w/--window-size is unspecified.\n"
+                         "--presketched\t To compute distances using a pre-sketched method (e.g., dashing2 sketch -o path), use this flag and pass in a single positional argument.\n"
+                         SHARED_DOC_LINES
+    );
 }
 void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std::vector<std::string> &paths) {
     DBG_ONLY(std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());)
@@ -89,15 +93,24 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             fsizes[i] = nelem;
             csizes[i + 1] = csizes[i] + nelem;
         }
+        result.nqueries(paths.size());
         // It's even if the items are actually sketches
         // And there are the same number of them per file
         const bool even = opts.kmer_result_ <= FULL_SETSKETCH &&
                  std::all_of(fsizes.begin() + 1, fsizes.end(), [r=fsizes.front()](auto x) {return x == r;});
+        if(even) {
+            opts.sketchsize_ = fsizes.front();
+        }
         const size_t totalsize = csizes.back();
         result.signatures_.resize(totalsize); // Account for the size of the sketch registers
         std::fprintf(stderr, "Resizing sigs to %zu for %zu paths and %zu total items\n", result.signatures_.size(), paths.size(), csizes.back());
         if(even) {
+            if(totalsize % opts.sketchsize_) {
+                throw std::runtime_error(std::string("sanity check: totalsize should be divisible if we get here. Totalsize ") + std::to_string(totalsize) + ", " + std::to_string(opts.sketchsize_));
+            }
             result.cardinalities_.resize(totalsize / opts.sketchsize_);
+        } else {
+            std::fprintf(stderr, "Warning: uneven file sizes. This is expected for hash sets but not sketches.");
         }
         if(bns::isfile(pf + ".kmerhashes.u64")) {
             DBG_ONLY(std::fprintf(stderr, "Loading k-mer hashes, too\n");)
@@ -107,6 +120,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             DBG_ONLY(std::fprintf(stderr, "Loading k-mer counts, too\n");)
             result.kmercounts_.resize(result.signatures_.size());
         }
+        assert(paths.size() == result.cardinalities_.size());
         OMP_PFOR_DYN
         for(size_t i = 0; i < paths.size(); ++i) {
             auto &path = paths[i];
@@ -176,15 +190,20 @@ int cmp_main(int argc, char **argv) {
     size_t batch_size = 0;
     bool fasta_dedup = false;
     std::string spacing;
+    std::vector<std::pair<uint32_t, uint32_t>> compareids; // TODO: consider a sparse mode comparing only pairs of presented genomes.
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
+    validate_options(argv, std::vector<std::string>{{"presketched"}});
     CMP_OPTS(cmp_long_options);
-    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
+    std::vector<std::string> paths;
+    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:L:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
         SHARED_FIELDS
         case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
     }}
     if(k < 0) k = nregperitem(rht, use128);
-    std::vector<std::string> paths(argv + optind, argv + argc);
+    if(compareids.empty()) {
+        paths.insert(paths.end(), argv + optind, argv + argc);
+    } else if(optind != argc) throw std::runtime_error("CLI paths must be empty to use pairlist mode.");
     std::unique_ptr<std::vector<std::string>> qup;
     if(nt < 0) {
         char *s = std::getenv("OMP_NUM_THREADS");
