@@ -106,6 +106,9 @@ void batched_write(const float * &src, std::back_insert_iterator<fmt::memory_buf
 }
 
 void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result) {
+    if(verbosity >= Verbosity::DEBUG) {
+        std::fprintf(stderr, "output format should be %s based on start\n", to_string(opts.output_format_).data());
+    }
     const size_t ns = result.names_.empty() ? result.nqueries(): result.names_.size();
     const std::string outp = opts.outfile_path_.empty() || opts.outfile_path_.front() == '-'
             ? "/dev/stdout"s: opts.outfile_path_;

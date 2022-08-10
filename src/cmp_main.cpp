@@ -23,9 +23,11 @@ void cmp_usage() {
 }
 void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std::vector<std::string> &paths) {
     DBG_ONLY(std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());)
-    std::fprintf(stderr, "Loading results. Paths of size %zu", paths.size());
-    for(const auto& path: paths) {
-        std::fprintf(stderr, "Path %s/%zd\n", path.data(), &path - paths.data());
+    if(verbosity >= Verbosity::INFO) {
+        std::fprintf(stderr, "Loading results. Paths of size %zu", paths.size());
+        for(const auto& path: paths) {
+            std::fprintf(stderr, "Path %s/%zd\n", path.data(), &path - paths.data());
+        }
     }
     auto &pf = paths.front();
     struct stat st;
@@ -193,10 +195,13 @@ int cmp_main(int argc, char **argv) {
     std::vector<std::pair<uint32_t, uint32_t>> compareids; // TODO: consider a sparse mode comparing only pairs of presented genomes.
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
+    if(verbosity >= Verbosity::DEBUG) {
+        std::fprintf(stderr, "output format should be %s based on start\n", to_string(of).data());
+    }
     validate_options(argv, std::vector<std::string>{{"presketched"}});
     CMP_OPTS(cmp_long_options);
     std::vector<std::string> paths;
-    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:L:Ns2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
+    for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:L:vNs2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
         SHARED_FIELDS
         case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
     }}

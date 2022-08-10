@@ -55,7 +55,11 @@ std::string to_string(CountingType ct) {
 
 std::string to_string(OutputFormat of) {
     if(of == HUMAN_READABLE) return "HumanReadable";
-    return "MachineReadable";
+    else if(of == MACHINE_READABLE) return "MachineReadable";
+    else {
+        throw std::runtime_error(std::string("Unexpected output format of value ") + std::to_string(static_cast<int32_t>(of)));
+    }
+    return {};
 }
 std::string to_string(OutputKind ok) {
     switch(ok) {
