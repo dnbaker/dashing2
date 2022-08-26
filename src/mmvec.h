@@ -284,39 +284,47 @@ public:
         path_ = "";
     }
     void resize(size_t newsz, T init=T(0)) {
+        std::fprintf(stderr, "Resizing from %zd to %zu\n", size_, newsz);
         if(newsz > size_) {
             reserve(newsz);
             std::fill_n(data() + size_, newsz - size_, init);
         } // else if(newsz < size_) std::destroy_n(data() + newsz, size_ - newsz); (this would be needed for non-trivial types.)
         size_ = newsz;
+        std::fprintf(stderr, "Resized from %zd to %zu\n", size_, newsz);
     }
     void reserve(size_t newcap) {
+        std::fprintf(stderr, "Reserving %zu wih capacity %zu\n", newcap, capacity_);
         if(newcap <= capacity_) return;
+        std::fprintf(stderr, "newcap %zu\n", newcap);
         const size_t ct = countthreshold();
         if(path_.empty() || newcap < ct) {
+            std::fprintf(stderr, "All done in memory - nothing happens. Resizing vector.\n");
             ram_.resize(newcap);
+            std::fprintf(stderr, "Resized vector");
             capacity_ = ram_.size();
             return;
         }
+        std::fprintf(stderr, "Need disk space. Unmapping\n");
         if(ms_.is_open()) ms_.unmap();
         size_t newnbytes = offset_ + newcap * sizeof(T);
         if(path_.empty())
             throw std::runtime_error("Failed to spill to disk, as path is empty");
+        std::fprintf(stderr, "Now calling truncate to %zu bytes\n", newnbytes);
         if(::truncate(path(), newnbytes)) {
             struct stat st;
             ::stat(path(), &st);
             throw std::runtime_error("Failed to resize"s + path_ + " via ::truncate");
         }
+        std::fprintf(stderr, "About to map\n");
         std::error_code ec;
         ms_.map(path_, offset_, sizeof(T) * newcap, ec);
+        std::fprintf(stderr, "Mmap'd\n");
         if(ec) {
             perror("Don't have permission to map.\n");
             throw std::runtime_error(ec.message());
         }
         if(capacity_ <= ct && newcap >= ct && ram_.size()) {
-#ifndef NDEBUG
             std::fprintf(stderr, "Crossing from %zu to %zu passes count threshold %zu, so we are writing the vector from RAM to disk and switching to mmap.\n", capacity_, newcap, ct);
-#endif
             std::copy(ram_.begin(), ram_.end(), (T *)ms_.data());
             VecT tmp(std::move(ram_));
             assert(ram_.empty());

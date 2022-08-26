@@ -82,30 +82,46 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         assert((st.st_size - offset) % sizeof(RegT) == 0);
         result.signatures_.assign(pf, offset, (st.st_size - offset) / sizeof(RegT));
     } else { // Else, we have to load sketches from each file
-        std::fprintf(stderr, "Parsing in data from file\n");
-        result.nperfile_.resize(paths.size());
+        if(verbosity >= Verbosity::INFO ) {
+            std::fprintf(stderr, "Parsing in data from file\n");
+        }
+        const size_t npaths = paths.size();
+        result.nperfile_.resize(npaths);
         auto &fsizes = result.nperfile_;
         std::vector<size_t> csizes(fsizes.size() + 1);
-        for(size_t i = 0; i < paths.size(); ++i) {
-            struct stat st;
-            ::stat(paths[i].data(), &st);
-            size_t mysz = st.st_size - 8; // 8 bytes for the cardinality (for sketches/kmer sets), length of the sequence for minimizer sequences
+        struct stat st;
+        for(size_t i = 0; i < npaths; ++i) {
+            if(::stat(paths[i].data(), &st)) {
+                std::fprintf(stderr, "File does not exist at %s/%zu\n", paths[i].data(), i);
+                std::exit(EXIT_FAILURE);
+            }
+            const size_t mysz = st.st_size - 8; // 8 bytes for the cardinality (for sketches/kmer sets), length of the sequence for minimizer sequences
+            if(verbosity >= Verbosity::DEBUG) {
+                std::fprintf(stderr, "Checking file size for %zu/%zu: %zd\n", i, npaths, mysz);
+            }
             assert(mysz % sizeof(RegT) == 0);
             const auto nelem = mysz / sizeof(RegT);
             fsizes[i] = nelem;
             csizes[i + 1] = csizes[i] + nelem;
         }
-        result.nqueries(paths.size());
+        result.nqueries(npaths);
         // It's even if the items are actually sketches
         // And there are the same number of them per file
         const bool even = opts.kmer_result_ <= FULL_SETSKETCH &&
                  std::all_of(fsizes.begin() + 1, fsizes.end(), [r=fsizes.front()](auto x) {return x == r;});
+        if(verbosity >= Verbosity::INFO) {
+            std::fprintf(stderr, "[%s:%d] File sizes are %s\n", __FILE__, __LINE__, even ? "even": "uneven");
+        }
         if(even) {
+            if(fsizes.empty()) {
+                throw std::runtime_error("fsizes are empty but should not be.");
+            }
             opts.sketchsize_ = fsizes.front();
         }
+        std::fprintf(stderr, "Sketchsize is now %zd\n", size_t(opts.sketchsize_));
         const size_t totalsize = csizes.back();
+        std::fprintf(stderr, "Resizing signatures to size %zu\n", totalsize);
         result.signatures_.resize(totalsize); // Account for the size of the sketch registers
-        std::fprintf(stderr, "Resizing sigs to %zu for %zu paths and %zu total items\n", result.signatures_.size(), paths.size(), csizes.back());
         if(even) {
             if(totalsize % opts.sketchsize_) {
                 throw std::runtime_error(std::string("sanity check: totalsize should be divisible if we get here. Totalsize ") + std::to_string(totalsize) + ", " + std::to_string(opts.sketchsize_));
@@ -113,6 +129,9 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             result.cardinalities_.resize(totalsize / opts.sketchsize_);
         } else {
             std::fprintf(stderr, "Warning: uneven file sizes. This is expected for hash sets but not sketches.");
+        }
+        if(verbosity >= Verbosity::INFO) {
+            std::fprintf(stderr, "[%s:%d] Resized signatures\n", __FILE__, __LINE__);
         }
         if(bns::isfile(pf + ".kmerhashes.u64")) {
             DBG_ONLY(std::fprintf(stderr, "Loading k-mer hashes, too\n");)
@@ -122,9 +141,15 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             DBG_ONLY(std::fprintf(stderr, "Loading k-mer counts, too\n");)
             result.kmercounts_.resize(result.signatures_.size());
         }
-        assert(paths.size() == result.cardinalities_.size());
+        assert(npaths == result.cardinalities_.size());
+        if(verbosity >= Verbosity::INFO) {
+            std::fprintf(stderr, "[%s:%d] About to load from file\n", __FILE__, __LINE__);
+        }
         OMP_PFOR_DYN
-        for(size_t i = 0; i < paths.size(); ++i) {
+        for(size_t i = 0; i < npaths; ++i) {
+            if(verbosity >= Verbosity::INFO) {
+                std::fprintf(stderr, "Loading from file %zd/%s\n", i, paths[i].data());
+            }
             auto &path = paths[i];
             std::FILE *ifp = bfopen(path.data(), "rb");
             if(even && result.cardinalities_.size() > i) {
@@ -154,6 +179,9 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                 }
                 std::fclose(ifp);
             }
+        }
+        if(verbosity >= Verbosity::INFO) {
+            std::fprintf(stderr, "Loaded all sketches from file.\n");
         }
     }
 }
@@ -201,10 +229,16 @@ int cmp_main(int argc, char **argv) {
     validate_options(argv, std::vector<std::string>{{"presketched"}});
     CMP_OPTS(cmp_long_options);
     std::vector<std::string> paths;
+    if(verbosity >= INFO) {
+        std::fprintf(stderr, "output format should be %s before parsing options \n", to_string(of).data());
+    }
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:L:vNs2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
-        SHARED_FIELDS
         case OPTARG_HELP: case '?': case 'h': cmp_usage(); return 1;
+        SHARED_FIELDS
     }}
+    if(verbosity >= INFO) {
+        std::fprintf(stderr, "output format should be %s after parsing options \n", to_string(of).data());
+    }
     if(k < 0) k = nregperitem(rht, use128);
     if(compareids.empty()) {
         paths.insert(paths.end(), argv + optind, argv + argc);
