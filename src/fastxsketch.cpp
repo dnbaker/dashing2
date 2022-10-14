@@ -579,6 +579,7 @@ do {\
                 std::array<long double, 4> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_), static_cast<long double>(opts.sketchsize_)};
                 checked_fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
                 if(opts.fd_level_ == 0.5) {
+                    std::fprintf(stderr, "Don't exepct this to be happening\n");
                     const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
                     for(size_t i = 0; i < opts.sketchsize_; i += 2) {
                         uint8_t reg = (srcptr[i] << 4) | srcptr[i + 1];
@@ -588,12 +589,14 @@ do {\
                     checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
                 }
             } else {
+                std::fprintf(stderr, "Writing %zu bytes for sketch\n", ss * sizeof(RegT));
                 checked_fwrite(ofp, ptr, ss * sizeof(RegT));
             }
             std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {
-                if(opts.fd_level_ != .5) {
-                    std::copy(ptr, ptr + (ss >> sigshift), &ret.signatures_[mss >> sigshift]);
+                if(!opts.sketch_compressed_set) {
+                    std::fprintf(stderr, "Copying signatures normal way from tid %d\n", tid);
+                    std::memcpy(&ret.signatures_[mss >> sigshift], ptr, (ss >> sigshift));
                 } else {
                     const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
                     uint8_t *destptr = (uint8_t *)&ret.signatures_[mss >> sigshift];

@@ -119,7 +119,7 @@ enum OptArg {
     LO_FLAG("square", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_ARG("regbytes", OPTARG_FASTCMP)\
     /*LO_ARG("set", 'H')*/\
-    {"fastcmp-nibbles", no_argument, 0, OPTARG_FASTCMPNIBBLES},\
+    /*{"fastcmp-nibbles", no_argument, 0, OPTARG_FASTCMPNIBBLES},*/\
     {"fastcmp-bytes", no_argument, 0, OPTARG_FASTCMPBYTES},\
     {"fastcmp-shorts", no_argument, 0, OPTARG_FASTCMPSHORTS},\
     {"fastcmp-words", no_argument, 0, OPTARG_FASTCMPWORDS},\
@@ -313,8 +313,8 @@ static inline void validate_options(char **const opts, const std::vector<std::st
 
 #define CMPOUT_FIELD case OPTARG_CMPOUT: {cmpout = optarg; break;}
 #define FASTCMP_FIELD case OPTARG_FASTCMP: {nbytes_for_fastdists = std::atof(optarg);\
-            if(nbytes_for_fastdists != 8. && nbytes_for_fastdists != 4. && nbytes_for_fastdists != 2. && nbytes_for_fastdists != 1. && nbytes_for_fastdists != .5){\
-                std::fprintf(stderr, "--fastcmp must have 8, 4, 2, 1, or 0.5 as the argument. These are the only register sizes supported.\n");\
+            if(nbytes_for_fastdists != 8. && nbytes_for_fastdists != 4. && nbytes_for_fastdists != 2. && nbytes_for_fastdists != 1.){\
+                std::fprintf(stderr, "--fastcmp must have 8, 4, 2, or 1 as the argument. These are the only register sizes supported.\n");\
                 throw std::runtime_error("See usage for --fastcmp instructions.");\
             }\
             break;\
@@ -628,7 +628,7 @@ static constexpr const char *siglen =
         "\t          --fastcmp-bytes sets a and b to 20 and 1.2, and sets --fastcmp to 1\n"\
         "\t          --fastcmp-shorts sets a and b to .06 and 1.0005, and sets --fastcmp to 2.\n"\
         "\t          --fastcmp-words sets a and b to 19.77 and 1.0000000109723500835 and sets --fastcmp to 4.\n"\
-        "\t          --fastcmp-nibbles sets a and b to .0005 and 2.71828, and sets --fastcmp to .5\n"\
+        /*"\t          --fastcmp-nibbles sets a and b to .0005 and 2.71828, and sets --fastcmp to .5\n"*/\
         "\n"\
         "If you instead want to truncate to the bottom-b bits of the signature --\n"\
         "\t          --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
