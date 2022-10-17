@@ -450,16 +450,30 @@ static constexpr const char *siglen =
         sizeof(RegT) == 4 ? "32":
         sizeof(RegT) == 8 ? "64": "128";
 #define SHARED_DOC_LINES \
-        "Flags:\n\n"\
-        "Runtime options:\n"\
-        "-p/--threads: Set number of threads [1]\n"\
-        "Encoding options\n"\
+        "General usage:\n"\
+        "dashing2 <subcommand> <flags> [optional: positional arguments]\n\n"\
+        "dashing2 takes all positional arguments as sketch objects.\nAlternatively, -F/--ffile takes inputs from a file in addition to positional arguments."\
+        "Threading parallelism is set with -p/--threads.\n"\
+        "\nThere are two main subcommands: sketch and cmp\n"\
+        "\nSketch only generates sketches, while cmp performs comparisons across inputs, but sketches if necessary.\n"\
+        "\n\nFile Format Options --\n"\
         "Dashing2 can sketch 4 kinds of files:"\
         "Fastq/Fasta, which has specific encoding options (default)\n"\
         "--bed to sketch BED files for interval sets\n"\
         "--bigwig to sketch BigWig files for coverage vectors\n"\
         "and --leafcutter to sketch LeafCutter splicing output\n"\
-        "\n\nFastx Options:\n"\
+        "\n\nSequence Parsing Options --\n"\
+        "If parsing fasta or fastq data, you can set several options:\n"\
+        "  1. Alphabet [Default: DNA]. See 'Sequence Alphabet Options' below for more details.\n"\
+        "  2. K-mer length (-k/--kmer-length) [Default: Maximum expressible in uint64_t (32 for DNA)]\n"\
+        "  3. Window size (-w/--window-size) [Default: k-mer length]. Selects minimum-hash item from window length. Larger windows yields fewer minimizers.\n"\
+        "  4. K-mer spacing. (--spacing) [Default: unspaced]. Allows for some positions to be ignored and others used. See below for more detail.\n\n"\
+        "  5. K-mer encoding size. Defaults to uint64_t. 128-bit integers (up to 64bp DNA) can be enabled with --long-kmers.\n"\
+        "     Dashing2 supports unbounded k-mer length by switching to rolling hashing if k is greater than the maximum possible length for the alphabet chosen.\n"\
+        "  6. Disabling Canonicalization (--no-canon). By default, DNA alphabet k-mers are canonicalized to abstract strand. --no-canon causes Dashing2 to be strand-specific.\n"\
+        "  7. Seed (--seed). To draw samples from a new hash function, you can provide a seed to the analysis.\n"\
+        "  8. K-mer filtering, such as from a set of sequences, downsampling, or minimum count. See Detailed Filtering Options below for details.\n"\
+        "Detailed Sequence Parsing Options\n"\
         "-k/--kmer-length: set k. Defaults to the largest k expressible directly in uint64_t.\n"\
         "If k is greater than this limit (31 for DNA, 14 for --protein, 22 for --protein8, 24 for --protein6), then rolling hashes will be generated instead of exact k-mer encodings.\n"\
         "-w/--window-size: set window size for winnowing; by default, all k-mers are used. If w > k, then only the minimum-hash k-mer in each window is processed\n"\
@@ -471,9 +485,8 @@ static constexpr const char *siglen =
         "This can also be run-length compressed in <space, num> format.\n"\
         "For example, --spacing 0,1x2,0 is equivalent to 0,1,1,0.\n"\
         "-2/--128bit/long-kmers: Use 128-bit k-mer hashes instead of 64-bit\n"\
-        "-m/--threshold/--count-threshold <arg>: Set a count threshold for inclusion. Default: 0. If > 1, this will only sketch k-mers with count >= <arg>\n"\
-        "\n\nFastx Alphabet:\n"\
-        "Dashing2 sketches DNA be default. This can be changed with the following flags; this will disable canonicalization.\n"\
+        "Detailed Sequence Alphabet Options\n\n"\
+        "Dashing2 sketches DNA by default. This can be changed with the following flags; this will disable canonicalization.\n"\
         "--enable-protein: Use 20 character amino acid alphabet.\n"\
         "--protein14: Use 14 character amino acid alphabet.\n"\
         "--protein6: Use 6 character amino acid alphabet.\n"\
@@ -484,22 +497,20 @@ static constexpr const char *siglen =
         "        Otherwise, this changes the hash function applied to k-mers when generated sorted hash sets. This makes it easy to decode quickly, but we can still get good bottom-k estimates using these hashes\n"\
         "        the xor value for u64 kmers (unless --long-kmers is enabled) is the Wang 64-bit hash of the seed.\n"\
         "        u128 kmers (--long-kmers) have the same lower 64 bits, but the upper 64 bits are the Wang 64-bit hash of the u64 xor value.\n"\
-        "\n\nPathsOptions\n"\
+        "Detailed Filtering Options\n\n"\
+        "--downsample\t Downsample minimizers at fraction <arg> . Default is 1: IE, all minimizers pass.\n"\
+        "-m/--threshold/--count-threshold <arg>: Set a count threshold for inclusion. If set to > 1, this will only sketch k-mers with count >= <arg>\n"\
+        "If there are a set of common k-mers or artefactual sequence, you can specify --filterset to skip k-mers in this file when sketching other files.\n"\
+        "By default, this converts it into a sorted hash set and skips k-mers which are found in the set.\n"\
+        "`--filterset [path]` yields this.\n"\
+        "\n\nInput File Options --\n"\
         "By default, dashing2 reads positional arguments and sketches them. You may want to use flags instructing it\n"\
         "to read from paths in <file>. Additionally, you can put multiple files separated by spaces into a single line "\
         "to place them all into a single sketch instead.\n"\
         "-F/--ffile: read paths from file in addition to positional arguments.\n"\
         "-Q/--qfile: read query paths from file; this is used for asymmetric queries (e.g., containment).\n"\
         "If multiple files are space-delimited in a single line, they will be sketched jointly.\n\n"\
-        "K-mer Filtering\n"\
-        "If there are a set of common k-mers or artefactual sequence, you can specify --filterset to skip k-mers in this file when sketching other files.\n"\
-        "By default, this converts it into a sorted hash set and skips k-mers which are found in the set.\n"\
-        "`--filterset [path]` yields this.\n"\
-        "--downsample\t Downsample minimizers at fraction <arg> . Default is 1: IE, all minimizers pass.\n"\
         "\nSketch options\n"\
-        "These decide how k-mers are accumulated.\n"\
-        "Default behavior is set sketching (tossing multiplicities). If --multiset or --prob is set or a minimum count is provided,"\
-        "\nk-mers will be counted before sketching.\n"\
         "-S/--sketchsize: Set sketchsize (1024)\n"\
         "Warning: this is a significant change from Dashing1, where sketch size was required to be a power of 2, and so the sketch size would be 2**<arg>.\n"\
         "This restriction is no longer in place, and so any positive integer can be selected.\n"\
@@ -511,92 +522,83 @@ static constexpr const char *siglen =
         "\t                 --outprefix: specifies directory in which to save sketches instead of adjacent to the input files.\n"\
         "\t                 aliases: --prefix.\n"\
         "\t                 Note: You must have permission to write in the specified folder.\n"\
-        "\nSketching modes\n\n"\
-        "When sketching, there are several sketch options.\n"\
-        "We use the SetSketch as the default sketch structure; This ignores multiplicities, except for filtering \n"\
-        "SetSketching -\n"\
-        "1. One-Permutation (stochastically-averaged) SetSketch.\n"\
-        "This is the default mode.\n"\
-        "-Z/--doph/--oneperm/--oneperm-setsketch: \n"\
-        "Stochastically-averaged setsketch. This is faster at sketching, but has a small probability of failure which grows with sketch size. Big one-permutation sketches may perform poorly.\n"\
-        "This is faster to sketch, equal speed to compare; it may fail if the sketch size is too large;\n"\
-        "If sketchsize is significantly smaller than the entities being processed, this should work;\n"\
-        "This should perform similarly to default setsketch behavior, but has better behaviors with large sketches and small sets\n"\
-        "2. FullSetSketch (the default), sketches in set space. Multiplicities are not considered.\n"\
-        "--full/--full-setsketch to enable.\n"\
-        "This uses increasing exponential random variates, and is more reliable but slower than the One-Permutation.\n"\
-        "Weighted Sketching -\n"\
-        "We provide to weighted sketching algorithms -- BagMinHash and ProbMinHash\n"\
-        "Both require counting for sequence data, but do not for input methods with counting already performed, e.g. BigWig.\n"\
-        "ProbMinHash is an LSH for the probability Jaccard index, which normalizes observations by total counts, yielding a discrete probability distribution for each collection.\n"\
-        "ProbMinHash is most applicable for datasets where sampling fractions are important, such as expression or splicing counts.\n"\
-        "--prob: Sketch k-mers into ProbMinHash. Treats weighted sets as discrete probability distributions.\n"\
-        "        Aliases: --pminhash, --probs, --pmh, --PMH\n"\
-        "BagMinHash is an LSH for the weighted Jaccard similarity, which treats k-mer counts as weighted sets.\n"\
-        "BagMinHash is most applicable for datasets where the absolute quantities of an event matter, rather than its fraction of the complete dataset.\n"\
-        "-B/--multiset: Treats weighted sets as multisets.\n"\
-        "        Aliases: --bagminhash, --bmh, --BMH\n"\
-        "Its construction time typically comes at 2-10x runtime cost over ProbMinHash, depending on sketch size.\n\n"\
-        "Weighted Sketching (Counting) Parameters -\n"\
-        "-c/--countmin-size/--countsketch-size: Use Count-Sketch counting instead of exact counting, using <arg> as the size.\n    "\
-        "This allows you to avoid unbounded dictionary size at the cost of some approximation of the weighted sets\n"\
-        "This only affects BagMinHash and ProbMinHash, and is only relevant to sequence data.\n"\
-        "\n\nExact Modes\n"\
-        "You can also emit full k-mer sets, a count dictionary (key-count map), or a set of minimizer sequences\n"\
-        "-H/--set: Full k-mer set. This generates a sorted hash set for k-mers in the data. If the parser is windowed (-w is fairly large), this could even be rather small.\n"\
-        "                If an LSH table is generated, then weighted bottom-k hashes are used to build an LSH table\n"\
-        "-J/--countdict: Full k-mer countdict. \n"\
-        "                This generates a sorted hash set for k-mers in the data, and additionally saves the associated counts for these k-mers.\n"\
-        "                If an LSH table is generated, then weighted bottom-k hashes as in Cohen, E. \"Summarizing Data using Bottom-K Sketches\"\n"\
-        "-G/--seq: Full k-mer (or minimizer) sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"\
-        "          On the other hand, it can require higher memory for large sequence collections\n"\
+        "\nSketching Mode Options -- \n\n"\
+        "Inputs can be summarized into several structures, and flags determine which is chosen.\n"\
+        "1. SetSketch (one-permutation). Treats inputs as sets, ignoring multiplicities. The fastest option.\n"\
+        "   This is faster at sketching, but has a small probability of failure which grows with sketch size. Big one-permutation sketches may perform poorly.\n"\
+        "   (Default setting.)\n"\
+        "2. FullSetSketch. Also treats inputs as sets but has better behavior for larger sketches and small sets.\n"\
+        "   FullSetSketch is slower than one-permutation at sketching, and equally fast at comparisons than One-Permutation.\n"\
+        "   --full/--full-setsketch to enable.\n"\
+        "\n"\
+        " We provide to weighted sketching algorithms -- WeightedSetSketch and DiscreteProbabilitySetSketch\n"\
+        " Both require counting for sequence data, but do not for input methods with counting already performed, e.g. BigWig.\n"\
+        " Full k-mer counting is enabled by default, but memory requirements can be fixed by using a count-min sketch during sketching.\n"\
+        " Enabled by --countmin-size [number-registers], this allows for weighted sketching with fixed memory usage at the expense of some approximation.\n"\
+        " This is only relevant to WeightedSetSketch and DiscreteProbabilitySetSketch.\n"\
+        "3. WeightedSetSketch: Weighted Sets sketched by BagMinHash\n"\
+        "   Multiset sketching via BagMinHash is an LSH for the weighted Jaccard similarity, which treats k-mer counts as weighted sets.\n"\
+        "   -B/--multiset/--bagminhash to enable.\n"\
+        "4. DiscreteProbabilitySetSketch: Discrete Probability Distributions using ProbMinHash\n"\
+        "   ProbMinHash is an LSH for the probability Jaccard index, which normalizes observations by total counts, yielding a discrete probability distribution for each collection.\n"\
+        "   ProbMinHash is most applicable for datasets where sampling fractions are important, such as expression or splicing counts.\n"\
+        "   --prob/--pminhash\n"\
+        "   ProbMinHash is 2-10x as fast as BagMinHash at sketching.\n"\
+        " We also provide some exact comparison and sketching modes.\n"\
+        " These include full k-mer sets (--set), a k-mer count dictionary (--countdict), or a sequence of minimizers (--seq)\n"\
+        " 5. K-mer Sets.\n"\
+        "   This generates a sorted hash set for k-mers in the data. If the parser is windowed (-w is fairly large), this could even be rather small.\n"\
+        "   -H/--set to enable\n"\
+        "   If an LSH table is generated, then weighted bottom-k hashes are used to build an LSH table\n"\
+        " 6. Full k-mer countdict. \n"\
+        "    This generates a sorted hash set for k-mers in the data, and additionally saves the associated counts for these k-mers.\n"\
+        "    If an LSH table is generated, then weighted bottom-k hashes as in Cohen, E. \"Summarizing Data using Bottom-K Sketches\"\n"\
+        "   -J/--countdict to enable \n"\
+        " 7. Full k-mer (or minimizer) sequence. This faster than building the hash set, and can be used to build a minimizer index afterwards\n"\
         "          If you use --parse-by-seq with this and an output path is provided, then the stacked minimizer sequences will be written to it.\n"\
         "          The format is the similar to the standard stacked sketches, except that the cardinality fields instead represent minimizer sequence lengths (in 64-bit registers).\n"\
         "          Specifically, it consists of a header: [uint64_t nitems, uint32_t k, uint32_t w], followed by `nitems` [double], specifying sequence lengths of 64-bit registers\n"\
-        "    Dependent option (only for --seq/-G parsing)\n"\
+        "   -G/--seq to enable.\n"\
+        "    Dependent option:\n"\
         "          --hp-compress:\n"\
         "              Minimizer sequence will be homopolymer-compressed before emission. \n"\
-        "              This makes the sequences insensitive to the lengths of minimizer stretches, which may simplify match finding\n"\
-        "\n\nDistance Options (shared)\n"\
-        "Exhaustive Distance Outputs--\n"\
-        "The default output format is all-pairs upper-triangular.\n"\
-        "We provide three other full matrix methods - \n"\
-        "1. PHYLIP Upper Triangular distance matrix, enabled by --phylip.\n"\
-        "2. Square distance matrix, enabled by --asymmetric-all-pairs\n"\
-        "--asymmetric-all-pairs: emit square distance matrix\n"\
-        "  Emits a full square distance matrix rather than upper-triangular.\n"\
-        "  Aliases: --asymmetric, --square\n"\
-        "3. Rectangular matrix, enabled by -Q/-qfile\n"\
-        "Use this if you want to compare a set of queries to a set of references rather than complete all-pairs. Note: -F must be provided, or reference files should be added as positional arguments\n"\
-        "positional arguments and -F paths are treated as a reference set;\n"\
-        "Paths provided in -Q/--qfile are are treated as a query set.\n"\
-        "The output shape then has |F| rows and |Q| columns, (F, Q) in row-major format\n\n"\
-        "Sparse Distance Outputs--\n"\
-        "We provide several sparse distance options - \n"\
-        "    1. topk, -- only the top-k nearest neighbors are emitted for each item\n"\
-        "    2. thresholded, -- only the similarities > threshold are emitted\n"\
+        "              This makes the sequences ignore the lengths of minimizer stretches.\n"\
+        "\n\nOther Sketching Options -- \n"\
+        "-s/--save-kmers: Save k-mers. This puts the k-mers saved into .kmer files to correspond with the minhash samples. \n"\
+        "  If an output path is specified for dashing2 and --save-kmers is enabled, stacked k-mers will be written to <arg>.kmer64, and names will be written to <arg>.kmer.names.txt\n"\
+        "  This has a 16-byte header containing a 32-bit integer describing the alphabet used, 32 bits describing sketch size, one 32-bit integer for k, and one 32-bit integer for window-length.\n"\
+        "  This database can be used for dashing2 contain.\n"\
+        "-N/--save-kmercounts: Save k-mer counts for sketches. This puts the k-mer counts saved into .kmercounts.f64 files to correspond with the k-mers.\n"\
+        "-o/--outfile: sketches are stacked into a single file and written to <arg>\n"\
+        "  This is the path for the stacked sketches; to set output location, use --cmpout instead. (This is the distance matrix betweek sketches).\n"\
+        "  This can also reduce memory requirements, as the destination file is memory-mapped instead of held in memory.\n"\
+        "\n\nComparison Options -- \n"\
+        "We provide exhaustive (all-vs-all) comparisons, top-k nearest neighbor (KNN) graph generation and clustering. \n"\
+        "  Within Exhaustive Comparisons, we have dense and sparse. The first 3 are dense:\n"\
+        "    1. Upper Triangular PHYLIP (default)\n"\
+        "    2. Square distance matrix (--asymmetric-all-pairs/--square)\n"\
+        "    3. Rectangular distance matrix (--qfile/-Q)\n"\
+        "  Instead of performing pairwise comparisons across one set, you can instead compare all in set X against all in set Y.\n"\
+        "  We call this rectangular. When enabled with a path, entries on each line of the file at that path are treated as entities.\n"\
+        "  positional arguments and -F paths are treated as a reference set;\n"\
+        "  Paths provided in -Q/--qfile are are treated as a query set.\n"\
+        "  Performing --asymmetric-all-pairs with the same input for -F and -Q should yield equivalent results.\n"\
+        "  The output shape then has |F| rows and |Q| columns, (F, Q) in row-major format\n\n"\
+        " We also support Sparse Exhaustive Comparisons, where the results are limited to more important entries.\n"\
+        "  These include: \n"\
+        "  1. Top-K, (--topk) only the top-k nearest neighbors are emitted for each item\n"\
+        "  2. Thresholded, (--similarity-threshold), which emits entries only if the similarity exceeds the given threshold.\n"\
         "Both change the output format from a full matrix into compressed-sparse row (CSR) format listing only the filtered entries;\n"\
         "All of these are powered by the use of an LSH table built over the sketches, with the exception of exact mode (--countdict or --set), which use an LSH index built over their bottom-k hashes.\n"\
         "For details on LSH table parameters, see `LSH Options` below.\n"\
         "Top-K (K-Nearest-Neighbor) mode -- \n"\
         "--topk/--top-k <arg>\tMaximum number of nearest neighbors to list. If <arg> is greater than N - 1, pairwise distances are instead emitted.\n"\
-        "Thresholded Mode -- \n"\
+        "\nThresholded Mode -- \n"\
         "--similarity-threshold <arg>\tMinimum fraction similarity for inclusion.\n\tIf this is enabled, only pairwise similarities over <arg> will be emitted.\n"\
-        "Distance Output Options--\n"\
-        "--binary-output\tEmit binary output rather than human-readable.\n\n"\
-        "\t For symmetric pairwise, this emits condensed distance matrix in f32\n"\
-        "\t For -Q/--qfile usage, this emits a full rectangular distance matrix in of shape (|F|, |Q|)\n"\
-        "\t For asymmetric pairwise, this emits a full distance matrix in f32 in row-major storage.\n"\
-        "\t For asymmetric pairwise, this emits a flat distance matrix in f32\n"\
-        "\t For top-k filtered, this emits a matrix of min(k, |N|) x |N| of IDs and distances\n"\
-        "In `dashing2 sketch`, distances are not automatically computed; If set, they are written to <arg>\n"\
-        "In `dashing2 cmp`, this defaults to stdout.\n"\
-        "--cmpout/--distout/--cmp-outfile\tCompute distances and emit them to <arg>.\n"\
-        "\t For similarity-thresholded distances, this emits a compressed-sparse row (CSR) formatted matrix with 64-bit indptr, 32-bit indices, and 32-bit floats for distances\n"\
-        "We also provide Greedy Clustering for grouping/de-duplication, using the CD High-Identity with Tolerance (CD-HIT) algorithm, also powered by the LSH table.\n"\
-        "Greedy HIT Clustering\n"\
-        "This is enabled by a single parameter, --greedy <float (0-1]>, which determines the similarity threshold below which a new cluster is formed.\n"\
-        "--greedy <float (0-1]> For greedy clustering by a given similarity threshold; this selects representative sequences or sequence sets.\n"\
+        "\n\n"\
+        "Greedy HIT Clustering Options --\n"\
+        "In addition to exhaustive comparisons, we also perform greedy clustering using the CD High-Identity with Tolerance (CD-HIT) algorithm.\n"\
+        "--greedy <float (0-1]> For greedy clustering by a given similarity threshold.\n"\
         "This uses an LSH index by default. \n"\
         "    To compare all points to all clusters, add E to the end of the flag. (e.g., '--greedy 0.8E')"\
         "    By default, this emits the names of the entities (sequence names, if --parse-by-seq, and filenames otherwise).\n"\
@@ -604,11 +606,11 @@ static constexpr const char *siglen =
         "    Example: '--greedy 0.8F' or '--greedy 0.8FE'.\n"\
         "    This is only allowed for --parse-by-seq.\n"\
         "  As this number approaches 1, the number and uniformity of clusters grows.\n"\
-        "  For human-readable, this emits one line per cluster listing its constituents, ordered by similarity\n"\
-        "  For machine-readable, this file consists of 2 64-bit integers (nclusters, nsets), followed by (nclusters + 1) 64-bit integers, followed by nsets 64-bit integers, identifying which sets belonged to which clusters.\n"\
+        "  For human-readable output, this emits one line per cluster listing its constituents, ordered by similarity\n"\
+        "  For machine-readable output, this file consists of 2 64-bit integers (nclusters, nsets), followed by (nclusters + 1) 64-bit integers, followed by nsets 64-bit integers, identifying which sets belonged to which clusters.\n"\
         "  This is a vector in Compressed-Sparse notation.\n"\
         "  Python code for parsing the binary representation is available at https://github.com/dnbaker/dashing2/blob/main/python/parse.py.\n"\
-        "Runtime Options --\n"\
+        "\nDistance Register Size Options --\n"\
         "By default, we compare items with full hash function registers; to trade accuracy for speed, these sketches can be compressed before comparisons.\n"\
         "To truncate for faster comparisons, you can either select a register size to which to truncate to after generating full floating-point values, which will allow Dashing2 to use as much resolution as possible in a fixed number of bits.\n"\
         "On the other hand, this means that initial sketching needs more memory.\n"\
@@ -616,7 +618,7 @@ static constexpr const char *siglen =
         "--fastcmp/--regsize <arg>\tEnable faster comparisons using n-byte signatures rather than full registers. By default, these are logarithmically-compressed\n"\
         "  You can use this first approach with --fastcmp/--regsize. These are logarithmically compressed.\n"\
         "  For example, --fastcmp 1 uses byte-sized sketches, with a and b parameters inferred by the data to minimize information loss\n"\
-        "  <arg> may be 8 (64 bits), 4 (32 bits), 2 (16 bits), 1 (8 bits), or .5 (4 bits)\n"\
+        "  <arg> may be 8 (64 bits), 4 (32 bits), 2 (16 bits), or 1 (8 bits)\n"\
         "  Results may even be somewhat stabilized by the use of smaller registers.\n"\
         "\tDependent Options:\n"\
         "\t          --setsketch-ab <float1>,<float2>\n"\
@@ -628,13 +630,13 @@ static constexpr const char *siglen =
         "\t          --fastcmp-bytes sets a and b to 20 and 1.2, and sets --fastcmp to 1\n"\
         "\t          --fastcmp-shorts sets a and b to .06 and 1.0005, and sets --fastcmp to 2.\n"\
         "\t          --fastcmp-words sets a and b to 19.77 and 1.0000000109723500835 and sets --fastcmp to 4.\n"\
-        "\t          --fastcmp-nibbles sets a and b to .0005 and 2.71828, and sets --fastcmp to .5\n"\
+        /*"\t          --fastcmp-nibbles sets a and b to .0005 and 2.71828, and sets --fastcmp to .5\n"*/\
         "\n"\
         "If you instead want to truncate to the bottom-b bits of the signature --\n"\
         "\t          --bbit-sigs: truncate to bottom-<arg> bytes of signatures instead of logarithmically-compressed.\n"\
         "The runtime is effectively equivalent to the setsketch.\n"\
-        "\n\nDistance specifications\n"\
-        "The default value emitted is similarity. For MinHash/HLL/SetSketch sketches, this is the fraction of shared registers.\n"\
+        "\n\nComparison Function Options --\n"\
+        "The default comparison emitted is similarity. For MinHash/HLL/SetSketch sketches, this is the fraction of shared registers.\n"\
         "This can be changed to a distance (--mash-distance) for k-mer similarity, where it can be used for hierarchical clustering.\n"\
         "--mash-distance/--poisson-distance/--distance\t Emit distances, as estimated by the Poisson model for k-mer distances.\n"\
         "--symmetric-containment\t Use symmetric containment as the distance. e.g., (|A & B| / min(|A|, |B|))\n"\
@@ -642,7 +644,19 @@ static constexpr const char *siglen =
         "--intersection-size/--intersection\t Emit the cardinality of the intersection between objects. IE, the number of k-mers shared between the two.\n"\
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
-        "LSH Options\n"\
+        "\n"\
+        "Distance Output Options --\n"\
+        "--binary-output\tEmit binary output rather than human-readable.\n\n"\
+        "\t For symmetric pairwise, this emits condensed distance matrix in f32\n"\
+        "\t For -Q/--qfile usage, this emits a full rectangular distance matrix in of shape (|F|, |Q|)\n"\
+        "\t For asymmetric pairwise, this emits a full distance matrix in f32 in row-major storage.\n"\
+        "\t For asymmetric pairwise, this emits a flat distance matrix in f32\n"\
+        "\t For top-k filtered, this emits a matrix of min(k, |N|) x |N| of IDs and distances\n"\
+        "In `dashing2 sketch`, distances are not automatically computed; If set, they are written to <arg>\n"\
+        "In `dashing2 cmp`, this defaults to stdout.\n"\
+        "--cmpout/--distout/--cmp-outfile\tCompute distances and emit them to <arg>.\n"\
+        "\t For similarity-thresholded distances, this emits a compressed-sparse row (CSR) formatted matrix with 64-bit indptr, 32-bit indices, and 32-bit floats for distances\n"\
+        "\n\nLSH Options --\n"\
         "There are a variety of heuristics in the LSH tables; however, the most important besides sketch size is the number of hash tables used.\n"\
         "--nLSH <int=2>\t\n"\
         "   Aliases: --nlsh\n"\
@@ -659,17 +673,6 @@ static constexpr const char *siglen =
         "                  This option is ignored in --topk mode, as the number of samples is ceil(3.5 * <topk>).\n"\
         "                  If set in --similarity-threshold mode, the number of items compared will be truncated to <maxcand> even if further samples are above the similarity threshold.\n"\
         "                  This can prevent quadratic complexity for the (rare) case that all items are within threshold distaance of each other.\n"\
-        "\nMetadata Options\n"\
-        "If sketching, you can also choose to save k-mers (the IDs corresponding to the k-mer selected), or\n"\
-        " and optionally save the counts for these k-mers\n"\
-        "This could be used to build inverted indexes (using samples to estimate containment), or for frequency estimation\n"\
-        "-s/--save-kmers: Save k-mers. This puts the k-mers saved into .kmer files to correspond with the minhash samples. \n"\
-        "If an output path is specified for dashing2 and --save-kmers is enabled, stacked k-mers will be written to <arg>.kmer64, and names will be written to <arg>.kmer.names.txt\n"\
-        "This has a 16-byte header containing a 32-bit integer describing the alphabet used, 32 bits describing sketch size, one 32-bit integer for k, and one 32-bit integer for window-length.\n"\
-        "This database can be used for dashing2 contain.\n"\
-        "-N/--save-kmercounts: Save k-mer counts for sketches. This puts the k-mer counts saved into .kmercounts.f64 files to correspond with the k-mers.\n"\
-        "-o/--outfile: sketches are stacked into a single file and written to <arg>\n"\
-        "This is the path for the stacked sketches; to set output location, use --cmpout instead. (This is the distance matrix betweek sketches).\n"\
 
 
 extern size_t MEMSIGTHRESH;
