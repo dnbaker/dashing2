@@ -97,6 +97,12 @@ enum OutputFormat {
     BINARY = MACHINE_READABLE
 };
 
+enum Verbosity: int {
+    STANDARD, // no extra logging
+    INFO, // information, but not low-level information
+    DEBUG,
+};
+
 std::string to_string(KmerSketchResultType t);
 std::string to_string(SketchSpace ss);
 std::string to_string(DataType dt);

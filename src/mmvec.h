@@ -314,9 +314,6 @@ public:
             throw std::runtime_error(ec.message());
         }
         if(capacity_ <= ct && newcap >= ct && ram_.size()) {
-#ifndef NDEBUG
-            std::fprintf(stderr, "Crossing from %zu to %zu passes count threshold %zu, so we are writing the vector from RAM to disk and switching to mmap.\n", capacity_, newcap, ct);
-#endif
             std::copy(ram_.begin(), ram_.end(), (T *)ms_.data());
             VecT tmp(std::move(ram_));
             assert(ram_.empty());
