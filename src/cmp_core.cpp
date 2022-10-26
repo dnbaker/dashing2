@@ -381,9 +381,14 @@ case v: {\
             // maps equality to 1 and down-estimates for account for collisions
             const long double b2pow = -std::ldexp(1.L, -static_cast<int>(opts.fd_level_ * 8.));
             ret = std::max(0.L, std::fma(res.first, invdenom, b2pow) / (1.L + b2pow));
-            if(opts.measure_ == INTERSECTION)
-                ret *= std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L);
-            else if(opts.measure_ == CONTAINMENT)
+            if(opts.measure_ == INTERSECTION || opts.measure_ == UNION_SIZE) {
+                const long double isz = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L);
+                if(opts.measure_ == INTERSECTION) {
+                    ret = isz;
+                } else { // UNION_SIZE
+                    ret = lhcard + rhcard - isz;
+                }
+            } else if(opts.measure_ == CONTAINMENT)
                 ret = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L) * ret / lhcard;
             else if(opts.measure_ == POISSON_LLR)
                 ret = sim2dist(ret);
@@ -408,6 +413,7 @@ case v: {\
             ret = std::max(1.L - (std::get<0>(triple) + std::get<1>(triple)), 0.L);
             switch(opts.measure_) {
                 case INTERSECTION: ret *= mu; break;
+                case UNION_SIZE: ret = lhcard + rhcard - (ret * mu); break;
                 case CONTAINMENT: ret  = ret * mu / lhcard; break;
                 case SYMMETRIC_CONTAINMENT:
                     ret = (ret * mu) / std::min(lhcard, rhcard); break;
@@ -436,12 +442,17 @@ case v: {\
                 eq = 0;
             }
             ucard = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
-            LSHDistType isz = ucard * eq, sim = eq;
-            ret = opts.measure_ == SIMILARITY ? sim
-                : opts.measure_ == INTERSECTION ? isz
-                : opts.measure_ == CONTAINMENT ? isz / rhcard
-                : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
-                : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
+            const LSHDistType isz = ucard * eq, sim = eq;
+            switch(opts.measure_) {
+                case SIMILARITY: ret = sim; break;
+                case INTERSECTION: ret = isz; break;
+                case CONTAINMENT: ret = isz / rhcard; break;
+                case SYMMETRIC_CONTAINMENT: ret = isz / (std::min(lhcard, rhcard)); break;
+                case POISSON_LLR: ret = sim2dist(sim); break;
+                case UNION_SIZE: ret = lhcard + rhcard - isz; break;
+                default: ret = LSHDistType(-1); break; // This never happens
+            }
+
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
             const RegT *sptr = result.signatures_.data();
@@ -461,6 +472,10 @@ case v: {\
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L) / std::min(lhcard, rhcard);
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L) / lhcard;
             else if(opts.measure_ == POISSON_LLR) ret = sim2dist(ret);
+            else if(opts.measure_ == UNION_SIZE) {
+                const long double isz = ret * std::max((lhcard + rhcard) / (1.L + ret), 0.L);
+                ret = (lhcard + rhcard - isz);
+            }
         }
     } else {
 #define CORRECT_RES(res, measure, lhc, rhc)\

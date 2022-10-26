@@ -55,6 +55,7 @@ enum OptArg {
     OPTARG_FASTCMPNIBBLES,
     OPTARG_FULL_SETSKETCH,
     OPTARG_PAIRLIST,
+    OPTARG_USZ,
     OPTARG_DUMMY
 };
 
@@ -99,6 +100,7 @@ enum OptArg {
     LO_FLAG("bbit-sigs", OPTARG_BBIT_SIGS, truncate_mode, 1)\
     LO_FLAG("intersection", OPTARG_ISZ, measure, INTERSECTION)\
     LO_FLAG("intersection-size", OPTARG_ISZ, measure, INTERSECTION)\
+    LO_FLAG("union-size", OPTARG_USZ, measure, UNION_SIZE)\
     LO_FLAG("mash-distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("distance", OPTARG_MASHDIST, measure, POISSON_LLR)\
     LO_FLAG("symmetric-containment", OPTARG_SYMCONTAIN, measure, SYMMETRIC_CONTAINMENT)\
@@ -273,6 +275,7 @@ const std::vector<std::string> VALID_LONG_OPTION_STRINGS {{
     "threshold",
     "top-k",
     "topk",
+    "union-size",
     "verbose",
     "window-size",
 }};
@@ -641,7 +644,8 @@ static constexpr const char *siglen =
         "--mash-distance/--poisson-distance/--distance\t Emit distances, as estimated by the Poisson model for k-mer distances.\n"\
         "--symmetric-containment\t Use symmetric containment as the distance. e.g., (|A & B| / min(|A|, |B|))\n"\
         "--containment\t Use containment as the distance. e.g., (|A & B| / |A|). This is asymmetric, so you must consider that when deciding the output shape.\n"\
-        "--intersection-size/--intersection\t Emit the cardinality of the intersection between objects. IE, the number of k-mers shared between the two.\n"\
+        "--intersection-size/--intersection\t Emit the cardinality of the intersection between entities. IE, the number of k-mers shared between the two.\n"\
+        "--union-size\t Emit the cardinality of the union between entities. IE, the number of k-mers in the union of the two.\n"\
         "--compute-edit-distance\t For edit distance, perform actual edit distance calculations rather than returning the distance in LSH space.\n"\
         "                       \t This means that the LSH index eliminates the quadratic barrier in candidate generation, but they are refined using actual edit distance.\n"\
         "\n"\
