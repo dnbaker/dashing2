@@ -256,7 +256,7 @@ int contain_main(int argc, char **argv) {
             fmt::print(ofp, "\t{}", names[i]);
         fmt::print(ofp, "\n");
         for(size_t i = 0; i < nq; ++i) {
-            fmt::print(ofp, streamfiles[i]);
+            fmt::print(ofp, "{}", streamfiles[i]);
             const float *cmatptr = &coverage_mat[nitems * i];
             const float *cstatsptr = &coverage_stats[nitems * i];
             size_t j = 0;

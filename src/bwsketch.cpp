@@ -150,7 +150,7 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
             bwIteratorDestroy(ptr);
         }
         ret.card_ = total_weight;
-        ret.global_.reset(new std::vector<RegT>(std::move(reduce(retmap))));
+        ret.global_.reset(new std::vector<RegT>(reduce(retmap)));
     } else {
         DBG_ONLY(auto timestart = std::chrono::high_resolution_clock::now();)
         auto cp = fp->cl;

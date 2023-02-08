@@ -18,7 +18,11 @@ namespace fastx_parser {
     static const size_t MAX_BACKOFF_ITERS = 1024;
 
     ALWAYS_INLINE static void cpuRelax() {
+#ifndef __aarch64__
       asm("pause");
+#else
+      asm volatile ("yield" ::: "memory");
+#endif
     }
 
     ALWAYS_INLINE void yieldSleep() {

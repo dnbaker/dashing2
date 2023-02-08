@@ -20,7 +20,7 @@ void emit_neighbors(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
         fmt::print(ofp, "#Collection\tNeighbor lists -- name:distance, separated by tabs\n");
         for(size_t i = 0; i < lists.size(); ++i) {
             auto &l = lists[i];
-            fmt::print(ofp, result.names_[i]);
+            fmt::print(ofp, "{}", result.names_[i]);
             for(size_t j = 0; j < l.size(); ++j) {
                 const auto [msr, rhid] = l[j];
                 fmt::print(ofp, "\t{}:{:0.8g}", result.names_[rhid], msr);

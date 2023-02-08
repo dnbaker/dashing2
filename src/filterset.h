@@ -45,12 +45,34 @@ class FilterSet {
     CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>>
         fshasher_;
     static constexpr size_t bits_per_reg = sizeof(T) * CHAR_BIT;
-    uint64_t hash(uint64_t x) const {return fshasher_(x);}
-    uint64_t hash(u128_t x) const {return fshasher_(uint64_t(x)) - fshasher_(uint64_t(x>>64));}
     template<typename T>
-    uint64_t hash(T x) {
-        if constexpr(sizeof(T) <= 8) return hash(uint64_t(x));
-        else return hash(u128_t(x));
+    uint64_t hash(const T x) const noexcept {
+        if constexpr(std::is_same_v<T, uint64_t>) {
+            return fshasher_(x);
+        }
+        if constexpr(std::is_same_v<T, u128_t>) {
+            return fshasher_(uint64_t(x)) - fshasher_(uint64_t(x>>64));
+        }
+        if constexpr(sizeof(T) <= 8) {
+            return fshasher_(x);
+        }
+        if constexpr(sizeof(T) <= 16) {
+            u128_t tmp = 0;
+            std::memcpy(&tmp, &x, sizeof(T));
+            return hash(tmp);
+        }
+        // Handle > 16 bytes
+        uint64_t ret = 0;
+        for(size_t i = 0; i < sizeof(T) / sizeof(u128_t); ++i) {
+            u128_t tmp = 0;
+            const size_t offset = i * sizeof(T);
+            const size_t end_offset = std::min(sizeof(T) - (i * sizeof(u128_t)), sizeof(u128_t));
+            const size_t nbytes = end_offset - offset;
+            std::memcpy(&tmp, ((const char *)&x) + (i * sizeof(u128_t)), nbytes);
+            const uint64_t rot_ret = (ret >> 33) | (ret << (64 - 33));
+            ret = rot_ret ^ hash(tmp);
+        }
+        return ret;
     }
 public:
     std::string to_string() const {
@@ -85,7 +107,6 @@ public:
     void finalize();
     template<typename IT>
     FilterSet(IT beg, IT end, double bfexp=-1., int ktouse=-1): bfexp_(bfexp) {
-        std::fprintf(stderr, "bfexp: %g\n", bfexp_);
         const size_t nelem = std::distance(beg, end);
         if(is_bf()) {
             const double dbits_per_el = std::log(1. / bfexp) / std::pow(M_LN2, 2);
@@ -94,10 +115,7 @@ public:
             size_t mem = nelem * dbits_per_el;
             mem = std::max((mem + mem % bits_per_reg) / bits_per_reg, size_t(1));
             k_ = k;
-            std::fprintf(stderr, "nreg: %zu. k: %d. nbits: %zu\n", mem, k_, mem * 64);
-            std::fprintf(stderr, "False positive rate %g using %d bits per el\n", bfexp_, k_);
             data_.resize(mem);
-            std::fprintf(stderr, "data size: %zu. total mem: %zu\n", data_.size(), size_t(nelem * dbits_per_el));
             schism::Schismatic<uint64_t> mod_(mem * 64);
             // Maybe we batch this in the future?
             for(;beg != end; ++beg) {

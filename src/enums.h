@@ -147,13 +147,13 @@ INLINE u128_t invmaskfn(u128_t x) {
 void seed_mask(uint64_t); // This function sets the seeds
 
 
-template<typename T> static constexpr const char *nlfmt = "%0.17g\n";
-template<> constexpr const char *nlfmt<float> = "%0.16g\n";
-template<> constexpr const char *nlfmt<double> = "%0.24g\n";
-template<> constexpr const char *nlfmt<long double> = "%0.30Lg\n";
-template<typename T> static constexpr const char *tfmt = "\t%0.17g";
-template<> constexpr const char *tfmt<float> = "\t%0.16g";
-template<> constexpr const char *tfmt<double> = "\t%0.24g";
-template<> constexpr const char *tfmt<long double> = "\t%0.30Lg";
+template<typename T> static inline constexpr const char *nlfmt = "%0.17g\n";
+template<typename T> static inline constexpr const char *tfmt = "\t%0.17g";
+template<> inline constexpr const char *tfmt<float> = "\t%0.16g";
+template<> inline constexpr const char *tfmt<double> = "\t%0.24g";
+template<> inline constexpr const char *tfmt<long double> = "\t%0.30Lg";
+template<> inline constexpr const char *nlfmt<float> = "%0.16g\n";
+template<> inline constexpr const char *nlfmt<double> = "%0.24g\n";
+template<> inline constexpr const char *nlfmt<long double> = "%0.30Lg\n";
 
 }

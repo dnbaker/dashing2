@@ -148,7 +148,6 @@ public:
 #ifdef __SSSE3__
 constexpr std::size_t alignment = 16;
 #else
-#warning "No SIMD extensions enabled"
 constexpr std::size_t alignment = 1;
 #endif
 
