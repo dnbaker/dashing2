@@ -367,13 +367,13 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         }
         perform_sketch:
         __RESET(tid);
-        auto perf_for_substrs = [&](const auto &func) __attribute__((always_inline)) {
+        auto perf_for_substrs = [&](const auto &func) __attribute__((__always_inline__)) {
             for_each_substr([&](const std::string &subpath) {
-                auto lfunc = [&](auto x) __attribute__((always_inline)) {
+                auto lfunc = [&](auto x) __attribute__((__always_inline__)) {
                     x = maskfn(x);
                     if((!opts.fs_ || !opts.fs_->in_set(x)) && opts.downsample_pass()) func(x);
                 };
-                auto lfunc2 = [&func](auto x) __attribute__((always_inline)) {func(maskfn(x));};
+                auto lfunc2 = [&func](auto x) __attribute__((__always_inline__)) {func(maskfn(x));};
                 const auto seqp = kseqs.kseqs_ + tid;
 #define FUNC_FE(f) \
 do {\

@@ -15,11 +15,11 @@ struct QTup: public std::tuple<std::unique_ptr<float[]>, size_t, size_t, size_t>
     auto &ptr() {return std::get<0>(*this);}
     auto &ptr() const {return std::get<0>(*this);}
     auto &start() {return std::get<1>(*this);}
-    const auto start() const {return std::get<1>(*this);}
+    auto start() const {return std::get<1>(*this);}
     auto &stop() {return std::get<2>(*this);}
-    const auto stop() const {return std::get<2>(*this);}
+    auto stop() const {return std::get<2>(*this);}
     auto &nwritten() {return std::get<3>(*this);}
-    const auto &nwritten() const {return std::get<3>(*this);}
+    auto &nwritten() const {return std::get<3>(*this);}
 };
 
 template<size_t L>
@@ -50,7 +50,7 @@ static INLINE int print_tabs(size_t n, std::FILE *ofp) {
 static INLINE void print_tabs(size_t n, std::back_insert_iterator<fmt::memory_buffer> &biof) {
     for(;n > 256; format_to(biof, tabstr), n -= 256);
     const auto substr = tabstr.substr(0, n << 1);
-    format_to(biof, substr);
+    format_to(biof, "{}", substr);
 }
 
 static INLINE void print_tabs(size_t n, fmt::ostream &os) {
@@ -338,7 +338,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                         fn = std::string("E") + std::to_string(i);
                     }
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
-                    format_to(biof, fn);
+                    format_to(biof, "{}", fn);
                     const size_t jend = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - i - 1;
                     if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS) print_tabs(i + 1, biof);
                     batched_write(datp, biof, jend);

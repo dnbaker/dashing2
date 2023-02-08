@@ -168,7 +168,7 @@ public:
             auto &subtab = packed_maps_[i];
             auto &submut = mutexes_[i];
             std::vector<std::mutex> *mptr = nullptr;
-            if(mutexes_.size() > i) mptr = &mutexes_[i];
+            if(mutexes_.size() > i) mptr = &submut;
             const size_t nsubs = subtab.size();
             for(size_t j = 0; j < nsubs; ++j) {
                 assert(j < subtab.size());

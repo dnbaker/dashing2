@@ -165,11 +165,11 @@ public:
     D2O2(fasta_dedup);
 #undef D2O
 #undef D2O2
-    void downsample(double f) {
+    void downsample(const double f) {
         if(f < 0. || f > 1.) throw std::runtime_error("Can't downsample to anything > 1 or < 0");
         kmer_downsample_frac_ = f;
         std::memcpy(&sampler_rng_, &f, 8);
-        sampler_threshold_ = std::ceil(uint64_t(-1) * f);
+        sampler_threshold_ = std::ceil(static_cast<long double>(uint64_t(-1)) * static_cast<long double>(f));
     }
     INLINE bool downsample_pass() {
         return kmer_downsample_frac_ == 1. ||

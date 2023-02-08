@@ -7,9 +7,22 @@ CACHE_SIZE?=4194304
 CACHE_SIZE_FLAG:=-DD2_CACHE_SIZE=${CACHE_SIZE}
 GIT_VERSION:=$(shell git describe --abbrev=4 --always)
 
+
+# If on M1, use -target arm64-apple-macos11 -mmacosx-version-min=11.0
+# Otherwise, use march=native
+UNAME_P := $(shell uname -p)
+ifeq ($(UNAME_P),arm)
+	TARGET_FLAG=-target arm64-apple-macos11 -mmacosx-version-min=11.0
+else
+    TARGET_FLAG=-march=native
+endif
+
 LIB=-lz # -lfmt
 INC=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc -Ifmt/include
-OPT+= -O3 -march=native -fopenmp -pipe $(CACHE_SIZE_FLAG)
+OPT+= -O3 \
+    $(TARGET_FLAG) \
+    -fopenmp -pipe $(CACHE_SIZE_FLAG)
+
 OPTMV:=$(OPT)
 OPT+= -std=c++17
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic -Wno-array-bounds # -Wno-shift-count-overflow

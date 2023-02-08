@@ -9,8 +9,9 @@ namespace dashing2 {
 using std::to_string;
 template<typename T>
 static inline std::string to_string(const T *ptr) {
-    char buf_[64];
-    return std::string(buf_, std::sprintf(buf_, "%p", static_cast<const void *>(ptr)));
+    std::ostringstream oss;
+    oss << static_cast<const void *>(ptr);
+    return oss.str();
 }
 struct SketchingResult {
     SketchingResult() {}

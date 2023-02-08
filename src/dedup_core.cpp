@@ -125,9 +125,10 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
     std::fprintf(stderr, "Total number of items to compare against: %zu\n", nh);
     std::vector<LSHDistType> vals(hits.size());
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
+    const auto hitptr = hits.data();
     OMP_PFOR_DYN
     for(size_t i = 0; i < nh; ++i) {
-        const auto id = hits[i];
+        const auto id = hitptr[i];
         assert(id < ids.size());
         vals[i] = mult * compare(opts, result, oid, ids[id]);
     }
@@ -285,7 +286,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             auto &ids = ret.first;
             auto &constituents = ret.second;
             auto &idx = retidx;
-            auto do_update = [&,st=nt<=1](auto id) __attribute__((always_inline)) {
+            auto do_update = [&,st=nt<=1](auto id) __attribute__((__always_inline__)) {
                 st ? update_res(id, ids, constituents, idx, opts, result, maxcands)
                    : update_res_mt(id, ids, constituents, idx, opts, result, maxcands);
             };

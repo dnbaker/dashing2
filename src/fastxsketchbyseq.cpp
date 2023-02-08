@@ -44,7 +44,7 @@ struct OptSketcher {
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
         else if(o.cfss) cfss.reset(new VSetSketch(*o.cfss));
     }
-    OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(std::move(enc_.to_u128())), ence_(enc_.to_entmin64()), ence128_(enc_.to_entmin128()), k_(opts.k_), w_(opts.w_), use128_(opts.use128()) {
+    OptSketcher(const Dashing2Options &opts): enc_(opts.enc_), enc128_(enc_.to_u128()), ence_(enc_.to_entmin64()), ence128_(enc_.to_entmin128()), k_(opts.k_), w_(opts.w_), use128_(opts.use128()) {
         input_mode(opts.input_mode());
         assert(opts.hashtype() == it_);
         if(opts.sspace_ == SPACE_EDIT_DISTANCE)

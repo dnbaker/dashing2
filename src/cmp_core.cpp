@@ -9,28 +9,29 @@
 #include "levenshtein-sse.hpp"
 #include "options.h"
 
-
 namespace dashing2 {
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result);
 void dedup_emit(const std::vector<LSHIDType> &, const std::vector<std::vector<LSHIDType>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result);
 
-static INLINE uint64_t reg2sig(__float128 x) {
-    const uint64_t *const p = (const uint64_t *)&x;
-    return sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(p[0] ^ 0xa3407fb23cd20eful) ^ p[1]);
-}
-static INLINE uint64_t reg2sig(long double x) {
-    const uint64_t *const p = (const uint64_t *)&x;
-    return sketch::hash::WangHash::hash(sketch::hash::WangHash::hash(p[0] ^ 0xa3407fb23cd20eful) ^ p[1]);
-}
-static INLINE uint64_t reg2sig(double x) {
+
+template<typename T> INLINE uint64_t reg2sig(const T x) {
+    if constexpr(sizeof(T) <= 4) {
+        uint32_t v = 0;
+        std::memcpy(&v, &x, sizeof(T));
+        return sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
+    }
     uint64_t v;
-    std::memcpy(&v, &x, 8);
-    return sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
-}
-static INLINE uint64_t reg2sig(float x) {
-    uint32_t v;
-    std::memcpy(&v, &x, 4);
-    return sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
+    std::memcpy(&v, &x, sizeof(uint64_t));
+    uint64_t hashvalue = sketch::hash::WangHash::hash(v ^ 0xa3407fb23cd20eful);
+    if constexpr(sizeof(T) == 8) {
+        return hashvalue;
+    }
+    for(size_t i = 1; i < sizeof(T) / sizeof(uint64_t); ++i) {
+        std::memcpy(&v, &x, sizeof(uint64_t));
+        const uint64_t new_hash_value = sketch::hash::WangHash::hash(v ^ hashvalue);
+        hashvalue ^= new_hash_value;
+    }
+    return hashvalue;
 }
 
 template<typename T>
@@ -189,7 +190,7 @@ struct CompressedRet: public std::tuple<void *, long double, long double> {
     long double b() const {return std::get<2>(*this);}
     CompressedRet(): super{nullptr, 0.L, 0.L} {
     }
-    CompressedRet(CompressedRet &&o): super(static_cast<super>(o)), up(std::move(up)), nbytes(o.nbytes), ismapped(o.ismapped) {
+    CompressedRet(CompressedRet &&o): super(static_cast<super>(o)), up(std::move(o.up)), nbytes(o.nbytes), ismapped(o.ismapped) {
         o.nbytes = 0; o.ismapped = 0; std::get<1>(o) = 0.; std::get<2>(o) = 0.;
         std::get<0>(o) = 0;
     }
@@ -198,7 +199,7 @@ struct CompressedRet: public std::tuple<void *, long double, long double> {
 
 INLINE void *ptr_roundup(void *ptr) {
     uint8_t *tv = static_cast<uint8_t *>(ptr);
-    if(auto rem = (uint64_t)tv & 63; rem) tv += (64 - rem);
+    if(const auto rem = (uint64_t)tv & 63; rem) tv += (64 - rem);
     ptr = static_cast<void *>(tv);
     return ptr;
 }
@@ -381,9 +382,14 @@ case v: {\
             // maps equality to 1 and down-estimates for account for collisions
             const long double b2pow = -std::ldexp(1.L, -static_cast<int>(opts.fd_level_ * 8.));
             ret = std::max(0.L, std::fma(res.first, invdenom, b2pow) / (1.L + b2pow));
-            if(opts.measure_ == INTERSECTION)
-                ret *= std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L);
-            else if(opts.measure_ == CONTAINMENT)
+            if(opts.measure_ == INTERSECTION || opts.measure_ == UNION_SIZE) {
+                const long double isz = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L);
+                if(opts.measure_ == INTERSECTION) {
+                    ret = isz;
+                } else { // UNION_SIZE
+                    ret = lhcard + rhcard - isz;
+                }
+            } else if(opts.measure_ == CONTAINMENT)
                 ret = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L) * ret / lhcard;
             else if(opts.measure_ == POISSON_LLR)
                 ret = sim2dist(ret);
@@ -393,7 +399,6 @@ case v: {\
             long double alpha = res.first * invdenom;
             long double beta = res.second * invdenom;
             const long double b = opts.compressed_b_;
-            static_assert(sizeof(b) == 16, "b must be a long double");
             long double mu;
             if(opts.fd_level_ < sizeof(RegT)) {
                 alpha = g_b(b, alpha);
@@ -408,6 +413,7 @@ case v: {\
             ret = std::max(1.L - (std::get<0>(triple) + std::get<1>(triple)), 0.L);
             switch(opts.measure_) {
                 case INTERSECTION: ret *= mu; break;
+                case UNION_SIZE: ret = lhcard + rhcard - (ret * mu); break;
                 case CONTAINMENT: ret  = ret * mu / lhcard; break;
                 case SYMMETRIC_CONTAINMENT:
                     ret = (ret * mu) / std::min(lhcard, rhcard); break;
@@ -436,12 +442,17 @@ case v: {\
                 eq = 0;
             }
             ucard = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
-            LSHDistType isz = ucard * eq, sim = eq;
-            ret = opts.measure_ == SIMILARITY ? sim
-                : opts.measure_ == INTERSECTION ? isz
-                : opts.measure_ == CONTAINMENT ? isz / rhcard
-                : opts.measure_ == SYMMETRIC_CONTAINMENT ? isz / (std::min(lhcard, rhcard))
-                : opts.measure_ == POISSON_LLR ? sim2dist(sim): LSHDistType(-1);
+            const LSHDistType isz = ucard * eq, sim = eq;
+            switch(opts.measure_) {
+                case SIMILARITY: ret = sim; break;
+                case INTERSECTION: ret = isz; break;
+                case CONTAINMENT: ret = isz / rhcard; break;
+                case SYMMETRIC_CONTAINMENT: ret = isz / (std::min(lhcard, rhcard)); break;
+                case POISSON_LLR: ret = sim2dist(sim); break;
+                case UNION_SIZE: ret = lhcard + rhcard - isz; break;
+                default: ret = LSHDistType(-1); break; // This never happens
+            }
+
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
         } else {
             const RegT *sptr = result.signatures_.data();
@@ -461,6 +472,10 @@ case v: {\
             } else if(opts.measure_ == SYMMETRIC_CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L) / std::min(lhcard, rhcard);
             else if(opts.measure_ == CONTAINMENT) ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L) / lhcard;
             else if(opts.measure_ == POISSON_LLR) ret = sim2dist(ret);
+            else if(opts.measure_ == UNION_SIZE) {
+                const long double isz = ret * std::max((lhcard + rhcard) / (1.L + ret), 0.L);
+                ret = (lhcard + rhcard - isz);
+            }
         }
     } else {
 #define CORRECT_RES(res, measure, lhc, rhc)\

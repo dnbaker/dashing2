@@ -22,36 +22,36 @@ struct PushBackCounter
 };
 
 template<typename IT, size_t MODE=0>
-std::pair<double, double> weighted_compare_mode(const IT *lptr, size_t lhl, const double lhsum, const double *lnptr, const IT *rptr, const double *rnptr, size_t rhl, const double rhsum) {
+std::pair<double, double> weighted_compare_mode(const IT *lptr, size_t lhl, const double lhsum, const double *lnptr, const IT *rptr, const double *rnptr, size_t rhl, const double rhsum) noexcept {
     double isz_size = 0, isz_carry = 0.;
-    auto increment = [](auto &sum, auto &carry, auto inc) __attribute__((__always_inline__)) {
-        if(MODE) sketch::kahan::update(sum, carry, inc);
-        else    sum += inc;
-    };
     for(size_t lhi = 0, rhi = 0; lhi < lhl && rhi < rhl;) {
-        //std::fprintf(stderr, "Comparing %zu/%zu, %zu/%zu\n", lhi, lhl, rhi, rhl);
-        if(lptr[lhi] == rptr[rhi])
-            increment(isz_size, isz_carry, std::min(lnptr[lhi++], rnptr[rhi++]));
-        else {
+        if(lptr[lhi] == rptr[rhi]) {
+            const auto increment = std::min(lnptr[lhi++], rnptr[rhi++]);
+            if(MODE) {
+                sketch::kahan::update(isz_size, isz_carry, increment);
+            } else {
+                isz_size += increment;
+            }
+        } else {
             const bool v = lptr[lhi] < rptr[rhi];
             lhi += v; rhi += !v;
         }
     }
     return std::make_pair(isz_size, lhsum + rhsum - isz_size);
 }
-std::pair<double, double> weighted_compare(const uint64_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const uint64_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) {
+std::pair<double, double> weighted_compare(const uint64_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const uint64_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) noexcept {
     return kahan ? weighted_compare_mode<uint64_t, 1>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum): weighted_compare_mode<uint64_t, 0>(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
 }
-std::pair<double, double> weighted_compare(const u128_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const u128_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) {
+std::pair<double, double> weighted_compare(const u128_t *lptr, const double *lnptr, size_t lhl, const double lhsum, const u128_t *rptr, const double *rnptr, size_t rhl, const double rhsum, bool kahan) noexcept {
     auto ptr = kahan ? &weighted_compare_mode<u128_t, 1> : &weighted_compare_mode<u128_t, 0>;
     return ptr(lptr, lhl, lhsum, lnptr, rptr, rnptr, rhl, rhsum);
 }
-size_t hamming_compare(const uint64_t *SK_RESTRICT lptr, size_t lhl, const uint64_t *SK_RESTRICT rptr, size_t rhl) {
-    return std::inner_product(lptr, lptr + std::min(lhl, rhl), rptr, size_t(0), [](auto &c, auto x) {return c + x;}, [](auto lhs, auto rhs) -> size_t {return lhs == rhs;})
+size_t hamming_compare(const uint64_t *SK_RESTRICT lptr, size_t lhl, const uint64_t *SK_RESTRICT rptr, size_t rhl) noexcept {
+    return std::inner_product(lptr, lptr + std::min(lhl, rhl), rptr, size_t(0), [](auto c, auto x) noexcept {return c += x;}, [](auto lhs, auto rhs) noexcept -> size_t {return lhs == rhs;})
             + (std::max(lhl, rhl) - std::min(lhl, rhl));
 }
 template<typename T>
-std::pair<size_t, size_t> mmer_edit_distance_f(std::FILE *lfp, std::FILE *rfp) {
+std::pair<size_t, size_t> mmer_edit_distance_f(std::FILE *lfp, std::FILE *rfp) noexcept {
     // Compute exact edit distance at char level, then divide by the ratio of the size of these registers to characters
     // IE, the edit distance calculated is by chars rather than T
     const auto lhs(load_file<T>(lfp));
@@ -60,7 +60,7 @@ std::pair<size_t, size_t> mmer_edit_distance_f(std::FILE *lfp, std::FILE *rfp) {
     assert(ret % sizeof(T) == 0);
     return {ret / sizeof(T), std::max(lhs.size(), rhs.size())};
 }
-std::pair<size_t, size_t> mmer_edit_distance(std::FILE *lfp, std::FILE *rfp, bool use128) {
+std::pair<size_t, size_t> mmer_edit_distance(std::FILE *lfp, std::FILE *rfp, bool use128) noexcept {
     auto ptr = use128 ? &mmer_edit_distance_f<u128_t>: &mmer_edit_distance_f<uint64_t>;
     return ptr(lfp, rfp);
 }
@@ -85,15 +85,15 @@ size_t hamming_compare_f(std::FILE *lfp, std::FILE *rfp) {
     }
     return ret;
 }
-size_t hamming_compare_f64(std::FILE *lfp, std::FILE *rfp) {return hamming_compare_f<8>(lfp, rfp);}
-size_t hamming_compare_f128(std::FILE *lfp, std::FILE *rfp) {return hamming_compare_f<16>(lfp, rfp);}
-size_t set_compare(const uint64_t *lptr, size_t lhl, const uint64_t *rptr, size_t rhl) {
+size_t hamming_compare_f64(std::FILE *lfp, std::FILE *rfp) noexcept {return hamming_compare_f<8>(lfp, rfp);}
+size_t hamming_compare_f128(std::FILE *lfp, std::FILE *rfp) noexcept {return hamming_compare_f<16>(lfp, rfp);}
+size_t set_compare(const uint64_t *lptr, size_t lhl, const uint64_t *rptr, size_t rhl) noexcept {
     PushBackCounter c;
     std::set_intersection(lptr, lptr + lhl, rptr, rptr + rhl, std::back_inserter(c));
     return c.count;
 }
 
-double cosine_compare(const uint64_t *lptr, size_t lhl, [[maybe_unused]] const double lhnorm, const uint64_t *rptr, size_t rhl, [[maybe_unused]] const double rhnorm, const double *lnptr, const double *rnptr, bool kahan) {
+double cosine_compare(const uint64_t *lptr, size_t lhl, [[maybe_unused]] const double lhnorm, const uint64_t *rptr, size_t rhl, [[maybe_unused]] const double rhnorm, const double *lnptr, const double *rnptr, bool kahan) noexcept {
     double dotprod = 0, carry = 0.;
     auto increment = [kahan](auto &norm, auto &carry, auto inc) __attribute__((__always_inline__)) {
         if(kahan) sketch::kahan::update(norm, carry, inc); else norm += inc;
@@ -122,7 +122,7 @@ std::vector<T> load_file(std::FILE *fp) {
     return ret;
 }
 std::pair<double, double>
-weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum, bool use128) {
+weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum, bool use128) noexcept {
     //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
 
     u128_t lhv2, rhv2;
@@ -167,7 +167,7 @@ weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn,
 
 
 template<typename T, typename CT>
-double cosine_compare_(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn) {
+double cosine_compare_(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn) noexcept {
     // Returns cosine similariy between the vectors
     //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
     T lhv, rhv;
@@ -195,7 +195,7 @@ double cosine_compare_(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE
     return isz;
 }
 
-double cosine_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, bool use128keys=false, bool usef32counts=false) {
+double cosine_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, bool use128keys=false, bool usef32counts=false) noexcept {
     const auto ptr = use128keys ? usef32counts ? &cosine_compare_<u128_t, float>: &cosine_compare_<u128_t, double>: usef32counts ? &cosine_compare_<uint64_t, float>: &cosine_compare_<uint64_t, double>;
     return ptr(lhk, rhk, lhn, rhn);
 }

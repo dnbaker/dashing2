@@ -196,7 +196,7 @@ public:
             if(::stat(ipp, &st)) {
                 std::FILE *ifp = std::fopen(ipp, "wb");
                 if(0 == ifp || ::fstat(::fileno(ifp), &st))
-                    throw std::runtime_error("Failed to create file at "s +path);
+                    throw std::runtime_error("Failed to create file at "s + inpath);
                 std::fclose(ifp);
             }
             offset_ = off != size_t(-1) ? off: size_t(st.st_size);

@@ -11,6 +11,7 @@ enum Measure {
     SYMMETRIC_CONTAINMENT, // (A & B) / min(|A|, |B|)
     POISSON_LLR, // -log-transformed similarity
     INTERSECTION, // |A & B|
+    UNION_SIZE,   // |A | B|
     M_EDIT_DISTANCE = POISSON_LLR, // Whether in minimizer-sequence space or sequence edit distance space.
     MASH_DISTANCE = POISSON_LLR
 };
@@ -20,6 +21,7 @@ static inline std::string to_string(Measure m) {
     if(m == SYMMETRIC_CONTAINMENT) return "SYMMETRIC_CONTAINMENT";
     if(m == POISSON_LLR) return "POISSON_LLR";
     if(m == INTERSECTION) return "INTERSECTION";
+    if(m == UNION_SIZE) return "UNION_SIZE";
     return "UNKNOWN";
 }
 
@@ -38,7 +40,7 @@ static constexpr inline bool symmetric(Measure msr) {
 }
 static constexpr inline bool distance(Measure msr) {
     switch(msr) {
-        case INTERSECTION: case SIMILARITY: case CONTAINMENT: return false;
+        case UNION_SIZE: case INTERSECTION: case SIMILARITY: case CONTAINMENT: return false;
         default: return true;
     }
 }
@@ -101,6 +103,10 @@ struct Dashing2DistOptions: public Dashing2Options {
             std::fprintf(stderr, "Can't estimate intersection sizes for ProbMinHash due to the implicit normalization. Reverting to similarity\n");
             measure_ = SIMILARITY;
         }
+        if((sspace_ == SPACE_PSET || sspace_ == SPACE_EDIT_DISTANCE) && measure_ == UNION_SIZE) {
+            std::fprintf(stderr, "Can't estimate union sizes for ProbMinHash due to the implicit normalization. Reverting to similarity\n");
+            measure_ = SIMILARITY;
+        }
         if((sspace_ == SPACE_EDIT_DISTANCE) && measure_ != SIMILARITY && measure_ != M_EDIT_DISTANCE) {
             std::fprintf(stderr, "Edit distance LSH, but measure is not similarity. Switching to edit distance so that it is well defined\n");
              measure_ = M_EDIT_DISTANCE;
@@ -111,6 +117,11 @@ struct Dashing2DistOptions: public Dashing2Options {
             if(this->compressed_b_ < 1.L) THROW_EXCEPTION(std::invalid_argument("base must be >= 1."));
             if(this->compressed_a_ <= 0.L) THROW_EXCEPTION(std::invalid_argument("offset a must be > 0."));
         }
+#ifdef __aarch64__
+        if((truncation_method_ <= 0) && (fd_level_ < 1.)) {
+            std::fprintf(stderr, "Warning: on apple silicon, accuracy may be reduced by the lack of 80-bit floating-point support. Consider using --fastcmp/--regsize 1 or greater.\n");
+        }
+#endif
     }
 };
 void cmp_core(const Dashing2DistOptions &ddo, SketchingResult &res);
