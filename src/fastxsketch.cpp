@@ -443,9 +443,12 @@ do {\
                     std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[mss]);
                 }
             }
-            std::FILE * ofp = bfopen(destination.data(), "wb");
-            checked_fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
-            if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
+            std::FILE * ofp{nullptr};
+            if(cache_sketches_) {
+                ofp = bfopen(destination.data(), "wb");
+                if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
+            }
+            if(ofp) checked_fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
             const void *buf = nullptr;
             size_t nb;
             const RegT *srcptr = nullptr;
@@ -466,7 +469,8 @@ do {\
             } else nb = 0, srcptr = nullptr;
             if(srcptr && ret.signatures_.size())
                 std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
-            checked_fwrite(ofp, buf, nb);
+            if(ofp)
+                checked_fwrite(ofp, buf, nb);
             if(opts.save_kmers_ && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
                 assert(ret.kmerfiles_.size());
                 ret.kmerfiles_[myind] = destkmer;
@@ -532,8 +536,8 @@ do {\
             std::free(dptr);
             std::fclose(ofp);
         } else if(opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) {
-            std::FILE * ofp;
-            if((ofp = bfopen(destination.data(), "wb")) == nullptr)
+            std::FILE * ofp{nullptr};
+            if((cache_sketches_) && (ofp = bfopen(destination.data(), "wb")) == nullptr)
                 THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
             if(opss.empty() && fss.empty() && cfss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
             const size_t opsssz = opss.size();
@@ -558,7 +562,7 @@ do {\
                     cret = fss[tid].getcard();
                 }
             }
-            checked_fwrite(ofp, &cret, sizeof(double));
+            if(ofp) checked_fwrite(ofp, &cret, sizeof(double));
             std::fflush(ofp);
             const uint64_t *ids = nullptr;
             const uint32_t *counts = nullptr;
@@ -571,20 +575,20 @@ do {\
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
             if(opts.sketch_compressed_set) {
                 std::array<long double, 4> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_), static_cast<long double>(opts.sketchsize_)};
-                checked_fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
+                if(ofp) checked_fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
                 if(opts.fd_level_ == 0.5) {
                     const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
                     for(size_t i = 0; i < opts.sketchsize_; i += 2) {
                         uint8_t reg = (srcptr[i] << 4) | srcptr[i + 1];
-                        checked_fwrite(ptr, sizeof(reg), 1, ofp);
+                        if(ofp) checked_fwrite(ptr, sizeof(reg), 1, ofp);
                     }
                 } else {
-                    checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
+                    if(ofp) checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
                 }
             } else {
-                checked_fwrite(ofp, ptr, ss * sizeof(RegT));
+                if(ofp) checked_fwrite(ofp, ptr, ss * sizeof(RegT));
             }
-            std::fclose(ofp);
+            if(ofp) std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {
                 if(!opts.sketch_compressed_set) {
                     std::memcpy(&ret.signatures_[mss >> sigshift], ptr, (ss >> sigshift));
