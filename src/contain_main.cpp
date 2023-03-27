@@ -265,8 +265,12 @@ int contain_main(int argc, char **argv) {
                 __m512 matd = _mm512_mul_ps(_mm512_loadu_ps(cmatptr + j), _mm512_set1_ps(100.f));
                 __m512 statd = _mm512_loadu_ps(cstatsptr + j);
                 interleave_512_ps(matd, statd);
+                float mat_arr[sizeof(matd) / sizeof(float)];
+                float stat_arr[sizeof(matd) / sizeof(float)];
+                std::memcpy(mat_arr, &matd, sizeof(matd));
+                std::memcpy(stat_arr, &statd, sizeof(statd));
                 fmt::print("\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}",
-                           matd[0], matd[1], matd[2], matd[3], matd[4], matd[5], matd[6], matd[7], matd[8], matd[9], matd[10], matd[11], matd[12], matd[13], matd[14], matd[15], statd[0], statd[1], statd[2], statd[3], statd[4], statd[5], statd[6], statd[7], statd[8], statd[9], statd[10], statd[11], statd[12], statd[13], statd[14], statd[15]
+                           mat_arr[0], mat_arr[1], mat_arr[2], mat_arr[3], mat_arr[4], mat_arr[5], mat_arr[6], mat_arr[7], mat_arr[8], mat_arr[9], mat_arr[10], mat_arr[11], mat_arr[12], mat_arr[13], mat_arr[14], mat_arr[15], stat_arr[0], stat_arr[1], stat_arr[2], stat_arr[3], stat_arr[4], stat_arr[5], stat_arr[6], stat_arr[7], stat_arr[8], stat_arr[9], stat_arr[10], stat_arr[11], stat_arr[12], stat_arr[13], stat_arr[14], stat_arr[15]
                 );
             }
 #elif __AVX2__
@@ -274,8 +278,13 @@ int contain_main(int argc, char **argv) {
                 __m256 matd = _mm256_mul_ps(_mm256_loadu_ps(cmatptr + j), _mm256_set1_ps(100.f));
                 __m256 statd = _mm256_loadu_ps(cstatsptr + j);
                 interleave_256_ps(matd, statd);
+
+                float mat_arr[sizeof(matd) / sizeof(float)];
+                float stat_arr[sizeof(matd) / sizeof(float)];
+                std::memcpy(mat_arr, &matd, sizeof(matd));
+                std::memcpy(stat_arr, &statd, sizeof(statd));
                 fmt::print("\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}\t{:0.6g}%:{}",
-                        matd[0], matd[1], matd[2], matd[3], matd[4], matd[5], matd[6], matd[7], statd[0], statd[1], statd[2], statd[3], statd[4], statd[5], statd[6], statd[7]
+                        mat_arr[0], mat_arr[1], mat_arr[2], mat_arr[3], mat_arr[4], mat_arr[5], mat_arr[6], mat_arr[7], stat_arr[0], stat_arr[1], stat_arr[2], stat_arr[3], stat_arr[4], stat_arr[5], stat_arr[6], stat_arr[7]
                 );
             }
 #endif
