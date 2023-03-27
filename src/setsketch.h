@@ -1,20 +1,23 @@
 #ifndef D2_SETSKETCH_H___H__
 #define D2_SETSKETCH_H___H__
+#define VEC_DISABLED__ 1
 #include <stdexcept>
 #include <cassert>
-#include "aesctr/wy.h"
 #include <queue>
-#include "sketch/div.h"
 #include <unordered_map>
 #include <memory>
+
+#include "enums.h"
+
+#include "aesctr/wy.h"
 #include "sketch/fy.h"
+#include "sketch/div.h"
 #include "sketch/count_eq.h"
 #include "sketch/macros.h"
 #include "sketch/hash.h"
 #include "sketch/flog.h"
 #include "sketch/kahan.h"
 #include "xxHash/xxh3.h"
-#include "flat_hash_map/flat_hash_map.hpp"
 
 namespace sketch {
 
@@ -727,12 +730,12 @@ public:
     double harmean(const SetSketch<ResT, FT> *ptr=static_cast<const SetSketch<ResT, FT> *>(nullptr)) const {
         static std::unordered_map<FT, std::vector<FT>> powers;
         if constexpr(sizeof(ResT) >= 4) {
-            ska::flat_hash_map<ResT, uint32_t> counts;
+            dashing2::flat_hash_map<ResT, uint32_t> counts;
             if(ptr) {
                 for(size_t i = 0; i < m_; ++i)
                     ++counts[std::max(data_[i], ptr->data()[i])];
             } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
-            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [b=b_](long double s, const std::pair<ResT, uint32_t> &reg) {return std::fma(reg.second, std::pow(b, -static_cast<ptrdiff_t>(reg.first)), s);});
+            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [b=b_](long double s, const auto&reg) {return std::fma(reg.second, std::pow(b, -static_cast<ptrdiff_t>(reg.first)), s);});
         }
         auto it = powers.find(b_);
         if(it == powers.end()) {
@@ -750,13 +753,13 @@ public:
             } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
             return std::inner_product(&counts[lowkh_.klow()], &counts[q_ + 2], &it->second[lowkh_.klow()], 0.L);
         } else {
-            ska::flat_hash_map<ResT, uint32_t> counts; counts.reserve(q_ + 2);
+            dashing2::flat_hash_map<ResT, uint32_t> counts; counts.reserve(q_ + 2);
             if(ptr) {
                 for(size_t i = 0; i < m_; ++i)
                     ++counts[std::max(data_[i], ptr->data()[i])];
             } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
             auto &ptable = it->second;
-            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [&ptable](long double s, const std::pair<ResT, uint32_t> &reg) {return std::fma(reg.second, ptable[reg.first], s);});
+            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [&ptable](long double s, auto &reg) {return std::fma(reg.second, ptable[reg.first], s);});
         }
     }
     double jaccard_by_ix(const SetSketch<ResT, FT> &o) const {
@@ -890,7 +893,7 @@ class CountFilteredSetSketch: public SetSketch<ResT, FT> {
     using Super = SetSketch<ResT, FT>;
 
     const uint32_t mc_;
-    ska::flat_hash_map<uint64_t, uint32_t> potentials_;
+    dashing2::flat_hash_map<uint64_t, uint32_t> potentials_;
 public:
     template<typename...Args>
     CountFilteredSetSketch(int32_t mincount=1, Args &&...args): Super(std::forward<Args>(args)...), mc_(mincount) {
@@ -998,7 +1001,7 @@ template<typename FT=double>
 struct CountFilteredCSetSketch: public CSetSketch<FT> {
     using super = CSetSketch<FT>;
     const uint32_t mc_;
-    ska::flat_hash_map<uint64_t, uint32_t> potentials_;
+    dashing2::flat_hash_map<uint64_t, uint32_t> potentials_;
 #ifdef VERBOSE_AF
     size_t numremoved = 0;
     ~CountFilteredCSetSketch() {
@@ -1030,7 +1033,7 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         long double tv = (lrv >> 32) * 1.2621774483536188887e-29L;
         return mi * std::log(tv);
     }
-    INLINE void erase_if(typename ska::flat_hash_map<uint64_t, uint32_t>::iterator it) {
+    INLINE void erase_if(typename dashing2::flat_hash_map<uint64_t, uint32_t>::iterator it) {
 #ifdef VERBOSE_AF
         ++numremoved;
 #endif

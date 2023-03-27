@@ -1,9 +1,9 @@
 #ifndef DASHING2_FILTERSET_H__
 #define DASHING2_FILTERSET_H__
+#include "enums.h"
 #include "sketch/sseutil.h"
 #include "sketch/hash.h"
 #include "sketch/div.h"
-#include "sketch/macros.h"
 #include "aesctr/wy.h"
 #include "aligned_vector.h"
 #include "interpbound.h"
