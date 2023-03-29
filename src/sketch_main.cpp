@@ -133,7 +133,7 @@ int sketch_main(int argc, char **argv) {
         return 1;
     }
     SketchingResult result;
-    sketch_core(result, opts, paths, outfile);
+    sketch_core(result, distopts, paths, outfile);
     result.nqueries(nq);
     if(cmpout.size()) {
         distopts.measure_ = measure;

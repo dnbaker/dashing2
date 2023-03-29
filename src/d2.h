@@ -131,7 +131,7 @@ public:
     bool fasta_dedup_ = false;
     bool sketch_compressed_set;
 
-    std::unique_ptr<FilterSet> fs_;
+    std::shared_ptr<FilterSet> fs_;
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false, KmerSketchResultType kres=ONE_PERM):
         k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_, canon), rh_(k, canon, rht, w), rh128_(k, canon, rht, w), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
         kmer_result_ = kres;
@@ -296,9 +296,6 @@ private:
 public:
     ~KSeqHolder() {
         for(size_t i = 0; i < n_; ++i){
-#ifndef NDEBUG
-            std::fprintf(stderr, "Length of buffer %zu: %zu\n", i, kseqs_[i].seq.m);
-#endif
             free_item(kseqs_[i]);
         }
         std::free(kseqs_);

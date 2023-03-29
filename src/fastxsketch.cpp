@@ -294,7 +294,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         const size_t mss = ss * myind;
         auto &path = paths[myind];
         //std::fprintf(stderr, "parsing from path = %s\n", path.data());
-        auto &destination = ret.destination_files_[myind];
+        std::string &destination = ret.destination_files_[myind];
         destination = makedest(opts, path, opts.kmer_result_ == FULL_MMER_COUNTDICT);
         const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
         std::string kmer_destination_prefix = makedest(opts, path, true);
@@ -444,7 +444,8 @@ do {\
                 }
             }
             std::FILE * ofp{nullptr};
-            if(cache_sketches_) {
+            if(opts.cache_sketches_) {
+                std::fprintf(stderr, "Writing saved sketch to %s\n", destination.data());
                 ofp = bfopen(destination.data(), "wb");
                 if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
             }
@@ -537,8 +538,8 @@ do {\
             std::fclose(ofp);
         } else if(opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) {
             std::FILE * ofp{nullptr};
-            if((cache_sketches_) && (ofp = bfopen(destination.data(), "wb")) == nullptr)
-                THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
+            if((opts.cache_sketches_) && (ofp = bfopen(destination.data(), "wb")) == nullptr)
+                THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file ") + destination + " for writing sketch."));
             if(opss.empty() && fss.empty() && cfss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
             const size_t opsssz = opss.size();
             auto &cret = ret.cardinalities_[myind];
