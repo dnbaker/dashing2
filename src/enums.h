@@ -1,7 +1,11 @@
 #pragma once
-#include <string>
-#include "sketch/macros.h"
+#define VEC_DISABLED__ 1
+// #include "hash.h"
 #include "sketch/hash.h"
+#include "sketch/macros.h"
+
+#include "robin_hood.h"
+#include <string>
 
 namespace dashing2 {
 
@@ -155,5 +159,40 @@ template<> inline constexpr const char *tfmt<long double> = "\t%0.30Lg";
 template<> inline constexpr const char *nlfmt<float> = "%0.16g\n";
 template<> inline constexpr const char *nlfmt<double> = "%0.24g\n";
 template<> inline constexpr const char *nlfmt<long double> = "%0.30Lg\n";
+namespace hash = sketch::hash;
+struct FHasher {
+    using FastRevHash = hash::CEHasher;
+    FastRevHash rhasher_;
+    FHasher() {}
+    template<typename T>
+    INLINE decltype(auto) hash(T x) const {
+        return this->operator()(x);
+    }
+    template<typename T>
+    static INLINE decltype(auto) hashi(T x) {
+        return FHasher()(x);
+    }
+    INLINE uint32_t operator()(uint32_t x) const {
+        return rhasher_(x);
+    }
+    INLINE uint64_t operator()(uint64_t x) const {
+        return rhasher_(x);
+    }
+    INLINE uint64_t operator()(u128_t x) const {
+        return rhasher_(uint64_t(x>>64)) ^ rhasher_(uint64_t(x));
+    }
+};
+
+template<typename Key, typename V,
+         typename Hash=std::conditional_t<std::is_same_v<u128_t, Key>, FHasher, robin_hood::hash<Key>>>
+using flat_hash_map = robin_hood::unordered_flat_map<Key, V, Hash>;
+
+template<typename Key,
+         typename Hash=std::conditional_t<
+                std::is_same_v<u128_t, Key>, FHasher, robin_hood::hash<Key>
+         >
+        >
+using flat_hash_set = robin_hood::unordered_flat_set<Key>;
+
 
 }

@@ -70,7 +70,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
 std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer) {
     std::string ret(path);
     ret = ret.substr(0, ret.find_first_of(' '));
-    if(opts.trim_folder_paths()) {
+    if(opts.trim_folder_paths() || opts.outprefix_.size()) {
         ret = trim_folder(path);
         if(opts.outprefix_.size())
             ret = opts.outprefix_ + '/' + ret;

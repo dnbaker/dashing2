@@ -61,7 +61,7 @@ struct Dashing2DistOptions: public Dashing2Options {
     size_t cmp_batch_size_ = 16;
     unsigned int nLSH = 2;
     Dashing2DistOptions(Dashing2Options &opts, OutputKind outres, OutputFormat of, double nbytes_for_fastdists=-1, int truncate_method=0, int nneighbors=-1, double minsim=-1., std::string outpath="", bool exact_kmer_dist=false, bool refine_exact=false, int nlshsubs=3):
-        Dashing2Options(std::move(opts)), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact), nLSH(nlshsubs)
+        Dashing2Options(opts), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact), nLSH(nlshsubs)
     {
         if(verbosity) {
             std::fprintf(stderr, "[%s] output format should be %s based on start\n", __PRETTY_FUNCTION__, ::dashing2::to_string(output_format_).data());

@@ -361,7 +361,7 @@ static inline void validate_options(char **const opts, const std::vector<std::st
         case 'v': ++verbosity; break;\
         case OPTARG_ISZ: measure = INTERSECTION; break;\
         case OPTARG_OUTPREF: {\
-            outprefix = optarg; break;\
+            outprefix = optarg; DBG_ONLY(std::fprintf(stderr, "outprefix: %s\n", outprefix.data());) break;\
         } \
         case OPTARG_HPCOMPRESS: {\
             hpcompress = true; break;\

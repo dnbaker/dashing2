@@ -294,7 +294,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         const size_t mss = ss * myind;
         auto &path = paths[myind];
         //std::fprintf(stderr, "parsing from path = %s\n", path.data());
-        auto &destination = ret.destination_files_[myind];
+        std::string &destination = ret.destination_files_[myind];
         destination = makedest(opts, path, opts.kmer_result_ == FULL_MMER_COUNTDICT);
         const std::string destination_prefix = destination.substr(0, destination.find_last_of('.'));
         std::string kmer_destination_prefix = makedest(opts, path, true);
@@ -324,11 +324,9 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                         std::fread(arr.data(), sizeof(long double), arr.size(), ifp);
                         auto &[a, b, fd_level, sketchsize] = arr;
                         if(fd_level != opts.fd_level_) {
-                            std::fprintf(stderr, "fd level found %g mismatches expected %g\n", double(fd_level), opts.fd_level_);
                             THROW_EXCEPTION(std::runtime_error("fd level mismatch."));
                         }
                         if(sketchsize != ss) {
-                            std::fprintf(stderr, "fd level found %g mismatches expected %zu\n", double(sketchsize), ss);
                             THROW_EXCEPTION(std::runtime_error("sketch size mismatch."));
                         }
                         RegT *const ptr = &ret.signatures_[(ss >> sigshift) * myind];
@@ -437,7 +435,6 @@ do {\
             } else THROW_EXCEPTION(std::runtime_error("Unexpected space for counter-based m-mer encoding"));
                 // Make bottom-k if we generated full k-mer sets or k-mer count dictionaries, and copy then over
             if(kmervec64.size() || kmervec128.size()) {
-                //std::fprintf(stderr, "If we gathered full k-mers, and we asked for signatures, let's store bottom-k hashes in the signature space\n");
                 if(ret.signatures_.size()) {
                     std::vector<BKRegT> keys(ss);
                     double *const kvcp = kmerveccounts.empty() ? static_cast<double *>(nullptr): kmerveccounts.data();
@@ -446,9 +443,13 @@ do {\
                     std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[mss]);
                 }
             }
-            std::FILE * ofp = bfopen(destination.data(), "wb");
-            checked_fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
-            if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
+            std::FILE * ofp{nullptr};
+            if(opts.cache_sketches_) {
+                std::fprintf(stderr, "Writing saved sketch to %s\n", destination.data());
+                ofp = bfopen(destination.data(), "wb");
+                if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
+            }
+            if(ofp) checked_fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
             const void *buf = nullptr;
             size_t nb;
             const RegT *srcptr = nullptr;
@@ -469,7 +470,8 @@ do {\
             } else nb = 0, srcptr = nullptr;
             if(srcptr && ret.signatures_.size())
                 std::copy(srcptr, srcptr + ss, &ret.signatures_[mss]);
-            checked_fwrite(ofp, buf, nb);
+            if(ofp)
+                checked_fwrite(ofp, buf, nb);
             if(opts.save_kmers_ && !(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_SEQUENCE || opts.kmer_result_ == FULL_MMER_COUNTDICT)) {
                 assert(ret.kmerfiles_.size());
                 ret.kmerfiles_[myind] = destkmer;
@@ -481,7 +483,6 @@ do {\
                 if(!ptr) THROW_EXCEPTION(std::runtime_error("This shouldn't happen"));
                 DBG_ONLY(std::fprintf(stderr, "Opening destkmer %s\n", destkmer.data());)
                 if((ofp = bfreopen(destkmer.data(), "wb", ofp)) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer file"));
-                //std::fprintf(stderr, "Writing to file %s\n", destkmer.data());
 
                 checked_fwrite(ofp, ptr, sizeof(uint64_t) * ss);
                 DBG_ONLY(std::fprintf(stderr, "About to copy to kmers of size %zu\n", ret.kmers_.size());)
@@ -489,7 +490,6 @@ do {\
                     std::copy(ptr, ptr + ss, &ret.kmers_[mss]);
             }
             if(opts.save_kmercounts_ || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
-                //std::fprintf(stderr, "About to save kmer counts manually\n");
                 assert(ret.kmercountfiles_.size());
                 ret.kmercountfiles_.at(i) = destkmercounts;
                 if((ofp = bfreopen(destkmercounts.data(), "wb", ofp)) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
@@ -503,14 +503,13 @@ do {\
                 const size_t nb = tmp.size() * sizeof(double);
                 checked_fwrite(ofp, tmp.data(), nb);
                 if(ret.kmercounts_.size()) {
-                    std::fprintf(stderr, "Copying range of size %zu from tmp to ret.kmercounts of size %zu\n", tmp.size(), ret.kmercounts_.size());
                     std::copy(tmp.begin(), tmp.begin() + ss, &ret.kmercounts_[mss]);
                 }
             }
             std::fclose(ofp);
         } else if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
             ret.kmers_.clear();
-            //std::fprintf(stderr, "Full mmer sequence\n");
+            DBG_ONLY(std::fprintf(stderr, "Full mmer sequence\n");)
             std::FILE * ofp;
             if((ofp = bfopen(destination.data(), "wb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open file for writing minimizer sequence"));
             void *dptr = nullptr;
@@ -538,9 +537,9 @@ do {\
             std::free(dptr);
             std::fclose(ofp);
         } else if(opts.kmer_result_ == ONE_PERM || opts.kmer_result_ == FULL_SETSKETCH) {
-            std::FILE * ofp;
-            if((ofp = bfopen(destination.data(), "wb")) == nullptr)
-                THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file") + destination + "for writing minimizer sequence"));
+            std::FILE * ofp{nullptr};
+            if((opts.cache_sketches_) && (ofp = bfopen(destination.data(), "wb")) == nullptr)
+                THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file ") + destination + " for writing sketch."));
             if(opss.empty() && fss.empty() && cfss.empty()) THROW_EXCEPTION(std::runtime_error("Both opss and fss are empty\n"));
             const size_t opsssz = opss.size();
             auto &cret = ret.cardinalities_[myind];
@@ -564,7 +563,7 @@ do {\
                     cret = fss[tid].getcard();
                 }
             }
-            checked_fwrite(ofp, &cret, sizeof(double));
+            if(ofp) checked_fwrite(ofp, &cret, sizeof(double));
             std::fflush(ofp);
             const uint64_t *ids = nullptr;
             const uint32_t *counts = nullptr;
@@ -577,25 +576,22 @@ do {\
                 counts = opsssz ? opss[tid].idcounts().data(): fss[tid].idcounts().data();
             if(opts.sketch_compressed_set) {
                 std::array<long double, 4> arr{opts.compressed_a_, opts.compressed_b_, static_cast<long double>(opts.fd_level_), static_cast<long double>(opts.sketchsize_)};
-                checked_fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
+                if(ofp) checked_fwrite(arr.data(), sizeof(long double), arr.size(), ofp);
                 if(opts.fd_level_ == 0.5) {
-                    std::fprintf(stderr, "Don't exepct this to be happening\n");
                     const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
                     for(size_t i = 0; i < opts.sketchsize_; i += 2) {
                         uint8_t reg = (srcptr[i] << 4) | srcptr[i + 1];
-                        checked_fwrite(ptr, sizeof(reg), 1, ofp);
+                        if(ofp) checked_fwrite(ptr, sizeof(reg), 1, ofp);
                     }
                 } else {
-                    checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
+                    if(ofp) checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
                 }
             } else {
-                std::fprintf(stderr, "Writing %zu bytes for sketch\n", ss * sizeof(RegT));
-                checked_fwrite(ofp, ptr, ss * sizeof(RegT));
+                if(ofp) checked_fwrite(ofp, ptr, ss * sizeof(RegT));
             }
-            std::fclose(ofp);
+            if(ofp) std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {
                 if(!opts.sketch_compressed_set) {
-                    std::fprintf(stderr, "Copying signatures normal way from tid %d\n", tid);
                     std::memcpy(&ret.signatures_[mss >> sigshift], ptr, (ss >> sigshift));
                 } else {
                     const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();

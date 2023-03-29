@@ -8,7 +8,7 @@
 #include <zlib.h>
 #include <iostream>
 #include "xxHash/xxh3.h"
-#include "flat_hash_map/flat_hash_map.hpp"
+#include "enums.h"
 #include "sketch/div.h"
 #include "sketch/integral.h"
 #include "sketch/hash.h"
@@ -19,6 +19,9 @@
 namespace sketch {
 using std::uint64_t;
 using std::uint32_t;
+
+using dashing2::flat_hash_map;
+using dashing2::flat_hash_set;
 
 namespace lsh {
 static inline constexpr uint64_t _wymum(uint64_t x, uint64_t y) {
@@ -42,7 +45,7 @@ struct SetSketchIndex {
      */
 private:
     size_t m_;
-    using HashMap = ska::flat_hash_map<KeyT, std::vector<IdT>>;
+    using HashMap = flat_hash_map<KeyT, std::vector<IdT>>;
     using HashV = std::vector<HashMap>;
     std::vector<HashV> packed_maps_;
     std::vector<uint64_t> regs_per_reg_;
@@ -160,7 +163,7 @@ public:
         if(starting_idx == size_t(-1) || starting_idx > regs_per_reg_.size()) starting_idx = regs_per_reg_.size();
         const size_t my_id = std::atomic_fetch_add(reinterpret_cast<std::atomic<size_t> *>(&total_ids_), size_t(1));
         const size_t n_subtable_lists = regs_per_reg_.size();
-        ska::flat_hash_map<IdT, uint32_t> rset;
+        flat_hash_map<IdT, uint32_t> rset;
         std::vector<IdT> passing_ids;
         std::vector<uint32_t> items_per_row;
         rset.reserve(maxcand); passing_ids.reserve(maxcand); items_per_row.reserve(starting_idx);
@@ -390,7 +393,7 @@ public:
          *  to least specific/most sensitive
          *  Can be then used, along with sketches, to select nearest neighbors
          *  */
-        ska::flat_hash_map<IdT, uint32_t> rset;
+        flat_hash_map<IdT, uint32_t> rset;
         std::vector<IdT> passing_ids;
         std::vector<uint32_t> items_per_row;
         rset.reserve(maxcand); passing_ids.reserve(maxcand); items_per_row.reserve(starting_idx);

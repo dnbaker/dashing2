@@ -16,7 +16,7 @@ static inline std::string to_string(const T *ptr) {
 struct SketchingResult {
     SketchingResult() {}
     SketchingResult(SketchingResult &&o) = default;
-    SketchingResult(const SketchingResult &o) = default;
+    SketchingResult(const SketchingResult &o) = delete;
     SketchingResult(SketchingResult &o) = default;
     SketchingResult &operator=(SketchingResult &&o) = default;
     SketchingResult &operator=(const SketchingResult &o) = delete;
