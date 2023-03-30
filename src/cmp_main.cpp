@@ -25,15 +25,21 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
     DBG_ONLY(std::fprintf(stderr, "Loading results using Dashing2Options: %s\n", opts.to_string().data());)
     if(verbosity >= Verbosity::INFO) {
         std::fprintf(stderr, "Loading results. Paths of size %zu", paths.size());
-        for(const auto& path: paths) {
+        for(const std::string& path: paths) {
             std::fprintf(stderr, "Path %s/%zd\n", path.data(), &path - paths.data());
         }
     }
     auto &pf = paths.front();
     struct stat st;
     ::stat(pf.data(), &st);
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Size of file: %d\n", int(st.st_size));
+    }
+    const std::string namesf = pf + ".names.txt";
     if(paths.size() == 1) {
-        std::string namesf = pf + ".names.txt";
+        if(verbosity >= INFO) {
+            std::fprintf(stderr, "Reading stacked sketches from %s. Names files is %s\n", paths.front().data(), namesf.data());
+        }
         if(bns::isfile(namesf)) {
             std::string l;
             for(std::ifstream ifs(namesf);std::getline(ifs, l);) {
@@ -52,33 +58,38 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             }
         }
         //size_t nregs = st.st_size / result.names_.size() / sizeof(RegT);
-        std::FILE *fp = bfopen(pf.data(), "w");
+        std::FILE *fp = bfopen(pf.data(), "rb");
         if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + pf));
-        struct stat st;
-        ::fstat(::fileno(fp), &st);
+        uint64_t num_entities;
+        if(st.st_size < 8 || std::fread(&num_entities, sizeof(num_entities), 1, fp) != 1u) {
+            THROW_EXCEPTION(std::runtime_error(std::string("Failed to read num_entities from file ") + pf + " of size " + std::to_string(st.st_size)));
+        }
         // Read in --
         // # of entities (64-bit integer)
-        uint64_t l;
-        std::fread(&l, sizeof(l), 1, fp);
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "%zu entities in file at %s\n", size_t(num_entities), pf.data());
+        }
         // sketch size (64-bit integer)
         uint64_t sketchsize;
-        std::fread(&sketchsize, sizeof(sketchsize), 1, fp);
+        if(std::fread(&sketchsize, sizeof(sketchsize), 1, fp) != 1) {
+            THROW_EXCEPTION(std::runtime_error(std::string("Failed to read sketch size from file ") + pf + " of size " + std::to_string(st.st_size)));
+        }
         opts.sketchsize_ = sketchsize;
         if(result.names_.empty()) {
-            result.names_.resize(l);
+            result.names_.resize(num_entities);
 #ifdef _OPENMP
             #pragma omp parallel for schedule(dynamic, 64)
 #endif
-            for(size_t i = 0; i < l; ++i)
+            for(size_t i = 0; i < num_entities; ++i)
                 result.names_[i] = std::to_string(i);
         }
-        assert(result.cardinalities_.empty() || result.cardinalities_.size() == l);
-        result.cardinalities_.resize(l);
-        // l * sizeof(double) for the cardinalitiy
+        assert(result.cardinalities_.empty() || result.cardinalities_.size() == num_entities || !std::fprintf(stderr, "card size: %zu. Number expected: %zu\n", result.cardinalities_.size(), num_entities));
+        result.cardinalities_.resize(num_entities);
+        // num_entities * sizeof(double) for the cardinalitiy
         if(std::fread(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), fp) != result.cardinalities_.size())
             THROW_EXCEPTION(std::runtime_error("Failed to read cardinalities from disk"));
         std::fclose(fp);
-        const auto offset = (l + 2) * sizeof(uint64_t);
+        const size_t offset = (num_entities + 2) * sizeof(uint64_t);
         assert((st.st_size - offset) % sizeof(RegT) == 0);
         result.signatures_.assign(pf, offset, (st.st_size - offset) / sizeof(RegT));
     } else { // Else, we have to load sketches from each file
@@ -298,7 +309,10 @@ int cmp_main(int argc, char **argv) {
         }
         std::string suf;
         if(suffixset.size() != 1) {
-            std::fprintf(stderr, "Multiple suffixes in set (%s). Picking the first one.\n", suffixset.begin()->data());
+            auto joinstrings =  [](const auto& strings) {
+                return std::accumulate(std::cbegin(strings), std::cend(strings), std::string{},[](auto x, const auto&y) {return x + ',' + y;});
+            };
+            std::fprintf(stderr, "Multiple suffixes in set (%s). Picking the first one. Paths: %s\n", joinstrings(suffixset).data(), joinstrings(paths).data());
             suf = paths.front().substr(paths.front().find_last_of('.'), std::string::npos);
         } else suf = *suffixset.begin();
         if(suf == ".bmh") {
