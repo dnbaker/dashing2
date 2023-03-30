@@ -226,6 +226,9 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         const size_t offset = sizeof(nitems) * 2 + sizeof(double) * nitems;
         ::truncate(outpath.data(), offset);
         ret.signatures_.assign(outpath, offset);
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Assigning vector of size %zu to mmap'd file of size %zu\n", ret.signatures_.size(), offset + ret.signatures_.size() * sizeof(RegT));
+        }
         if(opts.save_kmers_) {
             kmeroutpath = outpath + ".kmer64";
             kmernamesoutpath = kmeroutpath + ".names.txt";

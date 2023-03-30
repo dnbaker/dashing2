@@ -64,7 +64,7 @@ struct Dashing2DistOptions: public Dashing2Options {
         Dashing2Options(opts), output_kind_(outres), output_format_(of), outfile_path_(outpath), exact_kmer_dist_(exact_kmer_dist), refine_exact_(refine_exact), nLSH(nlshsubs)
     {
         if(verbosity) {
-            std::fprintf(stderr, "[%s] output format should be %s based on start\n", __PRETTY_FUNCTION__, ::dashing2::to_string(output_format_).data());
+            std::fprintf(stderr, "[%s] output format is %s\n", __PRETTY_FUNCTION__, ::dashing2::to_string(output_format_).data());
         }
         set_sketch_compressed();
         if(nbytes_for_fastdists < 0) nbytes_for_fastdists = sizeof(RegT);

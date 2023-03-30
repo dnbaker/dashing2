@@ -76,7 +76,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, con
                     DBG_ONLY(std::fprintf(stderr, "Cardinality %g found from path %s/%zu\n", res.card_, p.data(), i);)
                     //std::copy(sigs.begin(), sigs.end(), &result.signatures_[opts.sketchsize_* i]);
                 }
-                const auto total_n = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
+                const size_t total_n = std::accumulate(result.nperfile_.begin(), result.nperfile_.end(), size_t(0));
                 size_t offset = 0;
                 result.signatures_.resize(total_n * opts.sketchsize_);
                 result.names_.resize(total_n);
