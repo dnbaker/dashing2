@@ -73,6 +73,31 @@ def parse_binary_signatures(path):
         signatures = signatures.view({2: np.uint32, 1: np.uint64, 4: np.uint16, 8: np.uint8}[sigmul])
     return ParsedSignatureMatrix(nseqs, cardinalities, signatures)
 
+# This only works if --setsketch-ab has not been set,
+# but most use cases don't do this.
+def parse_binary_sketch(path):
+    dat = np.memmap(path, np.uint8)
+    card = dat[:8].view(np.double)[0]
+    signatures = dat[8:].view(np.float64)
+    return {"cardinality": card, "signatures": signatures}
+
+
+def convert_sketches_to_packed_sketch(paths, destination_path):
+    if not paths:
+        raise RuntimeError("Need at least one path")
+    with open(destination_path, "wb") as out:
+        u64 = np.array([len(paths)], np.uint64)
+        u64.tofile(out) # 8 bytes: num seqs
+        firstitem = parse_binary_sketch(paths[0])
+        u64[0] = firstitem['signatures'].size
+        u64.tofile(out) # 8 bytes: sketch size
+        items = [firstitem] + list(map(parse_binary_sketch, paths[1:]))
+        cards = np.fromiter((x['cardinality'] for x in items), np.float64)
+        cards.tofile(out) # 8 bytes * num_seqs: cardinalities
+        for item in items:
+            item['signatures'].tofile(out) # 8 bytes * sketch size * num_seqs signatures
+        return items
+
 
 def parse_binary_kmers(path):
     '''
@@ -186,4 +211,4 @@ def parse_minimizer_sequence_set(path):
 
 
 __all__ = ["parse_knn", "parse_binary_signatures", "ParsedSignatureMatrix", "parse_binary_kmers", "ParsedKmerMatrix", "alphabetcvt", "pairwise_equality_compare", "parse_binary_clustering", "parse_binary_distmat", "parse_binary_rectmat",
-           "parse_minimizer_sequence_set"]
+           "parse_minimizer_sequence_set", "parse_binary_sketch", "convert_sketches_to_packed_sketch"]
