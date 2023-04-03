@@ -235,12 +235,12 @@ int cmp_main(int argc, char **argv) {
     // By default, use full hash values, but allow people to enable smaller
     OutputFormat of = OutputFormat::HUMAN_READABLE;
     if(verbosity >= Verbosity::DEBUG) {
-        std::fprintf(stderr, "output format should be %s based on start\n", to_string(of).data());
+        std::fprintf(stderr, "output format should be %s based on value at start\n", to_string(of).data());
     }
     validate_options(argv, std::vector<std::string>{{"presketched"}});
     CMP_OPTS(cmp_long_options);
     std::vector<std::string> paths;
-    if(verbosity >= INFO) {
+    if(verbosity >= Verbosity::INFO) {
         std::fprintf(stderr, "output format should be %s before parsing options \n", to_string(of).data());
     }
     for(;(c = getopt_long(argc, argv, "m:p:k:w:c:f:S:F:Q:o:L:vNs2BPWh?ZJGH", cmp_long_options, &option_index)) >= 0;) {switch(c) {
@@ -353,6 +353,9 @@ int cmp_main(int argc, char **argv) {
     } else {
         sketch_core(result, distopts, paths, outfile);
         result.nqueries(nq);
+    }
+    if(verbosity >= Verbosity::EXTREME) {
+        std::fprintf(stderr, "before cmp_core, output format is %s\n", to_string(distopts.output_format_).data());
     }
     cmp_core(distopts, result);
     return 0;

@@ -45,6 +45,7 @@ OBJ0=$(patsubst %.o,%.0,$(OFS)) src/osfmt.o
 OBJV=$(patsubst %.o,%.vo,$(OFS)) src/osfmt.o
 OBJG=$(patsubst %.o,%.gobj,$(OFS)) src/osfmt.o
 OBJW=$(patsubst %.o,%.wo,$(OFS)) src/osfmt.o
+OBJNLTO=$(patsubst %.o,%.nlto,$(OFS)) src/osfmt.o
 
 all: dashing2 dashing2-64
 unit: readfx readbw readbed
@@ -98,6 +99,8 @@ dashing2-f64: $(OBJF64) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJF64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 dashing2-ld64: $(OBJLD64) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJLD64) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+dashing2-nftmp: $(OBJNLTO) libBigWig.a $(wildcard src/*.h)
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJNLTO) -o $@ $(LIB) $(EXTRA) libBigWig.a -DNDEBUG
 read%: test/read%.o $(LIBOBJ)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a
 read%-ld: test/read%.ldo $(LDLIBOBJ)
@@ -116,7 +119,7 @@ read%-f: test/read%.fo $(FLIBOBJ)
 %.64o: %.c
 	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto -O3 -DLSHIDTYPE="uint64_t" -std=c11
 %.0: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -O0
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -O0 -DNDEBUG
 %.0: %.c
 	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O0 -std=c11
 %.vo: %.cpp
@@ -149,6 +152,10 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 %.f64o: %.cpp $(wildcard src/*.h)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
+%.nlto: %.cpp
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
+%.nlto: %.c $(wildcard src/*.h)
+	$(CC) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
 src/osfmt.o: fmt/src/os.cc
 	$(CXX) -I fmt/include $(OPT) $(WARNING) $< -c -o $@ $(EXTRA)
 
@@ -169,26 +176,26 @@ libgomp.a:
 dashing2_s128: $(D2SRC) $(wildcard src/*.h) libgomp.a $(BWF) fmt/src/os.cc
 	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mno-avx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     fmt/src/os.cc libgomp.a $(BWF) \
-		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -DNDEBUG
 
 dashing2_savx: $(D2SRC) $(wildcard src/*.h) fmt/src/os.cc libgomp.a $(BWF)
 	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mno-avx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     fmt/src/os.cc libgomp.a $(BWF) \
-		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -DNDEBUG
 
 dashing2_savx2: $(D2SRC) $(wildcard src/*.h) fmt/src/os.cc libgomp.a $(BWF)
 	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     fmt/src/os.cc libgomp.a $(BWF) \
-		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -DNDEBUG
 
 dashing2_s512: $(D2SRC) $(wildcard src/*.h) fmt/src/os.cc libgomp.a $(BWF)
 	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mno-avx512dq -mno-avx512vl -mno-avx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
     fmt/src/os.cc libgomp.a $(BWF) \
-		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+		-DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -DNDEBUG
 
 dashing2_s512bw: $(D2SRC) $(wildcard src/*.h) fmt/src/os.cc libgomp.a $(BWF)
 	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc -flto \
-    fmt/src/os.cc libgomp.a $(BWF) -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz
+    fmt/src/os.cc libgomp.a $(BWF) -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -DNDEBUG
 
 dashing2_static: dashing2_s128 dashing2_savx dashing2_savx2 dashing2_s512 dashing2_s512bw
 static: dashing2_static

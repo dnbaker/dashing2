@@ -327,7 +327,7 @@ LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &resu
 #if COUNT_COMPARE_CALLS
     ++compare_count;
 #endif
-    if(verbosity >= 2) {
+    if(verbosity >= EXTREME) {
         std::fprintf(stderr, "About to compare sketches %zd and %zd. names size is %zu, signatures size is %zu. kmer counts %zu, and %zu kmers. Cardinalities %zu\n", i, j, result.names_.size(), result.signatures_.size(), result.kmercounts_.size(), result.kmers_.size(), result.cardinalities_.size());
     }
 #if 0
@@ -544,11 +544,11 @@ inline size_t densify(MHT *minhashes, uint64_t *const kmers, const size_t sketch
     for(size_t i = 0; i < sketchsize; ++i) {
         if(minhashes[i] != empty) continue;
         uint64_t j = i;
-        uint64_t rng = i;
+        uint64_t rng = (i + 1) * 0x501cdd81;
         while(minhashes[j] == empty) {
             static constexpr uint32_t PRIMEMOD = 4294967291u;
             auto a = (wy::wyhash64_stateless(&rng) % PRIMEMOD), b = (wy::wyhash64_stateless(&rng) % PRIMEMOD), c = (wy::wyhash64_stateless(&rng) % PRIMEMOD);
-            j = div.mod((((a * b) % PRIMEMOD + c) % PRIMEMOD));
+            j = div.mod(((a * b) % PRIMEMOD + c) % PRIMEMOD);
         }
         minhashes[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
@@ -638,7 +638,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                                  kp ? &kp[opts.sketchsize_ * i]: kp,
                                  opts.sketchsize_, sd);
         }
-        if(totaldens > 0) std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);
+        if((verbosity >= INFO) && (totaldens > 0)) std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);
     }
     //std::fprintf(stderr, "Handled generating needed cardinalities\n");
     // Calculate cardinalities if they haven't been
@@ -662,6 +662,9 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
     make_compressed(cret, opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE, opts.compressed_a_, opts.compressed_b_, opts.sketch_compressed_set);
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = cret;
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS || opts.output_kind_ == PANEL) {
+        if(verbosity >= Verbosity::DEBUG) {
+            std::fprintf(stderr, "before calling emit_rectangular, output format is %s\n", to_string(opts.output_format_).data());
+        }
         emit_rectangular(opts, result);
         return;
     }
