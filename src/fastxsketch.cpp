@@ -226,9 +226,6 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         const size_t offset = sizeof(nitems) * 2 + sizeof(double) * nitems;
         ::truncate(outpath.data(), offset);
         ret.signatures_.assign(outpath, offset);
-        if(verbosity >= DEBUG) {
-            std::fprintf(stderr, "Assigning vector of size %zu to mmap'd file of size %zu\n", ret.signatures_.size(), offset + ret.signatures_.size() * sizeof(RegT));
-        }
         if(opts.save_kmers_) {
             kmeroutpath = outpath + ".kmer64";
             kmernamesoutpath = kmeroutpath + ".names.txt";
@@ -258,6 +255,10 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     const int sigshift = opts.sigshift();
     const size_t sigvecsize64 = nitems * ss >> sigshift;
     ret.signatures_.resize(sigvecsize64);
+    if(verbosity >= DEBUG && outpath.size()) {
+        const size_t offset = sizeof(nitems) * 2 + sizeof(double) * nitems;
+        std::fprintf(stderr, "Assigning vector of size %zu to mmap'd file of size %zu with offset %zu\n", ret.signatures_.size(), offset + ret.signatures_.size() * sizeof(RegT), offset);
+    }
     if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         THROW_EXCEPTION(std::runtime_error("edit distance is only available in parse by seq mode"));
     }
@@ -595,7 +596,7 @@ do {\
             if(ofp) std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {
                 if(!opts.sketch_compressed_set) {
-                    std::memcpy(&ret.signatures_[mss >> sigshift], ptr, (ss >> sigshift));
+                    std::memcpy(&ret.signatures_[mss >> sigshift], ptr, ((ss * sizeof(RegT)) >> sigshift));
                 } else {
                     const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
                     uint8_t *destptr = (uint8_t *)&ret.signatures_[mss >> sigshift];

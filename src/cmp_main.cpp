@@ -356,6 +356,11 @@ int cmp_main(int argc, char **argv) {
     }
     if(verbosity >= Verbosity::EXTREME) {
         std::fprintf(stderr, "before cmp_core, output format is %s\n", to_string(distopts.output_format_).data());
+        for(uint32_t i = 0; i < result.total_seqs(); ++i) {
+            for(uint32_t j = 0; j < distopts.sketchsize_; ++j) {
+                std::fprintf(stderr, "Item %u has %g at idx %u\n", i, result.signatures_[i * distopts.sketchsize_ + j], j);
+            }
+        }
     }
     cmp_core(distopts, result);
     return 0;

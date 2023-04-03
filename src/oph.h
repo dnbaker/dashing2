@@ -33,11 +33,24 @@ struct CEIAdd {
 };
 using sketch::hash::CEIXOR;
 using sketch::hash::CEIMul;
+//using SimpleHasher = sketch::hash::CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>>;
+//static const SimpleHasher simplerHasher;
 #if 0
 // USE_SIMPLE_REVHASH
 using BHasher = sketch::hash::CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>>;
-#else
+#elif 0
 using BHasher = sketch::hash::WangHash;
+#else
+struct BHasher {
+    sketch::hash::WangHash Hasher;
+    sketch::hash::CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>> SimpleHasher;
+    uint64_t operator()(uint64_t x) const noexcept {
+        return Hasher(SimpleHasher(x));
+    }
+    uint64_t inverse(uint64_t x) const noexcept {
+        return Hasher.inverse(SimpleHasher.inverse(x));
+    }
+};
 #endif
 struct DHasher {
     BHasher bh;
@@ -68,9 +81,11 @@ struct DHasher {
     uint64_t inverse(uint64_t x) const {
         return seed_ ^ bh.inverse(x);
     }
+#if 0
     u128_t inverse(u128_t x) const {
         return seed2_ ^ bh.inverse(x);
     }
+#endif
 };
 
 
@@ -86,7 +101,7 @@ private:
     static_assert(std::is_integral_v<T> || std::is_same_v<T, u128_t>, "LazyOnePermSetSketch is to be used with integral types");
     std::vector<double> counts_;
     using SigT = std::conditional_t<(sizeof(T) == 4), float, std::conditional_t<(sizeof(T) == 8), double, long double>>;
-    std::unique_ptr<std::vector<SigT>> as_sigs_;
+    std::vector<SigT> as_sigs_;
     std::unique_ptr<std::vector<uint64_t>> original_ids_;
     std::unique_ptr<std::vector<uint32_t>> idcounts_;
     size_t mask_;
@@ -96,7 +111,7 @@ private:
     Hasher hasher_;
     // MultiplyAddXoRot
     // is already enough to pass Rabbit/SmallCrush
-    schism::Schismatic<uint64_t> div_;
+    schism::Schismatic<uint32_t> div_;
     double mincount_ = 0.;
     std::vector<flat_hash_map<T, uint32_t>> potentials_;
     double card_ = -1.;
@@ -117,7 +132,7 @@ public:
         mincount_ = o.mincount_;
         potentials_ = o.potentials_;
         card_ = o.card_;
-        if(o.as_sigs_) as_sigs_.reset(new std::decay_t<decltype(*as_sigs_)>(*o.as_sigs_));
+        as_sigs_ = o.as_sigs_;
         if(o.original_ids_) original_ids_.reset(new std::decay_t<decltype(*original_ids_)>(*o.original_ids_));
         if(o.idcounts_) idcounts_.reset(new std::decay_t<decltype(*idcounts_)>(*o.idcounts_));
         return *this;
@@ -131,7 +146,7 @@ public:
         m_ = m;
         registers_.resize(m_, T(-1));
         counts_.resize(m_);
-        div_ = schism::Schismatic<uint64_t>(m_);
+        div_ = schism::Schismatic<uint32_t>(m_);
         mask_ = m_ - 1;
         shift_ = sketch::integral::ilog2(m_);
         reset();
@@ -161,12 +176,12 @@ public:
     INLINE void update(const T oid) {
         ++total_updates_;
         const T id = hasher_(oid);
-        size_t idx = shasher_(id);
+        const size_t hashid = shasher_(id);
+        size_t idx;
         if constexpr(pow2)
-            idx = idx & mask_;
+            idx = hashid & mask_;
         else
-            idx -= m_ * div_.div(idx);
-        std::fprintf(stderr, "Pos: %zu. . Found pos: %zu. hash value: %zu. finalized-hash value %zu.\n", shasher_(id) % mask_, idx, id, shasher_(id));
+            idx = div_.mod(hashid);
         assert(idx < size());
         auto &cref = counts_[idx];
         auto &rref = registers_[idx];
@@ -217,7 +232,7 @@ public:
     void reset() {
         std::fill_n(registers_.data(), registers_.size(), T(-1));
         std::memset(counts_.data(), 0, counts_.size() * sizeof(double));
-        as_sigs_.reset();
+        as_sigs_.clear();
         card_ = -1.;
         for(auto &p: potentials_) p.clear();
         total_updates_ = 0;
@@ -231,14 +246,19 @@ public:
         return m_ * (m_ / sum);
     }
     SigT *data() {
-        if(as_sigs_) return as_sigs_->data();
-        as_sigs_.reset(new std::vector<SigT>(registers_.size()));
-        auto asp = as_sigs_->data();
+        if(!as_sigs_.empty()) return as_sigs_.data();
+        as_sigs_ = std::vector<SigT>(registers_.size());
+        SigT *asp = as_sigs_.data();
         const long double mul = -SigT(1) / (m_ - std::count(registers_.begin(), registers_.end(), std::numeric_limits<T>::max()));
+        std::transform(registers_.begin(), registers_.end(), asp, [mul](const auto x) -> SigT {
+            if(x == std::numeric_limits<T>::max()) {return 0.;}
+            return mul * std::log(omul * (std::numeric_limits<T>::max() - x + 1));
+        });
+#if 0
         for(size_t i = 0; i < m_; ++i) {
-            if(registers_[i] == std::numeric_limits<T>::max()) continue;
-            asp[i] = mul * std::log(omul * (std::numeric_limits<T>::max() - registers_[i] + 1));
+            std::fprintf(stderr, "Ret[%zu/%zu] %g is %g * log(%g * (max - %zu) + 1)\n", i, registers_.size(), asp[i], double(mul), omul, size_t(registers_[i]));
         }
+#endif
         return asp;
     }
     std::vector<uint64_t> &ids() {

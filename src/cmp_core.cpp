@@ -427,15 +427,7 @@ case v: {\
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET && opts.truncation_method_ <= 0) {
-            auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
-            if(verbosity >= Verbosity::DEBUG) {
-                auto getFive = [](auto src) {return std::accumulate(src, src + 5, std::string{}, [](auto x, auto y) {x += std::to_string(y); x += ','; return x;});};
-#if 0
-                auto lh_five = getFive(lhsrc);
-                auto rh_five = getFive(rhsrc);
-#endif
-                std::fprintf(stderr, "Computed gtlt for sketchsize=%d, and first entries = %s/%s\n", int(opts.sketchsize_), getFive(lhsrc).data(), getFive(rhsrc).data());
-            }
+            const auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
             long double alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
