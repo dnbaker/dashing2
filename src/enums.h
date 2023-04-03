@@ -104,7 +104,8 @@ enum OutputFormat {
 enum Verbosity: int {
     STANDARD, // no extra logging
     INFO, // information, but not low-level information
-    DEBUG,
+    DEBUG, // low-level
+    EXTREME, // no reason you would ever do this!
 };
 
 std::string to_string(KmerSketchResultType t);

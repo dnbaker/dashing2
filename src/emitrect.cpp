@@ -107,7 +107,7 @@ void batched_write(const float * &src, std::back_insert_iterator<fmt::memory_buf
 
 void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result) {
     if(verbosity >= Verbosity::DEBUG) {
-        std::fprintf(stderr, "output format should be %s based on start\n", to_string(opts.output_format_).data());
+        std::fprintf(stderr, "output format should be %s based on value at emit_rectangular start\n", to_string(opts.output_format_).data());
     }
     const size_t ns = result.names_.empty() ? result.nqueries(): result.names_.size();
     const std::string outp = opts.outfile_path_.empty() || opts.outfile_path_.front() == '-'
@@ -129,13 +129,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     const bool asym = opts.output_kind_ == ASYMMETRIC_ALL_PAIRS;
     std::deque<QTup> datq;
     std::mutex datq_lock;
-#ifndef NDEBUG
-    if(opts.output_format_ == MACHINE_READABLE) {
-        std::fprintf(stderr, "Emitting machine-readable: %s\n", to_string(opts.output_format_).data());
-    } else {
-        std::fprintf(stderr, "Emitting human-readable: %s\n", to_string(opts.output_format_).data());
+    if(verbosity >= Verbosity::DEBUG) {
+        std::fprintf(stderr, "Emitting %s: %s\n", opts.output_format_ == MACHINE_READABLE ? "machine readable": "human readable", to_string(opts.output_format_).data());
     }
-#endif
     // Emit Header
     if(opts.output_format_ == HUMAN_READABLE) {
         auto &of = ofopt.value();
@@ -205,6 +201,13 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     // and
     // Batched (batch_size > 1), which is more cache efficient by grouping comparisons
     // so that computations using the same data can share it
+    if(verbosity >= Verbosity::DEBUG) {
+        if(opts.output_format_ == MACHINE_READABLE) {
+            std::fprintf(stderr, "Before panel, emitting machine-readable: %s\n", to_string(opts.output_format_).data());
+        } else {
+            std::fprintf(stderr, "Before panel, emitting human-readable: %s\n", to_string(opts.output_format_).data());
+        }
+    }
     if(opts.output_kind_ == PANEL) {
         if(batch_size <= 1) {
             for(size_t i = 0; i < nf; ++i) {
