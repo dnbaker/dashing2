@@ -33,7 +33,8 @@ struct CEIAdd {
 };
 using sketch::hash::CEIXOR;
 using sketch::hash::CEIMul;
-#if USE_SIMPLE_REVHASH
+#if 0
+// USE_SIMPLE_REVHASH
 using BHasher = sketch::hash::CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>>;
 #else
 using BHasher = sketch::hash::WangHash;
@@ -165,6 +166,7 @@ public:
             idx = idx & mask_;
         else
             idx -= m_ * div_.div(idx);
+        std::fprintf(stderr, "Pos: %zu. . Found pos: %zu. hash value: %zu. finalized-hash value %zu.\n", shasher_(id) % mask_, idx, id, shasher_(id));
         assert(idx < size());
         auto &cref = counts_[idx];
         auto &rref = registers_[idx];

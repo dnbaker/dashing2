@@ -428,6 +428,14 @@ case v: {\
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET && opts.truncation_method_ <= 0) {
             auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
+            if(verbosity >= Verbosity::DEBUG) {
+                auto getFive = [](auto src) {return std::accumulate(src, src + 5, std::string{}, [](auto x, auto y) {x += std::to_string(y); x += ','; return x;});};
+#if 0
+                auto lh_five = getFive(lhsrc);
+                auto rh_five = getFive(rhsrc);
+#endif
+                std::fprintf(stderr, "Computed gtlt for sketchsize=%d, and first entries = %s/%s\n", int(opts.sketchsize_), getFive(lhsrc).data(), getFive(rhsrc).data());
+            }
             long double alpha, beta, eq, lhcard, ucard, rhcard;
             alpha = gtlt.first * invdenom;
             beta = gtlt.second * invdenom;
@@ -442,6 +450,9 @@ case v: {\
                 eq = 0;
             }
             ucard = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
+            if(verbosity >= Verbosity::DEBUG) {
+                std::fprintf(stderr, "gtlt: %d/%d. Matching = %d.  alpha: %g. beta: %g. ucard: %g\n", int(gtlt.first), int(gtlt.second), int(opts.sketchsize_), double(alpha), double(beta), double(ucard));
+            }
             const LSHDistType isz = ucard * eq, sim = eq;
             switch(opts.measure_) {
                 case SIMILARITY: ret = sim; break;
@@ -539,12 +550,15 @@ case v: {\
 template<typename MHT>
 inline size_t densify(MHT *minhashes, uint64_t *const kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
 {
+    for(int32_t i = 0; i < int(sketchsize); ++i) {
+        std::fprintf(stderr, "Sketch index %d is %g\n", i, double(minhashes[i]));
+    }
     const long long unsigned int ne = simdcount(minhashes, sketchsize, empty);
     if(ne == sketchsize  || ne == 0) return ne;
     for(size_t i = 0; i < sketchsize; ++i) {
         if(minhashes[i] != empty) continue;
         uint64_t j = i;
-        uint64_t rng = (i + 1) * 0x501cdd81;
+        uint64_t rng = (i ^ 2732335779078894447ull) * 0x50ad1e46e4631399ull;
         while(minhashes[j] == empty) {
             static constexpr uint32_t PRIMEMOD = 4294967291u;
             auto a = (wy::wyhash64_stateless(&rng) % PRIMEMOD), b = (wy::wyhash64_stateless(&rng) % PRIMEMOD), c = (wy::wyhash64_stateless(&rng) % PRIMEMOD);
