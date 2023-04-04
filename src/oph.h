@@ -43,7 +43,7 @@ using BHasher = sketch::hash::WangHash;
 #else
 struct BHasher {
     sketch::hash::WangHash Hasher;
-    sketch::hash::CEIFused<CEIXOR<0x533f8c2151b20f97>, CEIMul<0x9a98567ed20c127d>, CEIXOR<0x691a9d706391077a>> SimpleHasher;
+    sketch::hash::CEIXOR<0x533f8c2151b20f97> SimpleHasher;
     uint64_t operator()(uint64_t x) const noexcept {
         return Hasher(SimpleHasher(x));
     }
@@ -176,7 +176,7 @@ public:
     INLINE void update(const T oid) {
         ++total_updates_;
         const T id = hasher_(oid);
-        const size_t hashid = shasher_(id);
+        const size_t hashid = id; // shasher_(id);
         size_t idx;
         if constexpr(pow2)
             idx = hashid & mask_;

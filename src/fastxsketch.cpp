@@ -448,7 +448,7 @@ do {\
                 }
             }
             std::FILE * ofp{nullptr};
-            if(opts.cache_sketches_) {
+            if(opts.cache_sketches_ || opts.kmer_result_  == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 std::fprintf(stderr, "Writing saved sketch to %s\n", destination.data());
                 ofp = bfopen(destination.data(), "wb");
                 if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));

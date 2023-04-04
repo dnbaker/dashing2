@@ -215,6 +215,9 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
 #ifndef NDEBUG
                 std::fill_n(dat.get(), nq, EMPTY);
 #endif
+                if(verbosity >= Verbosity::DEBUG) {
+                    std::fprintf(stderr, "Panel comparing %zd against %zd->%zd\n", i, nf, nf + nq);
+                }
                 OMP_PFOR_DYN
                 for(size_t j = 0; j < nq; ++j) {
                     dat[j] = compare(opts, result, i, j + nf);
@@ -272,8 +275,12 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                     std::fill_n(dat.get(), nelem, EMPTY);
 #endif
                     const auto datp = dat.get() - (asym ? size_t(0): i + 1);
+                    const size_t start_index = asym ? 0: i + 1;
+                    if(verbosity >= Verbosity::DEBUG && (start_index < ns)) {
+                        std::fprintf(stderr, "UT comparing %zd against %zd through %zd\n", i, start_index, ns - 1);
+                    }
                     OMP_PFOR_DYN
-                    for(size_t start = asym ? 0: i + 1;start < ns; ++start) {
+                    for(size_t start = start_index;start < ns; ++start) {
                         datp[start] = compare(opts, result, i, start);
                     }
                     std::lock_guard<std::mutex> guard(datq_lock);

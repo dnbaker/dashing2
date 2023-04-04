@@ -9,6 +9,8 @@
 #include "levenshtein-sse.hpp"
 #include "options.h"
 
+#include <span>
+
 namespace dashing2 {
 std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_core(sketch::lsh::SetSketchIndex<LSHIDType, LSHIDType> &idx, const Dashing2DistOptions &opts, const SketchingResult &result);
 void dedup_emit(const std::vector<LSHIDType> &, const std::vector<std::vector<LSHIDType>> &constituents, const Dashing2DistOptions &opts, const SketchingResult &result);
@@ -434,16 +436,17 @@ case v: {\
             assert((opts.sketchsize_ - (gtlt.first + gtlt.second)) == std::inner_product(lhsrc, lhsrc + opts.sketchsize_, rhsrc, size_t(0), std::plus<>(), std::equal_to<>()));
             lhcard = result.cardinalities_[i], rhcard = result.cardinalities_[j];
             eq = (1. - alpha - beta);
+            ucard = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
+            if(verbosity >= Verbosity::DEBUG) {
+                const int counteqman = std::inner_product(lhsrc, lhsrc + opts.sketchsize_, rhsrc, size_t{0}, std::plus<>{}, std::equal_to<>{});
+                std::fprintf(stderr, "gtlt: %d/%d between %zu and %zu. Out of %d. Number equal simd/manual: %d/%d.  alpha: %g. beta: %g. ucard: %g\n", int(gtlt.first), int(gtlt.second), i, j, int(opts.sketchsize_), int(sketch::eq::count_eq(lhsrc, rhsrc, opts.sketchsize_)), counteqman, double(alpha), double(beta), double(ucard));
+            }
             if(eq <= 0.) {
                 return opts.measure_ != POISSON_LLR ? 0.: std::numeric_limits<double>::max();
             }
             static constexpr long double EPS = 1e-15;
             if(eq <= EPS) {
                 eq = 0;
-            }
-            ucard = std::max((lhcard + rhcard) / (2.L - alpha - beta), 0.L);
-            if(verbosity >= Verbosity::DEBUG) {
-                std::fprintf(stderr, "gtlt: %d/%d. Matching = %d.  alpha: %g. beta: %g. ucard: %g\n", int(gtlt.first), int(gtlt.second), int(opts.sketchsize_), double(alpha), double(beta), double(ucard));
             }
             const LSHDistType isz = ucard * eq, sim = eq;
             switch(opts.measure_) {
@@ -454,6 +457,9 @@ case v: {\
                 case POISSON_LLR: ret = sim2dist(sim); break;
                 case UNION_SIZE: ret = lhcard + rhcard - isz; break;
                 default: ret = LSHDistType(-1); break; // This never happens
+            }
+            if(verbosity >= Verbosity::DEBUG) {
+                std::fprintf(stderr, "sim: %g. isz: %g. llr: %g\n", double(sim), double(isz), double(sim2dist(sim)));
             }
 
             assert(ret >= 0. || !std::fprintf(stderr, "measure: %s. sim: %g. isz: %g\n", to_string(opts.measure_).data(), sim, isz));
@@ -540,24 +546,33 @@ case v: {\
 }
 
 template<typename MHT>
-inline size_t densify(MHT *minhashes, uint64_t *const kmers, const size_t sketchsize, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
+inline size_t densify(std::span<MHT> minhashes, uint64_t *const kmers, const schism::Schismatic<uint64_t> &div, const MHT empty=MHT(0))
 {
-    for(int32_t i = 0; i < int(sketchsize); ++i) {
-        std::fprintf(stderr, "Sketch index %d is %g\n", i, double(minhashes[i]));
+    const size_t sketchsize = minhashes.size();
+    if(verbosity >= EXTREME) {
+        for(size_t i = 0; i < sketchsize; ++i) {
+            std::fprintf(stderr, "BEFORE Sketch %zu is %g\n", i, double(minhashes[i]));
+        }
     }
-    const long long unsigned int ne = simdcount(minhashes, sketchsize, empty);
-    if(ne == sketchsize  || ne == 0) return ne;
+    size_t ne = 0;
     for(size_t i = 0; i < sketchsize; ++i) {
         if(minhashes[i] != empty) continue;
-        uint64_t j = i;
-        uint64_t rng = (i ^ 2732335779078894447ull) * 0x50ad1e46e4631399ull;
-        while(minhashes[j] == empty) {
-            static constexpr uint32_t PRIMEMOD = 4294967291u;
-            auto a = (wy::wyhash64_stateless(&rng) % PRIMEMOD), b = (wy::wyhash64_stateless(&rng) % PRIMEMOD), c = (wy::wyhash64_stateless(&rng) % PRIMEMOD);
-            j = div.mod(((a * b) % PRIMEMOD + c) % PRIMEMOD);
+        ++ne;
+        uint64_t rng_i = i + 0x5bf2b8bdf07c06cull;
+        uint64_t j;
+        do {
+            j = div.mod(wy::wyhash64_stateless(&rng_i));
+        } while(empty == minhashes[j]);
+        if(verbosity >= EXTREME) {
+            std::fprintf(stderr, "Assigned idx %d to %d because it was empty (%g)\n", int(j), int(i), double(empty));
         }
         minhashes[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
+    }
+    if(verbosity >= EXTREME) {
+        for(size_t i = 0; i < sketchsize; ++i) {
+            std::fprintf(stderr, "AFTER Sketch %zu is %g\n", i, double(minhashes[i]));
+        }
     }
     assert(std::find(minhashes, minhashes + sketchsize, empty) == minhashes + sketchsize);
     return ne;
@@ -636,13 +651,28 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         const size_t n = result.cardinalities_.size();
         uint64_t *const kp = result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
         size_t totaldens = 0;
+        auto allpairdists = [&](const char *msg){
+            for(size_t i = 0; i < n;++i) {
+                for(size_t j = i + 1; j < n;++j) {
+                    auto lhsrc = &result.signatures_[i * opts.sketchsize_];
+                    auto rhsrc = &result.signatures_[j * opts.sketchsize_];
+                    std::fprintf(stderr, "%s numeq = %zu for %zu/%zu\n", msg, std::inner_product(lhsrc, lhsrc + opts.sketchsize_, rhsrc, size_t(0), std::plus<>(), [](auto x, auto y) {return x > 0 && y > 0 && x == y;}), i, j);
+                }
+            }
+        };
+        if(verbosity >= DEBUG) {
+            allpairdists("before");
+        }
 #ifdef _OPENMP
         #pragma omp parallel for schedule(dynamic, 32) reduction(+:totaldens)
 #endif
         for(size_t i = 0; i < n;++i) {
-            totaldens += densify(&result.signatures_[opts.sketchsize_ * i],
+            totaldens += densify(std::span(&result.signatures_[opts.sketchsize_ * i], opts.sketchsize_),
                                  kp ? &kp[opts.sketchsize_ * i]: kp,
-                                 opts.sketchsize_, sd);
+                                 sd);
+        }
+        if(verbosity >= DEBUG) {
+            allpairdists("after");
         }
         if((verbosity >= INFO) && (totaldens > 0)) std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);
     }

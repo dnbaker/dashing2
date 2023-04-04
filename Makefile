@@ -24,10 +24,10 @@ OPT+= -O3 \
     -fopenmp -pipe $(CACHE_SIZE_FLAG)
 
 OPTMV:=$(OPT)
-OPT+= -std=c++17
+OPT+= -std=c++20
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic -Wno-array-bounds # -Wno-shift-count-overflow
 EXTRA+=-DNOCURL -DDASHING2_VERSION=\"$(GIT_VERSION)\" -DFMT_HEADER_ONLY
-CXXFLAGS+= -std=c++17
+CXXFLAGS+= -std=c++20
 CFLAGS+= -std=c11
 
 D2SRC=$(wildcard src/*.cpp)
