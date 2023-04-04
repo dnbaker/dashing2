@@ -555,6 +555,7 @@ inline size_t densify(std::span<MHT> minhashes, uint64_t *const kmers, const sch
         }
     }
     size_t ne = 0;
+    std::vector<MHT> tmp(minhashes.begin(), minhashes.end());
     for(size_t i = 0; i < sketchsize; ++i) {
         if(minhashes[i] != empty) continue;
         ++ne;
@@ -566,9 +567,10 @@ inline size_t densify(std::span<MHT> minhashes, uint64_t *const kmers, const sch
         if(verbosity >= EXTREME) {
             std::fprintf(stderr, "Assigned idx %d to %d because it was empty (%g)\n", int(j), int(i), double(empty));
         }
-        minhashes[i] = minhashes[j];
+        tmp[i] = minhashes[j];
         if(kmers) kmers[i] = kmers[j];
     }
+    std::copy(tmp.begin(), tmp.end(), minhashes.begin());
     if(verbosity >= EXTREME) {
         for(size_t i = 0; i < sketchsize; ++i) {
             std::fprintf(stderr, "AFTER Sketch %zu is %g\n", i, double(minhashes[i]));

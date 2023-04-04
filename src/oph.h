@@ -251,7 +251,7 @@ public:
         SigT *asp = as_sigs_.data();
         const long double mul = -SigT(1) / (m_ - std::count(registers_.begin(), registers_.end(), std::numeric_limits<T>::max()));
         std::transform(registers_.begin(), registers_.end(), asp, [mul](const auto x) -> SigT {
-            if(x == std::numeric_limits<T>::max()) {return 0.;}
+            if(x == std::numeric_limits<T>::max() || x == T(0)) {return 0.;}
             return mul * std::log(omul * (std::numeric_limits<T>::max() - x + 1));
         });
 #if 0
