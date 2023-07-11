@@ -48,9 +48,9 @@ static INLINE int print_tabs(size_t n, std::FILE *ofp) {
 }
 
 static INLINE void print_tabs(size_t n, std::back_insert_iterator<fmt::memory_buffer> &biof) {
-    for(;n > 256; format_to(biof, tabstr), n -= 256);
+    for(;n > 256; fmt::format_to(biof, tabstr), n -= 256);
     const auto substr = tabstr.substr(0, n << 1);
-    format_to(biof, "{}", substr);
+    fmt::format_to(biof, "{}", substr);
 }
 
 static INLINE void print_tabs(size_t n, fmt::ostream &os) {
@@ -348,7 +348,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                         fn = std::string("E") + std::to_string(i);
                     }
                     if(fn.size() < 9) fn.append(9 - fn.size(), ' ');
-                    format_to(biof, "{}", fn);
+                    fmt::format_to(biof, "{}", fn);
                     const size_t jend = opts.output_kind_ == PANEL ? nq: asym ? ns: ns - i - 1;
                     if(opts.output_kind_ == SYMMETRIC_ALL_PAIRS) print_tabs(i + 1, biof);
                     batched_write(datp, biof, jend);
