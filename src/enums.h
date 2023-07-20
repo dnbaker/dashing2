@@ -1,5 +1,7 @@
 #pragma once
+#ifndef VEC_DISABLED__
 #define VEC_DISABLED__ 1
+#endif
 // #include "hash.h"
 #include "sketch/hash.h"
 #include "sketch/macros.h"

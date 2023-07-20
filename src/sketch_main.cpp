@@ -133,7 +133,13 @@ int sketch_main(int argc, char **argv) {
         return 1;
     }
     SketchingResult result;
+    if(verbosity >= EXTREME) {
+        std::fprintf(stderr, "About to sketch\n");
+    }
     sketch_core(result, distopts, paths, outfile);
+    if(verbosity >= EXTREME) {
+        std::fprintf(stderr, "Finished sketching\n");
+    }
     result.nqueries(nq);
     if(cmpout.size()) {
         distopts.measure_ = measure;

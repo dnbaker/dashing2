@@ -1,6 +1,8 @@
 #ifndef D2_SETSKETCH_H___H__
 #define D2_SETSKETCH_H___H__
+#ifndef VEC_DISABLED__
 #define VEC_DISABLED__ 1
+#endif
 #include <stdexcept>
 #include <cassert>
 #include <queue>

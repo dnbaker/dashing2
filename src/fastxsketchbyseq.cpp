@@ -4,6 +4,8 @@ namespace dashing2 {
 using namespace variation;
 using bns::InputType;
 
+#undef DBG_ONLY
+#define DBG_ONLY(x) do {if(verbosity >= DEBUG) {x}} while(0)
 
 struct OptSketcher {
     std::unique_ptr<BagMinHash> bmh;
@@ -102,9 +104,11 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
     OptSketcher sketcher(opts);
     sketcher.rh_ = opts.rh_;
     sketcher.rh128_ = opts.rh128_;
+    if(verbosity >= INFO) {
+        std::fprintf(stderr, "Beginning sketch-by-seq with sketch space %s\n", to_string(opts.sspace_).data());
+    }
     if(opts.sspace_ == SPACE_SET) {
         if(opts.one_perm()) {
-            DBG_ONLY(std::fprintf(stderr, "Using OPSS\n");)
             sketcher.opss.reset(new OPSetSketch(opts.sketchsize_));
             if(opts.count_threshold_ > 0) sketcher.opss->set_mincount(opts.count_threshold_);
         } else if(!opts.sketch_compressed_set)
@@ -113,19 +117,19 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
             assert(sketcher.cfss);
         }
     } else if(opts.sspace_ == SPACE_MULTISET) {
-            DBG_ONLY(std::fprintf(stderr, "Using BMH\n");)
+        DBG_ONLY(std::fprintf(stderr, "Using BMH\n"););
         sketcher.bmh.reset(new BagMinHash(opts.sketchsize_, opts.save_kmers_, opts.save_kmercounts_));
     } else if(opts.sspace_ == SPACE_PSET) {
         sketcher.pmh.reset(new ProbMinHash(opts.sketchsize_));
-        DBG_ONLY(std::fprintf(stderr, "Setting sketcher.pmh: %p\n", (void *)sketcher.pmh.get());)
+        DBG_ONLY(std::fprintf(stderr, "Setting sketcher.pmh: %p\n", (void *)sketcher.pmh.get()););
     } else if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
         sketcher.omh.reset(new OrderMinHash(opts.sketchsize_, opts.k_));
-        DBG_ONLY(std::fprintf(stderr, "Setting sketcher.omh: %p\n", (void *)sketcher.omh.get());)
+        DBG_ONLY(std::fprintf(stderr, "Setting sketcher.omh: %p\n", (void *)sketcher.omh.get()););
     } else THROW_EXCEPTION(std::runtime_error("Should have been set space, multiset, probset, or edit distance"));
     if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
         sketcher.ctr.reset(new Counter(opts.cssize()));
     }
-    uint64_t total_nseqs = 0;
+    size_t total_nseqs = 0;
     for_each_substr([&total_nseqs](const std::string &path) {
         gzFile fp = gzopen(path.data(), "r");
         if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open gzfile"s + path + "to count sequences."));
@@ -134,9 +138,12 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
         kseq_destroy(ks);
         gzclose(fp);
     }, path);
+    if(verbosity >= INFO) {
+        std::fprintf(stderr, "%zu seqs in file\n", total_nseqs);
+    }
     if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
         if(!bns::isfile(outpath)) {
-            DBG_ONLY(std::fprintf(stderr, "Creating outpath '%s'\n", outpath.data());)
+            DBG_ONLY(std::fprintf(stderr, "Creating outpath '%s'\n", outpath.data()););
             std::FILE *fp = std::fopen(outpath.data(), "wb");
             if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open path "s + outpath + " for writing"));
             std::fclose(fp);
@@ -151,17 +158,27 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
         }
         ret.signatures_.assign(outpath);
     }
+
+    const size_t num_sigs = (total_nseqs * opts.sketchsize_) >> opts.sigshift();
+    if(verbosity >= INFO) {
+        std::fprintf(stderr, "Reserving signatures space: %zu entries, for %zu bytes each\n", num_sigs, (sizeof(double) * opts.sketchsize_) >> opts.sigshift());
+    }
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
-        ret.signatures_.reserve(total_nseqs * opts.sketchsize_ >> opts.sigshift());
+        ret.signatures_.reserve(num_sigs);
     }
 
     ret.cardinalities_.resize(total_nseqs);
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE && opts.save_kmers_) {
         ret.kmers_.resize(opts.sketchsize_ * total_nseqs);
     }
+
     if((opts.kmer_result_ != FULL_MMER_SEQUENCE) && opts.save_kmercounts_) {
         ret.kmercounts_.resize(opts.sketchsize_ * total_nseqs);
     }
+    if(verbosity >= INFO) {
+        std::fprintf(stderr, "Reserved kmers, kmer counts, etc.\n");
+    }
+
 
     std::vector<OptSketcher> sketching_data;
     size_t nt = 1;
@@ -176,20 +193,20 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
     if(nt > 1) {
         sketching_data.resize(nt, sketcher);
     } else sketching_data.emplace_back(std::move(sketcher));
-    DBG_ONLY(std::fprintf(stderr, "save ids: %d, save counts %d\n", opts.save_kmers_, opts.save_kmercounts_);)
+    DBG_ONLY(std::fprintf(stderr, "save ids: %d, save counts %d\n", opts.save_kmers_, opts.save_kmercounts_););
     size_t lastindex = 0;
     for_each_substr([&](const auto &x) {
-        DBG_ONLY(std::fprintf(stderr, "Processing substr %s\n", x.data());)
+        DBG_ONLY(std::fprintf(stderr, "Processing substr %s\n", x.data()););
         if((ifp = gzopen(x.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to read from ") + x));
         gzbuffer(ifp, 1u << 17);
         kseq_assign(myseq, ifp);
         for(int c;(c = kseq_read(myseq)) >= 0;) {
-            //DBG_ONLY(std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l);)
+            //DBG_ONLY(std::fprintf(stderr, "Sequence %s of length %zu\n", myseq->name.s, myseq->seq.l););
             ret.sequences_.emplace_back(myseq->seq.s, myseq->seq.l);
             const int off = (myseq->name.s[0] == '>');
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
-                DBG_ONLY(std::fprintf(stderr, "batch index = %zu\n", batch_index);)
+                DBG_ONLY(std::fprintf(stderr, "batch index = %zu\n", batch_index););
                 resize_fill(opts, ret, std::min(size_t(seqs_per_batch), size_t(total_nseqs - ret.names_.size())), sketching_data, lastindex, nt);
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
@@ -214,18 +231,20 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
     return ret;
 }
 void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nt) {
-    DBG_ONLY(std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);)
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
+    }
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
     const int sigshift = opts.sigshift();
     if(opts.kmer_result_ != FULL_MMER_SEQUENCE) {
-        DBG_ONLY(std::fprintf(stderr, "old sig size %zu, cap %zu, new %zu\n", ret.signatures_.size(), ret.signatures_.capacity(), newsz * opts.sketchsize_ >> sigshift);)
+        DBG_ONLY(std::fprintf(stderr, "old sig size %zu, cap %zu, new %zu\n", ret.signatures_.size(), ret.signatures_.capacity(), newsz * opts.sketchsize_ >> sigshift););
         assert(oldsz * (opts.sketchsize_ >> sigshift) <= ret.signatures_.capacity());
         ret.signatures_.resize(oldsz * (opts.sketchsize_ >> sigshift));
-        DBG_ONLY(std::fprintf(stderr, "ret signature size: %zu\n", ret.signatures_.size());)
+        DBG_ONLY(std::fprintf(stderr, "ret signature size: %zu\n", ret.signatures_.size()););
     }
-    DBG_ONLY(std::fprintf(stderr, "mmer matrix size %zu. save kmers %d\n", ret.kmers_.size(), opts.save_kmers_);)
-    DBG_ONLY(std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA");)
+    DBG_ONLY(std::fprintf(stderr, "mmer matrix size %zu. save kmers %d\n", ret.kmers_.size(), opts.save_kmers_););
+    DBG_ONLY(std::fprintf(stderr, "Parsing %s\n", sketchvec.front().enable_protein() ? "Protein": "DNA"););
     std::unique_ptr<std::vector<uint64_t>[]> seqmins;
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
@@ -233,7 +252,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
     OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
-        //DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid);)
+        //DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid););
         auto &sketchers(sketchvec[tid]);
         sketchers.reset();
         const auto seqp = ret.sequences_[i].data();
@@ -298,6 +317,7 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             }
             ret.cardinalities_[i] = myseq.size();
         } else {
+            DBG_ONLY(std::fprintf(stderr, "Sketching all k-mers in sequence %s/%zu\n", ret.sequences_[i].data(), i););
             const bool isop = sketchers.opss.get(), isctr = sketchers.ctr.get(), isfs = sketchers.fss.get(), iscfss = sketchers.cfss.get();
             auto fsfunc = [&](auto x) __attribute__((always_inline)) {
                 x = maskfn(x);
@@ -319,11 +339,13 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
             } else {
                 sketchers.for_each(nofsfunc, seqp, seql);
             }
+            DBG_ONLY(std::fprintf(stderr, "Sketched all k-mers in sequence\n"););
             RegT *ptr = nullptr;
             const uint64_t *kmer_ptr = nullptr;
             std::vector<double> kmercounts;
             if(opts.sspace_ == SPACE_SET) {
                 if(sketchers.ctr) {
+                    DBG_ONLY(std::fprintf(stderr, "Sketching setspace with count thresholding.\n"););
                     if(sketchers.opss) {
                         sketchers.ctr->finalize(*sketchers.opss, opts.count_threshold_);
                         ptr = sketchers.opss->data();
@@ -335,10 +357,18 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                     } else if(sketchers.cfss) {
                         std::visit([&](auto &sketch) {sketchers.ctr->finalize(sketch, opts.count_threshold_); ptr = (RegT *)sketch.data();ret.cardinalities_[i] = sketch.getcard();}, *sketchers.cfss);
                     }
+                    DBG_ONLY(std::fprintf(stderr, "Sketched setspace with count thresholding.\n"););
                 } else {
                     ptr = sketchers.opss ? sketchers.opss->data(): sketchers.fss ? sketchers.fss->data(): (RegT *)getdata(*sketchers.cfss);
-                    ret.cardinalities_[i] = sketchers.opss ? sketchers.opss->getcard(): sketchers.fss ? sketchers.fss->getcard(): getcard(*sketchers.cfss);
+                    ret.cardinalities_[i] = sketchers.opss ? sketchers.opss->getcard(): sketchers.fss ? sketchers.fss->getcard(): sketchers.cfss ? getcard(*sketchers.cfss): std::numeric_limits<double>::quiet_NaN();
+                    if(std::isnan(ret.cardinalities_[i])) {
+                        if(verbosity >= INFO) {
+                            std::fprintf(stderr, "Warning: sketch cardinality was a NAN. This is unexpected. Settings to 0.\n");
+                        }
+                        ret.cardinalities_[i] = 0.;
+                    }
                     if(ret.cardinalities_[i] < 10 * opts.sketchsize_) {
+                        DBG_ONLY(std::fprintf(stderr, "Cardinality exact counting fall-back\n"););
                         flat_hash_set<uint64_t> ids;
                         ids.reserve(opts.sketchsize_);
                         if(opts.fs_) {
@@ -351,13 +381,14 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                             sketchers.for_each([&](auto x) {ids.insert(maskfn(x));}, seqp, seql);
                         }
                         ret.cardinalities_[i] = ids.size();
+                        DBG_ONLY(std::fprintf(stderr, "Cardinality exact counting fall-back complete\n"););
                     }
                     kmer_ptr = sketchers.opss ? sketchers.opss->ids().data(): sketchers.fss ? sketchers.fss->ids().data(): (const uint64_t *)nullptr;
-                    kmercounts.resize(opts.sketchsize_);
                     if(sketchers.opss && sketchers.opss->idcounts().size()) {
                         auto &idc = sketchers.opss->idcounts();
+                        kmercounts.resize(opts.sketchsize_);
                         std::copy(idc.begin(), idc.end(), kmercounts.begin());
-                    } else if(sketchers.fss->idcounts().size()) {
+                    } else if(sketchers.fss && sketchers.fss->idcounts().size()) {
                         kmercounts.resize(opts.sketchsize_);
                         std::copy(sketchers.fss->idcounts().begin(), sketchers.fss->idcounts().end(), kmercounts.begin());
                     }
@@ -382,7 +413,11 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 }
             } else THROW_EXCEPTION(std::runtime_error("Not yet implemented?"));
             if(!sketchers.cfss || opts.fd_level_ != 0.5) {
-                std::copy(ptr, ptr + (opts.sketchsize_ >> sigshift), &ret.signatures_[i * (opts.sketchsize_ >> sigshift)]);
+                const size_t mss = opts.sketchsize_ * i;
+                DBG_ONLY(std::fprintf(stderr, "About to copy out. For sketch idx %zu, Offset into dict: %zu. copying %zu bytes.\n", mss, mss >> sigshift, ((opts.sketchsize_ * sizeof(RegT)) >> sigshift)););
+                std::memcpy(&ret.signatures_[mss >> sigshift], ptr, ((opts.sketchsize_ * sizeof(RegT)) >> sigshift));
+                // std::copy(ptr, ptr + (opts.sketchsize_ >> sigshift), &ret.signatures_[i * (opts.sketchsize_ >> sigshift)]);
+                DBG_ONLY(std::fprintf(stderr, "Copied out. For sketch idx %zu, Offset into dict: %zu. copying %zu bytes.\n", mss, mss >> sigshift, ((opts.sketchsize_ * sizeof(RegT)) >> sigshift)););
             } else {
                 const uint8_t *const srcptr = std::get<NibbleSetS>(*sketchers.cfss).data();
                 uint8_t *destptr = (uint8_t *)&ret.signatures_[i * opts.sketchsize_ >> sigshift];
@@ -391,9 +426,10 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 }
             }
             if(kmer_ptr && ret.kmers_.size()) {
-                //std::fprintf(stderr, "Copying k-mers out, kmers size %zu, idx = %zu\n", ret.kmers_.size(), i * opts.sketchsize_);
                 std::copy(kmer_ptr, kmer_ptr + opts.sketchsize_, &ret.kmers_[i * opts.sketchsize_]);
-            }// else std::fprintf(stderr, "k-mers not saved\n");
+            } else if(verbosity >= DEBUG) {
+                std::fprintf(stderr, "k-mers not saved\n");
+            }
             if(kmercounts.size() && ret.kmercounts_.size()) {
                 std::copy(kmercounts.begin(), kmercounts.end(), &ret.kmercounts_[i * opts.sketchsize_]);
             }

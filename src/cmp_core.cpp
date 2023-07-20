@@ -581,6 +581,9 @@ inline size_t densify(std::span<MHT> minhashes, uint64_t *const kmers, const sch
 }
 
 void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
+    if(verbosity >= EXTREME) {
+        std::fprintf(stderr, "Beginning cmp_core");
+    }
     if(opts.sketch_compressed() && opts.truncate_mode() != 0) {
         THROW_EXCEPTION(std::invalid_argument("Can't use truncated setsketch generation with bbit signatures. Omit --bbit-sigs or --setsketch-ab"));
     }
@@ -752,6 +755,9 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
 #if COUNT_COMPARE_CALLS
     std::fprintf(stderr, "Total number of comparisons performed (dashing::cmp): %lld\n", compare_count.load());
 #endif
+    if(verbosity >= EXTREME) {
+        std::fprintf(stderr, "Completing cmp_core");
+    }
 }
 
 } // namespace dashing2
