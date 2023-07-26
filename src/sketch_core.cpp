@@ -1,4 +1,5 @@
 #include "sketch_core.h"
+#include "cmp_main.h"
 #include <cinttypes>
 
 namespace dashing2 {
@@ -10,7 +11,7 @@ INLINE size_t nbytes_from_line(const std::string &line) {
     return ret;
 }
 
-SketchingResult &sketch_core(SketchingResult &result, Dashing2Options &opts, const std::vector<std::string> &paths, std::string &outfile) {
+SketchingResult &sketch_core(SketchingResult &result, Dashing2DistOptions &opts, const std::vector<std::string> &paths, std::string &outfile) {
     if(opts.kmer_result() == FULL_MMER_SEQUENCE && outfile.empty()) {
         THROW_EXCEPTION(std::runtime_error("outfile must be specified for --seq mode."));
     }

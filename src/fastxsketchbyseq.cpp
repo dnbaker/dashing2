@@ -1,4 +1,5 @@
 #include "fastxsketch.h"
+#include "cmp_main.h"
 
 namespace dashing2 {
 using namespace variation;
@@ -95,9 +96,9 @@ struct OptSketcher {
         //if(omh) omh->reset();
     }
 };
-void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads);
+void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads);
 
-FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Options &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel, size_t seqs_per_batch) {
+FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2DistOptions &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel, size_t seqs_per_batch) {
     gzFile ifp;
     kseq_t *myseq = kseqs ? &kseqs[OMP_ELSE(omp_get_thread_num(), 0)]: (kseq_t *)std::calloc(sizeof(kseq_t), 1);
     size_t batch_index = 0;
@@ -195,6 +196,8 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
     } else sketching_data.emplace_back(std::move(sketcher));
     DBG_ONLY(std::fprintf(stderr, "save ids: %d, save counts %d\n", opts.save_kmers_, opts.save_kmercounts_););
     size_t lastindex = 0;
+    const bool need_to_keep_sequences = (opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE))
+                                         || (opts.output_kind_ == DEDUP);
     for_each_substr([&](const auto &x) {
         DBG_ONLY(std::fprintf(stderr, "Processing substr %s\n", x.data()););
         if((ifp = gzopen(x.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to read from ") + x));
@@ -217,7 +220,14 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
     if(!kseqs) kseq_destroy(myseq);
     if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt);
     ret.names_.resize(lastindex);
-    ret.sequences_.resize(lastindex);
+#if SEQS_IN_MEM
+    if(need_to_keep_sequences) {
+        ret.sequences_.resize(lastindex);
+    } else {
+        std::vector<std::string> tmp;
+        std::swap(tmp, ret.sequences_);
+    }
+#endif
     ret.cardinalities_.resize(lastindex);
     if(ret.kmers_.size()) ret.kmers_.resize(opts.sketchsize_ * lastindex);
     if(ret.kmercounts_.size()) ret.kmercounts_.resize(opts.sketchsize_ * lastindex);
@@ -230,10 +240,12 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Opti
 #endif
     return ret;
 }
-void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nt) {
+void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, const size_t nt) {
     if(verbosity >= DEBUG) {
         std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     }
+    const bool need_to_keep_sequences = (opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE))
+                                         || (opts.output_kind_ == DEDUP);
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
     const int sigshift = opts.sigshift();
@@ -434,6 +446,12 @@ void resize_fill(Dashing2Options &opts, FastxSketchingResult &ret, size_t newsz,
                 std::copy(kmercounts.begin(), kmercounts.end(), &ret.kmercounts_[i * opts.sketchsize_]);
             }
         }
+#if SEQS_IN_MEM
+        if(!need_to_keep_sequences) {
+            std::string tmp;
+            std::swap(tmp, ret.sequences_[i]);
+        }
+#endif
     }
     if(seqmins) {
         const size_t seqminsz = oldsz - lastindex;
