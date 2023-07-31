@@ -3,6 +3,7 @@
 #define DASHING2_FASTX_SKETCH_H__
 #include "d2.h"
 #include "mmvec.h"
+#include "tmpseqs.h"
 #include <variant>
 
 namespace dashing2 {
@@ -13,11 +14,16 @@ static inline std::string to_string(const T *ptr) {
     oss << static_cast<const void *>(ptr);
     return oss.str();
 }
+
+#ifndef SEQS_IN_MEM
+#define SEQS_IN_MEM 0
+#endif
+
 struct SketchingResult {
     SketchingResult() {}
     SketchingResult(SketchingResult &&o) = default;
     SketchingResult(const SketchingResult &o) = delete;
-    SketchingResult(SketchingResult &o) = default;
+    SketchingResult(SketchingResult &o) = delete;
     SketchingResult &operator=(SketchingResult &&o) = default;
     SketchingResult &operator=(const SketchingResult &o) = delete;
 
@@ -29,7 +35,11 @@ struct SketchingResult {
     std::vector<uint32_t> nperfile_; // This is either empty (in which case each filename/row has its own sketch)
                                      // Or, this contains a list indicating the number of sketches created for each file/line
     std::vector<double> cardinalities_;
+#if SEQS_IN_MEM
     std::vector<std::string> sequences_;
+#else
+    tmpseq::Seqs sequences_;
+#endif
     // This is only filled if sspace is SPACE_EDIT_DISTANCE and
     // we are using LSH only for pre-filtering but performing exact distance calculations via edit distance
     mm::vector<RegT> signatures_;
