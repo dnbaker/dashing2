@@ -876,7 +876,7 @@ inline size_t query_file_size(file_handle_type handle, std::error_code& error)
         error = detail::last_error();
         return 0;
     }
-	return static_cast<int64_t>(file_size.QuadPart);
+    return static_cast<int64_t>(file_size.QuadPart);
 #else // POSIX
     struct stat sbuf;
     if(::fstat(handle, &sbuf) == -1)

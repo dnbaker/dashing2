@@ -213,6 +213,9 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
     auto &compressed_reps = std::get<0>(ret);
     if(sketch_compressed_set) {
         compressed_reps = static_cast<void *>(const_cast<RegT *>(sigs.data()));
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Compressed reps are made of total size %zu\n", sigs.size() * sizeof(RegT));
+        }
         ret.a(a);
         ret.b(b);
         assert(std::min(a, b) > 0.L);
@@ -330,7 +333,7 @@ LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &resu
     ++compare_count;
 #endif
     if(verbosity >= EXTREME) {
-        std::fprintf(stderr, "About to compare sketches %zd and %zd. names size is %zu, signatures size is %zu. kmer counts %zu, and %zu kmers. Cardinalities %zu\n", i, j, result.names_.size(), result.signatures_.size(), result.kmercounts_.size(), result.kmers_.size(), result.cardinalities_.size());
+        std::fprintf(stderr, "About to compare sketches %zd and %zd via measure %s. names size is %zu, signatures size is %zu. kmer counts %zu, and %zu kmers. Cardinalities %zu\n", i, j, to_string(opts.measure_).data(), result.names_.size(), result.signatures_.size(), result.kmercounts_.size(), result.kmers_.size(), result.cardinalities_.size());
     }
 #if 0
 #endif
@@ -339,6 +342,9 @@ LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &resu
     const long double invdenom = 1.L / opts.sketchsize_;
     auto sim2dist = [poisson_mult=-1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
     if(opts.compressed_ptr_) {
+        if(verbosity >= EXTREME) {
+            std::fprintf(stderr, "Comparing compressed representations.\n");
+        }
         const bool bbit_c = opts.truncation_method_ > 0;
         std::pair<uint64_t, uint64_t> res{0, 0};
         if(bbit_c) {
@@ -423,8 +429,13 @@ case v: {\
                 default: ;
             }
         }
-    } else if(opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE)) {
+    } else if((opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_) || opts.measure_ == M_EDIT_DISTANCE) {
         assert(result.sequences_.size() > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zu vs %zu/%zu)\n", result.sequences_.size(), i, j));
+        auto lhs = result.sequences_[i];
+        auto rhs = result.sequences_[j];
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Lhs %s, rhs %s\n", std::string(lhs).data(), std::string(rhs).data());
+        }
         return levenshteinSSE::levenshtein(result.sequences_[i], result.sequences_[j]);
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
@@ -553,6 +564,9 @@ inline size_t densify(std::span<MHT> minhashes, uint64_t *const kmers, const sch
         for(size_t i = 0; i < sketchsize; ++i) {
             std::fprintf(stderr, "BEFORE Sketch %zu is %g\n", i, double(minhashes[i]));
         }
+    }
+    if(std::count(minhashes.begin(), minhashes.end(), 0) == int64_t(minhashes.size())) {
+        return minhashes.size();
     }
     size_t ne = 0;
     std::vector<MHT> tmp(minhashes.begin(), minhashes.end());
@@ -743,7 +757,13 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
     // Step 2: Build nearest-neighbor candidate table
     if(opts.output_kind_ == KNN_GRAPH || opts.output_kind_ == NN_GRAPH_THRESHOLD) {
         const bool exact_knn = std::getenv("EXACT_KNN");
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Building knn graph\n");
+        }
         std::vector<pqueue> neighbor_lists = exact_knn ? build_exact_graph(idx, opts, result): build_index(idx, opts, result);
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Built knn graph\n");
+        }
         if(!exact_knn) {
             refine_results(neighbor_lists, opts, result);
         } else if(!distance(opts.measure_)) {
@@ -754,6 +774,10 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                 std::transform(beg, e, beg, [&](PairT x) {return PairT{-x.first, x.second};});
             }
         }
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Emitting neighbors\n");
+        }
+        
         emit_neighbors(neighbor_lists, opts, result);
     } else if(opts.output_kind_ == DEDUP) {
         // The ID corresponds to the representative of a cluster;

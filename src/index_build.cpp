@@ -60,6 +60,9 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
     // Make the similarities negative so that the smallest items are the ones with the highest similarities
     size_t ntoquery = opts.num_neighbors_ <= 0 ? (maxcand_global <= 0 ? ns - 1: size_t(maxcand_global))
                                                : std::min(ns - 1, size_t(opts.num_neighbors_ * INFLATE_FACTOR));
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Making graph for %zu neighbors for %zu sequences\n", ntoquery, ns);
+    }
     std::vector<pqueue> neighbor_lists(ns);
     if(opts.output_kind_ == KNN_GRAPH && opts.num_neighbors_ > 0)
         for(auto &n: neighbor_lists)
@@ -69,6 +72,10 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
     auto idxstart = std::chrono::high_resolution_clock::now();
     // Build the index
     const bool indexing_compressed = opts.sketch_compressed_set && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET;
+
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Indexing compressed: %s\n", indexing_compressed ? "true": "false");
+    }
     idx.size(ns);
     OMP_PFOR
     for(size_t i  = 0; i < ns; ++i) {
@@ -78,7 +85,13 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
                 continue;
             }
             switch(int(opts.fd_level_)) {
-#define CASE_N(digit, TYPE) case digit: idx.update(minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * i, opts.sketchsize_), i); break
+#define CASE_N(digit, TYPE) case digit: \
+            {\
+                if(verbosity >= EXTREME) {\
+                    std::fprintf(stderr, "register size %d. Accessing offset %zu for entity %zu.\n", digit, size_t(opts.compressed_ptr_) + digit * opts.sketchsize_ * i, i);}\
+                \
+            idx.update(minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * i, opts.sketchsize_), i); break;\
+            }
             ALL_CASE_NS
 #undef CASE_N
             }
@@ -87,15 +100,20 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
         }
     }
     auto idxstop = std::chrono::high_resolution_clock::now();
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Indexed in: %gms\n", std::chrono::duration<double, std::milli>(idxstop - idxstart).count());
+    }
+    if(indexing_compressed && (opts.fd_level_ == 0.5)) {
+        THROW_EXCEPTION(std::runtime_error("Error: Dashing2 can only perform LSH-assisted analyses using registers of at least 1 byte."));
+    }
     // Build neighbor lists
     // Currently parallelizing the outer loop,
     // but the inner might be worth trying
     OMP_PFOR_DYN
     for(size_t id = 0; id < ns; ++id) {
-        //std::fprintf(stderr, "%zu\t%zu\n", id, ns);
         std::tuple<std::vector<LSHIDType>, std::vector<uint32_t>, std::vector<uint32_t>> query_res;
         if(indexing_compressed && opts.fd_level_ >= 1. && opts.fd_level_ < sizeof(RegT) && opts.kmer_result_ < FULL_MMER_SET) {
-            switch(int(2. * opts.fd_level_)) {
+            switch(int(opts.fd_level_)) {
 #define CASE_N(i, TYPE) \
         case i: {query_res = idx.query_candidates(\
             minispan<TYPE>((TYPE *)opts.compressed_ptr_ + opts.sketchsize_ * id, opts.sketchsize_),\
@@ -104,8 +122,9 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
                ALL_CASE_NS
 #undef CASE_N
             }
-        } else
+        } else {
             query_res = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * id], opts.sketchsize_), ntoquery);
+        }
         auto &[ids, counts, npr] = query_res;
         const size_t idn = ids.size();
         for(size_t j = 0; j < idn; ++j) {
@@ -116,9 +135,15 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
             update(neighbor_lists[id], neighbor_sets[id], PairT{cd, oid}, topk, ntoquery, mutexes[id]);
         }
     }
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Built neighbor lists.\n");
+    }
     OMP_PFOR_DYN
     for(size_t i = 0; i < ns; ++i)
         neighbor_lists[i].sort();
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Sorted neighbor lists.\n");
+    }
     auto knnstop = std::chrono::high_resolution_clock::now();
 
 VERBOSE_ONLY(

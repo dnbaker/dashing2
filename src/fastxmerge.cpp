@@ -28,7 +28,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     }
     ret.names_.resize(total_seqs);
     if(std::any_of(start, start + n, [](auto &x) {return x.sequences_.size();})) {
-        ret.sequences_.resize(total_seqs);
+        seq_resize(ret.sequences_, total_seqs);
     }
     const size_t sketchsz = start->signatures_.size() / start->names_.size();
     if(total_sig_size > 0) {
@@ -55,7 +55,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         });
         std::copy(src.cardinalities_.begin(), src.cardinalities_.end(), &ret.cardinalities_.at(ofs));
         if(seqsz) {
-            std::copy(src.sequences_.begin(), src.sequences_.end(), &ret.sequences_.at(ofs));
+            ret.sequences_.add_set(src.sequences_.begin(), src.sequences_.end());
         }
         if(!start[i].signatures_.empty())
             std::copy(src.signatures_.begin(), src.signatures_.end(), &ret.signatures_.at(sofs));

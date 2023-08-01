@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <stdexcept>
 #include <filesystem>
+#include <mio.hpp>
 
 namespace tmpseq {
 
@@ -43,6 +44,13 @@ public:
     Seqs(Seqs&& o) = default;
     Seqs& operator=(Seqs&& o) = default;
     Seqs(Seqs& o) = delete;
+    ~Seqs() {
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+        if(ec) {
+            std::fprintf(stderr, "Failed to delete temporary file %s. You may need to delete this manually.\n", path_.data());
+        }
+    }
     int64_t add_sequence(std::string_view seq) {
         const int64_t ret = offsets_.back();
         const int64_t seq_len = seq.size();
@@ -60,6 +68,10 @@ public:
     void push_back(std::string_view seq) {
         add_sequence(seq);
     }
+    void emplace_back(std::string_view seq) {
+        add_sequence(seq);
+    }
+#if USE_FILE
     std::string operator[](const int64_t idx) const {
         thread_local std::unique_ptr<std::FILE, FileDeleter> reader;
         if(!reader) {
@@ -78,11 +90,106 @@ public:
         }
         return ret;
     }
+#else
+    std::string_view operator[](const int64_t idx) const {
+        static std::unique_ptr<mio::mmap_sink> reader;
+        static std::mutex mutex;
+        if(!reader) {
+            std::lock_guard<std::mutex> lock(mutex);
+            if(!reader) {
+                reader = std::make_unique<mio::mmap_sink>(path_);
+            }
+        }
+        return std::string_view(reader->data() + offsets_[idx], offsets_[idx + 1] - offsets_[idx]);
+    }
+#endif
     int64_t size() const noexcept {
         return (offsets_.size()) - 1;
     }
 };
 
-}
+struct MemoryOrRAMSequences {
+    using V = std::variant<std::vector<std::string>, Seqs>;
+    V core_;
+    MemoryOrRAMSequences(const bool inRam): core_{inRam ? V(std::vector<std::string>{}): V(Seqs{})} {}
+    struct Iterator {
+        const MemoryOrRAMSequences& container;
+        int64_t idx;
+        std::string_view operator*() const {
+            return container[idx];
+        }
+        Iterator& operator++() {
+            ++idx;
+            return *this;
+        }
+        Iterator operator++(int) {
+            Iterator ret{*this};
+            ++idx;
+            return ret;
+        }
+        bool operator==(const Iterator& other) {
+            return idx == other.idx;
+        }
+        bool operator!=(const Iterator& other) {
+            return idx != other.idx;
+        }
+    };
+    std::string_view operator[](const int64_t idx) const {
+        return std::visit([idx](const auto& x) {
+            auto ret = x.operator[](idx);
+            if constexpr(std::is_same_v<decltype(ret), std::string>) {
+                return std::string_view(ret);
+            } else {
+                return ret;
+            }
+        }, core_);
+    }
+    Iterator begin() {
+        return {*this, static_cast<int64_t>(0)};
+    }
+    Iterator end() {
+        return {*this, size()};
+    }
+    void emplace_back(const char* seq, const size_t len) {
+        emplace_back(std::string_view(seq, len));
+    }
+    void emplace_back(std::string_view seq) {
+        std::visit([seq](auto& x) -> void {
+            x.emplace_back(seq);
+        }, core_);
+    }
+    int64_t size() const noexcept {
+        return std::visit([](const auto& x) -> int64_t {return x.size();}, core_);
+    }
+    template<typename It>
+    void add_set(It beg, const It end) {
+        while(beg != end) {
+            emplace_back(*beg);
+            ++beg;
+        }
+    }
+    void free_if_possible(const int64_t idx) {
+        if(core_.index() == 0) {
+            std::string tmp;
+            std::swap(tmp, std::get<0>(core_)[idx]);
+        }
+    }
+    void free_if_possible() {
+        if(core_.index() == 0) {
+            std::vector<std::string> tmp;
+            std::swap(tmp, std::get<0>(core_));
+        }
+    }
+    void swap_to_ram() {
+        if(size() > 0) {
+            throw std::runtime_error("Cannot swap variant type after adding an item.");
+        }
+        if(core_.index() == 1) {
+            core_ = V(std::vector<std::string>{});
+        }
+    }
+};
+
+} // tmpseq
 
 #endif
