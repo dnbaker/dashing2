@@ -12,7 +12,7 @@ enum Measure {
     POISSON_LLR, // -log-transformed similarity
     INTERSECTION, // |A & B|
     UNION_SIZE,   // |A | B|
-    M_EDIT_DISTANCE = POISSON_LLR, // Whether in minimizer-sequence space or sequence edit distance space.
+    M_EDIT_DISTANCE, // Whether in minimizer-sequence space or sequence edit distance space.
     MASH_DISTANCE = POISSON_LLR
 };
 static inline std::string to_string(Measure m) {
@@ -22,8 +22,11 @@ static inline std::string to_string(Measure m) {
     if(m == POISSON_LLR) return "POISSON_LLR";
     if(m == INTERSECTION) return "INTERSECTION";
     if(m == UNION_SIZE) return "UNION_SIZE";
+    if(m == M_EDIT_DISTANCE) return "EDIT_DISTANCE";
     return "UNKNOWN";
 }
+
+struct SketchingResult;
 
 template<Measure measure>
 struct is_symmetric: public std::true_type {};

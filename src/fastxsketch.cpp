@@ -46,6 +46,17 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
     }
 }
 
+int32_t num_threads() {
+    int nt = 1;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+#endif
+    return nt;
+}
+
 template<typename T, size_t chunk_size = 65536>
 size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss) {
     T *const origptr = ptr;
@@ -616,6 +627,15 @@ do {\
 }
 
 
+void seq_resize(std::vector<std::string>& seqs, const size_t num_seqs) {
+    seqs.reserve(num_seqs); // Actually resizing is managed by emplace_back
+}
+// No-ops
+void seq_resize(tmpseq::Seqs&, const size_t) noexcept {
+}
+void seq_resize(tmpseq::MemoryOrRAMSequences&, const size_t) {
+
+}
 
 
 } // dashing2

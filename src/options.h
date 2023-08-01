@@ -56,7 +56,8 @@ enum OptArg {
     OPTARG_FULL_SETSKETCH,
     OPTARG_PAIRLIST,
     OPTARG_USZ,
-    OPTARG_DUMMY
+    OPTARG_DUMMY,
+    OPTARG_SEQS_IN_RAM
 };
 
 #define SHARED_OPTS \
@@ -119,6 +120,7 @@ enum OptArg {
     LO_FLAG("asymmetric-all-pairs", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_FLAG("asymmetric", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
     LO_FLAG("square", OPTARG_ASYMMETRIC_ALLPAIRS, ok, OutputKind::ASYMMETRIC_ALL_PAIRS)\
+    LO_FLAG("seqs-in-ram", OPTARG_SEQS_IN_RAM, seqs_in_memory, 1) \
     LO_ARG("regbytes", OPTARG_FASTCMP)\
     /*LO_ARG("set", 'H')*/\
     /*{"fastcmp-nibbles", no_argument, 0, OPTARG_FASTCMPNIBBLES},*/\
@@ -567,6 +569,9 @@ static constexpr const char *siglen =
         "              Minimizer sequence will be homopolymer-compressed before emission. \n"\
         "              This makes the sequences ignore the lengths of minimizer stretches.\n"\
         "\n\nOther Sketching Options -- \n"\
+        "--parse-by-seq: Parse each sequence in each file as a separate entity. For workloads using edit distance, or for the --greedy mode, this will store all sequences in a temporary file in $TMPDIR.\n"\
+        "                Previous versions of Dashing2 stored all sequences in memory with high memory usage for --parse-by-seq. This is reduced in v2.1.18.\n"\
+        "                For faster use but more memory (restoring previous behavior), add --seqs-in-ram to avoid spilling to disk.\n"\
         "-s/--save-kmers: Save k-mers. This puts the k-mers saved into .kmer files to correspond with the minhash samples. \n"\
         "  If an output path is specified for dashing2 and --save-kmers is enabled, stacked k-mers will be written to <arg>.kmer64, and names will be written to <arg>.kmer.names.txt\n"\
         "  This has a 16-byte header containing a 32-bit integer describing the alphabet used, 32 bits describing sketch size, one 32-bit integer for k, and one 32-bit integer for window-length.\n"\

@@ -1,5 +1,6 @@
 #include "fastxsketch.h"
 #include "cmp_main.h"
+#include <chrono>
 
 namespace dashing2 {
 using namespace variation;
@@ -130,17 +131,49 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
     if(opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_PSET) {
         sketcher.ctr.reset(new Counter(opts.cssize()));
     }
-    size_t total_nseqs = 0;
-    for_each_substr([&total_nseqs](const std::string &path) {
-        gzFile fp = gzopen(path.data(), "r");
-        if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open gzfile"s + path + "to count sequences."));
-        kseq_t *ks = kseq_init(fp);
-        while(kseq_read(ks) >= 0) ++total_nseqs;
-        kseq_destroy(ks);
-        gzclose(fp);
+    std::atomic<size_t> total_nseqs_a{0};
+    std::atomic<size_t> total_bases_a{0};
+    std::vector<std::thread> threads;
+    std::mutex mutex;
+    const int32_t total_threads = num_threads();
+    auto join_if_joinable = [](std::thread& x) {
+            const bool is_joinable = x.joinable();
+            if(is_joinable) {
+                x.join();
+            }
+            return is_joinable;
+        };
+    for_each_substr([&](const std::string path) {
+        std::lock_guard<std::mutex> lock(mutex);
+        while(int(threads.size()) >= total_threads) {
+            std::this_thread::sleep_for(std::chrono::duration<double, std::micro>{10});
+        }
+        threads.emplace_back([&,path]() {
+            gzFile fp = gzopen(path.data(), "r");
+            if(!fp) THROW_EXCEPTION(std::runtime_error("Failed to open gzfile"s + path + "to count sequences."));
+            kseq_t *ks = kseq_init(fp);
+            while(kseq_read(ks) >= 0) {
+                ++total_nseqs_a;
+                total_bases_a += ks->seq.l;
+            }
+            kseq_destroy(ks);
+            gzclose(fp);
+        });
+        std::erase_if(threads, join_if_joinable);
     }, path);
+    const size_t total_nseqs = total_nseqs_a.load();
+    const size_t total_bases = total_bases_a.load();
+    while(!threads.empty()) {
+        std::erase_if(threads, join_if_joinable);
+    }
     if(verbosity >= INFO) {
-        std::fprintf(stderr, "%zu seqs in file\n", total_nseqs);
+        std::fprintf(stderr, "%zu seqs in dataset, of total %zu bases\n", total_nseqs, total_bases);
+    }
+    if(!seqs_in_memory && (total_bases <= 2'000'000'000ull)) {
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Swapping to keep sequences in RAM instead of storing on disk and memory-mapping because total number of bases < 2 billion %zu.\n", total_bases);
+        }
+        ret.sequences_.swap_to_ram();
     }
     if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
         if(!bns::isfile(outpath)) {
@@ -182,22 +215,20 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
 
 
     std::vector<OptSketcher> sketching_data;
-    size_t nt = 1;
-#ifdef _OPENMP
-    #pragma omp parallel
-    {
-        nt = omp_get_num_threads();
-    }
-#endif
-    if(!parallel) nt = 1;
+    const int nt = parallel ? num_threads(): 1;
     std::vector<OptSketcher> sv;
     if(nt > 1) {
         sketching_data.resize(nt, sketcher);
-    } else sketching_data.emplace_back(std::move(sketcher));
+    } else {
+        sketching_data.emplace_back(std::move(sketcher));
+    }
     DBG_ONLY(std::fprintf(stderr, "save ids: %d, save counts %d\n", opts.save_kmers_, opts.save_kmercounts_););
     size_t lastindex = 0;
-    const bool need_to_keep_sequences = (opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE))
+    const bool need_to_keep_sequences = (opts.measure_ == M_EDIT_DISTANCE || (opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_))
                                          || (opts.output_kind_ == DEDUP);
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "%s to keep sequences\n", need_to_keep_sequences ? "Need": "Do not need");
+    }
     for_each_substr([&](const auto &x) {
         DBG_ONLY(std::fprintf(stderr, "Processing substr %s\n", x.data()););
         if((ifp = gzopen(x.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Failed to read from ") + x));
@@ -220,14 +251,9 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
     if(!kseqs) kseq_destroy(myseq);
     if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt);
     ret.names_.resize(lastindex);
-#if SEQS_IN_MEM
-    if(need_to_keep_sequences) {
-        ret.sequences_.resize(lastindex);
-    } else {
-        std::vector<std::string> tmp;
-        std::swap(tmp, ret.sequences_);
+    if(!need_to_keep_sequences) {
+        ret.sequences_.free_if_possible();
     }
-#endif
     ret.cardinalities_.resize(lastindex);
     if(ret.kmers_.size()) ret.kmers_.resize(opts.sketchsize_ * lastindex);
     if(ret.kmercounts_.size()) ret.kmercounts_.resize(opts.sketchsize_ * lastindex);
@@ -244,8 +270,10 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
     if(verbosity >= DEBUG) {
         std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     }
-    const bool need_to_keep_sequences = (opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE))
-                                         || (opts.output_kind_ == DEDUP);
+    const bool need_to_keep_sequences = (opts.sspace_ == SPACE_EDIT_DISTANCE &&
+                                         ((opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE)
+                                          || opts.output_kind_ == DEDUP)
+                                        );
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
     const int sigshift = opts.sigshift();
@@ -446,12 +474,9 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
                 std::copy(kmercounts.begin(), kmercounts.end(), &ret.kmercounts_[i * opts.sketchsize_]);
             }
         }
-#if SEQS_IN_MEM
         if(!need_to_keep_sequences) {
-            std::string tmp;
-            std::swap(tmp, ret.sequences_[i]);
+            ret.sequences_.free_if_possible(i);
         }
-#endif
     }
     if(seqmins) {
         const size_t seqminsz = oldsz - lastindex;
