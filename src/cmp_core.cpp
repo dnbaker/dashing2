@@ -652,6 +652,9 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         }
     }
     if(opts.kmer_result_ == ONE_PERM) {
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Densifying.\n");
+        }
         const schism::Schismatic<uint64_t> sd(opts.sketchsize_);
         const size_t n = result.cardinalities_.size();
         uint64_t *const kp = result.kmers_.size() ? result.kmers_.data(): (uint64_t *)nullptr;
@@ -677,7 +680,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                                  sd);
         }
         if(verbosity >= DEBUG) {
-            allpairdists("after");
+            std::fprintf(stderr, "Densified.\n");
         }
         if((verbosity >= INFO) && (totaldens > 0)) std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);
     }
@@ -700,7 +703,13 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         if(result.signatures_.empty()) THROW_EXCEPTION(std::runtime_error("Empty signatures; trying to compress registers but don't have any"));
     }
     CompressedRet cret;
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Making compressed.\n");
+    }
     make_compressed(cret, opts.truncation_method_, opts.fd_level_, result.signatures_, result.kmers_, opts.sspace_ == SPACE_EDIT_DISTANCE, opts.compressed_a_, opts.compressed_b_, opts.sketch_compressed_set);
+    if(verbosity >= DEBUG) {
+        std::fprintf(stderr, "Made compressed.\n");
+    }
     std::tie(opts.compressed_ptr_, opts.compressed_a_, opts.compressed_b_) = cret;
     if(opts.output_kind_ <= ASYMMETRIC_ALL_PAIRS || opts.output_kind_ == PANEL) {
         if(verbosity >= Verbosity::DEBUG) {

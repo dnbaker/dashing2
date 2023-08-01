@@ -220,14 +220,12 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
     if(!kseqs) kseq_destroy(myseq);
     if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt);
     ret.names_.resize(lastindex);
-#if SEQS_IN_MEM
     if(need_to_keep_sequences) {
         ret.sequences_.resize(lastindex);
     } else {
         std::vector<std::string> tmp;
         std::swap(tmp, ret.sequences_);
     }
-#endif
     ret.cardinalities_.resize(lastindex);
     if(ret.kmers_.size()) ret.kmers_.resize(opts.sketchsize_ * lastindex);
     if(ret.kmercounts_.size()) ret.kmercounts_.resize(opts.sketchsize_ * lastindex);
