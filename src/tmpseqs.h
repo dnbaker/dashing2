@@ -40,7 +40,7 @@ class Seqs {
         return ret;
     }
 public:
-    Seqs(): path_(make_new_file()), offsets_{0}, file_{std::fopen(path_.data(), "wb")} {}
+    Seqs(bool in_memory=false): path_(make_new_file(in_memory)), offsets_{0}, file_{std::fopen(path_.data(), "wb")} {}
     Seqs(Seqs&& o) = default;
     Seqs& operator=(Seqs&& o) = default;
     Seqs(Seqs& o) = delete;
@@ -49,6 +49,13 @@ public:
         std::filesystem::remove(path_, ec);
         if(ec) {
             std::fprintf(stderr, "Failed to delete temporary file %s. You may need to delete this manually.\n", path_.data());
+        }
+    }
+    void swap_to_ram() const noexcept {
+    }
+    void free_if_possible(const int64_t _=0) const noexcept {
+        if(_) {
+            std::fprintf(stderr, "Warning: cannot free a ram-backed database.\n");
         }
     }
     int64_t add_sequence(std::string_view seq) {
@@ -71,7 +78,14 @@ public:
     void emplace_back(std::string_view seq) {
         add_sequence(seq);
     }
-#if USE_FILE
+    template<typename It>
+    void add_set(It beg, const It end) {
+        while(beg != end) {
+            emplace_back(*beg);
+            ++beg;
+        }
+    }
+#if 1
     std::string operator[](const int64_t idx) const {
         thread_local std::unique_ptr<std::FILE, FileDeleter> reader;
         if(!reader) {
@@ -91,7 +105,7 @@ public:
         return ret;
     }
 #else
-    std::string_view operator[](const int64_t idx) const {
+    std::string operator[](const int64_t idx) const {
         static std::unique_ptr<mio::mmap_sink> reader;
         static std::mutex mutex;
         if(!reader) {
@@ -100,11 +114,39 @@ public:
                 reader = std::make_unique<mio::mmap_sink>(path_);
             }
         }
-        return std::string_view(reader->data() + offsets_[idx], offsets_[idx + 1] - offsets_[idx]);
+        return std::string(reader->data() + offsets_[idx], offsets_[idx + 1] - offsets_[idx]);
     }
 #endif
     int64_t size() const noexcept {
         return (offsets_.size()) - 1;
+    }
+    struct Iterator {
+        const Seqs& container;
+        int64_t idx;
+        std::string_view operator*() const {
+            return container[idx];
+        }
+        Iterator& operator++() {
+            ++idx;
+            return *this;
+        }
+        Iterator operator++(int) {
+            Iterator ret{*this};
+            ++idx;
+            return ret;
+        }
+        bool operator==(const Iterator& other) {
+            return idx == other.idx;
+        }
+        bool operator!=(const Iterator& other) {
+            return idx != other.idx;
+        }
+    };
+    Iterator begin() {
+        return {*this, static_cast<int64_t>(0)};
+    }
+    Iterator end() {
+        return {*this, size()};
     }
 };
 
@@ -134,14 +176,9 @@ struct MemoryOrRAMSequences {
             return idx != other.idx;
         }
     };
-    std::string_view operator[](const int64_t idx) const {
-        return std::visit([idx](const auto& x) {
-            auto ret = x.operator[](idx);
-            if constexpr(std::is_same_v<decltype(ret), std::string>) {
-                return std::string_view(ret);
-            } else {
-                return ret;
-            }
+    std::string operator[](const int64_t idx) const {
+        return std::visit([idx](const auto& x) -> std::string {
+            return std::string(x.operator[](idx));
         }, core_);
     }
     Iterator begin() {

@@ -177,7 +177,10 @@ public:
                 assert(j < subtab.size());
                 auto &table = subtab[j];
                 KeyT myhash = hash_index(item, i, j);
-                std::optional<std::lock_guard<std::mutex>> lock(mptr ? std::optional<std::lock_guard<std::mutex>>((*mptr)[j]): std::optional<std::lock_guard<std::mutex>>());
+                std::optional<std::lock_guard<std::mutex>> lock;
+                if(mptr) {
+                    lock = std::optional<std::lock_guard<std::mutex>>((*mptr)[j]);
+                }
                 auto it = table.find(myhash);
                 if(it == table.end()) {
                     table.emplace(myhash, std::vector<IdT>{static_cast<IdT>(my_id)});
@@ -252,6 +255,13 @@ public:
             } else it->second.emplace_back(my_id);
         }
     }
+    static std::optional<std::lock_guard<std::mutex>> maybe_lock(std::vector<std::mutex> *const mptr, size_t j) {
+        if(mptr) {
+            return std::optional<std::lock_guard<std::mutex>>((*mptr)[j]);
+        } else {
+            return std::nullopt;
+        }
+    }
     template<typename Sketch>
     size_t update_mt(const Sketch &item) {
         if(item.size() < m_) throw std::invalid_argument(std::string("Item has wrong size: ") + std::to_string(item.size()) + ", expected" + std::to_string(m_));
@@ -270,7 +280,7 @@ public:
             for(size_t j = 0; j < nsubs; ++j) {
                 KeyT myhash = hash_index(item, i, j);
                 auto &subsub = subtab[j];
-                std::optional<std::lock_guard<std::mutex>> lock(mptr ? std::optional<std::lock_guard<std::mutex>>((*mptr)[j]): std::optional<std::lock_guard<std::mutex>>());
+                std::optional<std::lock_guard<std::mutex>> lock = maybe_lock(mptr, j);
                 auto it = subsub.find(myhash);
                 if(it == subsub.end()) subsub.emplace(myhash, std::vector<IdT>{static_cast<IdT>(my_id)});
                 else it->second.push_back(my_id);
@@ -297,7 +307,7 @@ public:
             for(size_t j = 0; j < nsubs; ++j) {
                 KeyT myhash = hash_index(item, i, j);
                 assert(j < subtab.size());
-                std::optional<std::lock_guard<std::mutex>> lock(mptr ? std::optional<std::lock_guard<std::mutex>>((*mptr)[j]): std::optional<std::lock_guard<std::mutex>>());
+                std::optional<std::lock_guard<std::mutex>> lock = maybe_lock(mptr, j);
                 subtab[j][myhash].push_back(my_id);
             }
         }

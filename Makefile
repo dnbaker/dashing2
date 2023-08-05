@@ -24,10 +24,11 @@ OPT+= -O3 \
     -fopenmp -pipe $(CACHE_SIZE_FLAG)
 
 OPTMV:=$(OPT)
-OPT+= -std=c++20
+CXXSTD?=-std=c++20
+OPT+= $(CXXSTD)
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic -Wno-array-bounds # -Wno-shift-count-overflow
 EXTRA+=-DNOCURL -DDASHING2_VERSION=\"$(GIT_VERSION)\" -DFMT_HEADER_ONLY
-CXXFLAGS+= -std=c++20
+CXXFLAGS+= $(CXXSTD)
 CFLAGS+= -std=c11
 
 D2SRC=$(wildcard src/*.cpp)
@@ -91,7 +92,7 @@ dashing2-v: $(OBJV) libBigWig.a $(wildcard src/*.h)
 dashing2-d0: $(OBJDBG) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJDBG) -o $@ $(LIB) $(EXTRA) libBigWig.a -O0
 dashing2-add: $(OBJADD) libBigWig.a
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJADD) -o $@ $(LIB) $(EXTRA) libBigWig.a -fsanitize=address
+	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJADD) -o $@ $(LIB) $(EXTRA) libBigWig.a -fsanitize=address -O1
 dashing2-g: $(OBJG) libBigWig.a
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $(OBJG) -o $@ $(LIB) $(EXTRA) libBigWig.a -fno-lto -pg
 dashing2-ld: $(OBJLD) libBigWig.a

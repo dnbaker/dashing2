@@ -48,7 +48,7 @@ struct BHasher {
         return Hasher(SimpleHasher(x));
     }
     uint64_t inverse(uint64_t x) const noexcept {
-        return Hasher.inverse(SimpleHasher.inverse(x));
+        return SimpleHasher.inverse(Hasher.inverse(x));
     }
 };
 #endif
