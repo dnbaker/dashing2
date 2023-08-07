@@ -1,8 +1,14 @@
 #ifndef TEMPSEQS_H__
 #define TEMPSEQS_H__
+#include <cstdint>
 #include <cstdio>
-#include <stdexcept>
 #include <filesystem>
+#include <memory>
+#include <stdexcept>
+#include <string_view>
+#include <string>
+#include <variant>
+#include <vector>
 #include <mio.hpp>
 
 namespace tmpseq {
