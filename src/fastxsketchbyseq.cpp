@@ -224,11 +224,9 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
     }
     DBG_ONLY(std::fprintf(stderr, "save ids: %d, save counts %d\n", opts.save_kmers_, opts.save_kmercounts_););
     size_t lastindex = 0;
-    const bool need_to_keep_sequences = true;
-    /*
+    const bool need_to_keep_sequences =
                 (opts.measure_ == M_EDIT_DISTANCE || (opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_))
                                          || (opts.output_kind_ == DEDUP);
-    */
     if(verbosity >= DEBUG) {
         std::fprintf(stderr, "%s to keep sequences\n", need_to_keep_sequences ? "Need": "Do not need");
     }
@@ -273,11 +271,9 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
     if(verbosity >= DEBUG) {
         std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     }
-    const bool need_to_keep_sequences = true;
-    /*
+    const bool need_to_keep_sequences =
             (opts.measure_ == M_EDIT_DISTANCE || (opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_))
                                          || (opts.output_kind_ == DEDUP);
-    */
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
     const int sigshift = opts.sigshift();
