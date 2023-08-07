@@ -28,9 +28,7 @@ void update(pqueue &x, flat_hash_set<LSHIDType> &xset, const PairT &item, const 
         xset.insert(id);
         x.push(item);
         return;
-        //assert(*std::min_element(x.begin(), x.end()) == x.front());
     }
-    //DBG_ONLY(std::fprintf(stderr, "Updating item %g/%u\n", item.first, item.second);)
     if(item.first <= x.top().first) {
         DBG_ONLY(std::fprintf(stderr, "New top before update: %g/Size %zu, with new item %g/%u added\n", x.front().first, x.size(), item.first, item.second);)
         std::lock_guard<std::mutex> lock(mut);
@@ -133,6 +131,9 @@ std::vector<pqueue> build_index(SetSketchIndex<LSHIDType, LSHIDType> &idx, const
             const auto cd(-LSHDistType(counts[j]));
             update(neighbor_lists[oid], neighbor_sets[oid], PairT{cd, id}, topk, ntoquery, mutexes[oid]);
             update(neighbor_lists[id], neighbor_sets[id], PairT{cd, oid}, topk, ntoquery, mutexes[id]);
+        }
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Processed candidates for %zu/%zu\n", id, ns);
         }
     }
     if(verbosity >= DEBUG) {

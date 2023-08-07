@@ -83,7 +83,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             for(size_t i = 0; i < num_entities; ++i)
                 result.names_[i] = std::to_string(i);
         }
-        assert(result.cardinalities_.empty() || result.cardinalities_.size() == num_entities || !std::fprintf(stderr, "card size: %zu. Number expected: %zu\n", result.cardinalities_.size(), num_entities));
+        assert(result.cardinalities_.empty() || result.cardinalities_.size() == num_entities || !std::fprintf(stderr, "card size: %zu. Number expected: %zu\n", result.cardinalities_.size(), size_t(num_entities)));
         result.cardinalities_.resize(num_entities);
         // num_entities * sizeof(double) for the cardinalitiy
         if(std::fread(result.cardinalities_.data(), sizeof(double), result.cardinalities_.size(), fp) != result.cardinalities_.size())

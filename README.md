@@ -278,9 +278,8 @@ Dashing2 has not been tested on Windows, and we do not support it.
 
 Alternatively, you can build from source with  `git clone --recursive https://github.com/dnbaker/dashing2 && make -j4`.
 
-Dashing2 is written in C++17, and therefore needs a relatively recent compiler, but the binary will be smaller than the statically-linked options provided
+Dashing2 now requires C++20, and therefore needs a relatively recent compiler, but the binary will be smaller than the statically-linked options provided
 and the code may be more directly tailored to your architecture.
-
 
 ## Versions + Configuration
 

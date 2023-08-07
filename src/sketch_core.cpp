@@ -26,7 +26,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2DistOptions &opts,
                 THROW_EXCEPTION(std::runtime_error("parse-by-seq currently only handles one file at a time. To process multiple files, simply concatenate them into one file, and run dashing2 on that."));
             }
             KSeqHolder kseqs(std::max(opts.nthreads(), 1u));
-            fastx2sketch_byseq(result, opts, paths.front(), kseqs.kseqs_, outfile, true);
+            fastx2sketch_byseq(result, opts, paths.front(), kseqs.kseqs_, outfile, true, 512);
         } else {
             fastx2sketch(result, opts, paths, outfile);
         }

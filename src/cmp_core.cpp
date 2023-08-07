@@ -430,7 +430,7 @@ case v: {\
             }
         }
     } else if((opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_) || opts.measure_ == M_EDIT_DISTANCE) {
-        assert(result.sequences_.size() > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zu vs %zu/%zu)\n", result.sequences_.size(), i, j));
+        assert(size_t(result.sequences_.size()) > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zd vs %zu/%zu)\n", size_t(result.sequences_.size()), size_t(i), size_t(j)));
         auto lhs = result.sequences_[i];
         auto rhs = result.sequences_[j];
         if(verbosity >= DEBUG) {
@@ -590,7 +590,7 @@ inline size_t densify(std::span<MHT> minhashes, uint64_t *const kmers, const sch
             std::fprintf(stderr, "AFTER Sketch %zu is %g\n", i, double(minhashes[i]));
         }
     }
-    assert(std::find(minhashes, minhashes + sketchsize, empty) == minhashes + sketchsize);
+    assert(std::find(minhashes.begin(), minhashes.end(), empty) == minhashes.end());
     return ne;
 }
 
@@ -682,7 +682,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                 }
             }
         };
-        if(verbosity >= DEBUG) {
+        if(verbosity >= EXTREME) {
             allpairdists("before");
         }
 #ifdef _OPENMP
@@ -693,7 +693,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
                                  kp ? &kp[opts.sketchsize_ * i]: kp,
                                  sd);
         }
-        if(verbosity >= DEBUG) {
+        if(verbosity >= EXTREME) {
             std::fprintf(stderr, "Densified.\n");
         }
         if((verbosity >= INFO) && (totaldens > 0)) std::fprintf(stderr, "Densified a total of %zu/%zu entries\n", totaldens, opts.sketchsize_ * n);

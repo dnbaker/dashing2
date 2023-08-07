@@ -64,7 +64,7 @@ struct OptSketcher {
         }
     }
     template<typename Func>
-    void for_each(const Func &func, const char *s, size_t n) {
+    void for_each(const Func &func, const char *s, const size_t n) {
         if(use128_) {
             if(unsigned(k_) <= enc_.nremperres128()) {
                 if(entmin)
@@ -97,7 +97,7 @@ struct OptSketcher {
         //if(omh) omh->reset();
     }
 };
-void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads);
+void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads, const std::string_view path);
 
 FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2DistOptions &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel, size_t seqs_per_batch) {
     gzFile ifp;
@@ -224,7 +224,8 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
     }
     DBG_ONLY(std::fprintf(stderr, "save ids: %d, save counts %d\n", opts.save_kmers_, opts.save_kmercounts_););
     size_t lastindex = 0;
-    const bool need_to_keep_sequences = (opts.measure_ == M_EDIT_DISTANCE || (opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_))
+    const bool need_to_keep_sequences =
+                (opts.measure_ == M_EDIT_DISTANCE || (opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_))
                                          || (opts.output_kind_ == DEDUP);
     if(verbosity >= DEBUG) {
         std::fprintf(stderr, "%s to keep sequences\n", need_to_keep_sequences ? "Need": "Do not need");
@@ -241,7 +242,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
                 DBG_ONLY(std::fprintf(stderr, "batch index = %zu\n", batch_index););
-                resize_fill(opts, ret, std::min(size_t(seqs_per_batch), size_t(total_nseqs - ret.names_.size())), sketching_data, lastindex, nt);
+                resize_fill(opts, ret, std::min(size_t(seqs_per_batch), size_t(total_nseqs - ret.names_.size())), sketching_data, lastindex, nt, std::string_view(path));
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
             }
@@ -249,7 +250,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
         gzclose(ifp);
     }, path);
     if(!kseqs) kseq_destroy(myseq);
-    if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt);
+    if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt, std::string_view(path));
     ret.names_.resize(lastindex);
     if(!need_to_keep_sequences) {
         ret.sequences_.free_if_possible();
@@ -266,11 +267,12 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
 #endif
     return ret;
 }
-void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, const size_t nt) {
+void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, const size_t nt, const std::string_view path) {
     if(verbosity >= DEBUG) {
         std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     }
-    const bool need_to_keep_sequences = (opts.measure_ == M_EDIT_DISTANCE || (opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_))
+    const bool need_to_keep_sequences =
+            (opts.measure_ == M_EDIT_DISTANCE || (opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_))
                                          || (opts.output_kind_ == DEDUP);
     const size_t oldsz = ret.names_.size();
     newsz = oldsz + newsz;
@@ -293,10 +295,16 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
         //DBG_ONLY(std::fprintf(stderr, "%zu/%zu -- parsing sequence from tid = %d\n", i, oldsz, tid););
         auto &sketchers(sketchvec[tid]);
         sketchers.reset();
-        const auto seqp = ret.sequences_[i].data();
-        const auto seql = ret.sequences_[i].size();
+        const std::string sequence{ret.sequences_[i]};
+        const auto seqp = sequence.data();
+        const auto seql = sequence.size();
         if(sketchers.omh) { // OrderMinHash
-            std::vector<uint64_t> res = sketchers.omh->hash(seqp, seql);
+            if(seql == 0) {
+                std::fprintf(stderr, "EMPTY SEQ at idx %zu for %s in path %s\n", i, ret.names_[i].data(), path.data());
+                std::exit(1);
+            }
+            std::fprintf(stderr, "OMH sketching from %s of length %zu\n", ret.names_[i].data(), size_t(seql));
+            const std::vector<uint64_t> res = sketchers.omh->hash(seqp, seql);
             auto destp = &ret.signatures_[i * opts.sketchsize_];
             if constexpr(sizeof(RegT) == sizeof(uint64_t)) { // double
                 // Copy as-is
@@ -355,7 +363,7 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
             }
             ret.cardinalities_[i] = myseq.size();
         } else {
-            DBG_ONLY(std::fprintf(stderr, "Sketching all k-mers in sequence %s/%zu\n", ret.sequences_[i].data(), i););
+            DBG_ONLY(std::fprintf(stderr, "Sketching all k-mers in sequence %s/%zu\n", ret.names_[i].data(), i););
             const bool isop = sketchers.opss.get(), isctr = sketchers.ctr.get(), isfs = sketchers.fss.get(), iscfss = sketchers.cfss.get();
             auto fsfunc = [&](auto x) __attribute__((always_inline)) {
                 x = maskfn(x);
@@ -452,10 +460,10 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
             } else THROW_EXCEPTION(std::runtime_error("Not yet implemented?"));
             if(!sketchers.cfss || opts.fd_level_ != 0.5) {
                 const size_t mss = opts.sketchsize_ * i;
-                DBG_ONLY(std::fprintf(stderr, "About to copy out. For sketch idx %zu, Offset into dict: %zu. copying %zu bytes.\n", mss, mss >> sigshift, ((opts.sketchsize_ * sizeof(RegT)) >> sigshift)););
+                VERBOSE_ONLY(std::fprintf(stderr, "About to copy out. For sketch idx %zu, Offset into dict: %zu. copying %zu bytes.\n", mss, mss >> sigshift, ((opts.sketchsize_ * sizeof(RegT)) >> sigshift)););
                 std::memcpy(&ret.signatures_[mss >> sigshift], ptr, ((opts.sketchsize_ * sizeof(RegT)) >> sigshift));
                 // std::copy(ptr, ptr + (opts.sketchsize_ >> sigshift), &ret.signatures_[i * (opts.sketchsize_ >> sigshift)]);
-                DBG_ONLY(std::fprintf(stderr, "Copied out. For sketch idx %zu, Offset into dict: %zu. copying %zu bytes.\n", mss, mss >> sigshift, ((opts.sketchsize_ * sizeof(RegT)) >> sigshift)););
+                VERBOSE_ONLY(std::fprintf(stderr, "Copied out. For sketch idx %zu, Offset into dict: %zu. copying %zu bytes.\n", mss, mss >> sigshift, ((opts.sketchsize_ * sizeof(RegT)) >> sigshift)););
             } else {
                 const uint8_t *const srcptr = std::get<NibbleSetS>(*sketchers.cfss).data();
                 uint8_t *destptr = (uint8_t *)&ret.signatures_[i * opts.sketchsize_ >> sigshift];
@@ -465,8 +473,6 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
             }
             if(kmer_ptr && ret.kmers_.size()) {
                 std::copy(kmer_ptr, kmer_ptr + opts.sketchsize_, &ret.kmers_[i * opts.sketchsize_]);
-            } else if(verbosity >= DEBUG) {
-                std::fprintf(stderr, "k-mers not saved\n");
             }
             if(kmercounts.size() && ret.kmercounts_.size()) {
                 std::copy(kmercounts.begin(), kmercounts.end(), &ret.kmercounts_[i * opts.sketchsize_]);
@@ -474,6 +480,9 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
         }
         if(!need_to_keep_sequences) {
             ret.sequences_.free_if_possible(i);
+        }
+        if(verbosity >= DEBUG) {
+            std::fprintf(stderr, "Completing sequence %zu\n", i);
         }
     }
     if(seqmins) {

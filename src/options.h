@@ -280,6 +280,7 @@ const std::vector<std::string> VALID_LONG_OPTION_STRINGS {{
     "union-size",
     "verbose",
     "window-size",
+    "seqs-in-ram",
 }};
 
 // This function takes a vector of additional strings,
