@@ -97,7 +97,7 @@ struct OptSketcher {
         //if(omh) omh->reset();
     }
 };
-void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads);
+void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, size_t nthreads, const std::string_view path);
 
 FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2DistOptions &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel, size_t seqs_per_batch) {
     gzFile ifp;
@@ -244,7 +244,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
             ret.names_.emplace_back(myseq->name.s + off, myseq->name.l - off);
             if(++batch_index == seqs_per_batch) {
                 DBG_ONLY(std::fprintf(stderr, "batch index = %zu\n", batch_index););
-                resize_fill(opts, ret, std::min(size_t(seqs_per_batch), size_t(total_nseqs - ret.names_.size())), sketching_data, lastindex, nt);
+                resize_fill(opts, ret, std::min(size_t(seqs_per_batch), size_t(total_nseqs - ret.names_.size())), sketching_data, lastindex, nt, std::string_view(path));
                 batch_index = 0;
                 seqs_per_batch = std::min(seqs_per_batch << 1, size_t(0x1000));
             }
@@ -252,7 +252,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
         gzclose(ifp);
     }, path);
     if(!kseqs) kseq_destroy(myseq);
-    if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt);
+    if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt, std::string_view(path));
     ret.names_.resize(lastindex);
     if(!need_to_keep_sequences) {
         ret.sequences_.free_if_possible();
@@ -269,7 +269,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
 #endif
     return ret;
 }
-void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, const size_t nt) {
+void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t newsz, std::vector<OptSketcher> &sketchvec, size_t &lastindex, const size_t nt, const std::string_view path) {
     if(verbosity >= DEBUG) {
         std::fprintf(stderr, "Calling resize_fill with newsz = %zu\n", newsz);
     }
@@ -303,6 +303,11 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
         const auto seqp = sequence.data();
         const auto seql = sequence.size();
         if(sketchers.omh) { // OrderMinHash
+            if(seql == 0) {
+                std::fprintf(stderr, "EMPTY SEQ at idx %zu for %s in path %s\n", i, ret.names_[i].data(), path.data());
+                std::exit(1);
+            }
+            std::fprintf(stderr, "OMH sketching from %s of length %zu\n", ret.names_[i].data(), size_t(seql));
             const std::vector<uint64_t> res = sketchers.omh->hash(seqp, seql);
             auto destp = &ret.signatures_[i * opts.sketchsize_];
             if constexpr(sizeof(RegT) == sizeof(uint64_t)) { // double
