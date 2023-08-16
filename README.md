@@ -276,7 +276,7 @@ There are different folders for osx and linux, so select the latest version from
 Dashing2 has not been tested on Windows, and we do not support it.
 
 
-Alternatively, you can build from source with  `git clone --recursive https://github.com/dnbaker/dashing2 && make -j4`.
+Alternatively, you can build from source with  `git clone --recursive https://github.com/dnbaker/dashing2 && cd dashing2 && make -j4`.
 
 Dashing2 now requires C++20, and therefore needs a relatively recent compiler, but the binary will be smaller than the statically-linked options provided
 and the code may be more directly tailored to your architecture.
