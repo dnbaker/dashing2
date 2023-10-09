@@ -6,7 +6,9 @@
 #include <numeric>
 #include "enums.h"
 #include <cstring>
-#include "levenshtein-sse.hpp"
+#include "edlib.h"
+
+#include <span>
 
 namespace dashing2 {
 //using u128_t = __uint128_t;
@@ -50,16 +52,37 @@ size_t hamming_compare(const uint64_t *SK_RESTRICT lptr, size_t lhl, const uint6
     return std::inner_product(lptr, lptr + std::min(lhl, rhl), rptr, size_t(0), [](auto c, auto x) noexcept {return c += x;}, [](auto lhs, auto rhs) noexcept -> size_t {return lhs == rhs;})
             + (std::max(lhl, rhl) - std::min(lhl, rhl));
 }
+
+static constexpr EdlibAlignConfig CONFIG {
+    .k = -1,
+    .mode = EDLIB_MODE_NW,
+    .task = EDLIB_TASK_DISTANCE,
+    .additionalEqualities = nullptr,
+    .additionalEqualitiesLength = 0,
+};
+
+template<typename T>
+int32_t edlib_edit_distance(const T&x, const T& y) {
+    const char *xptr = reinterpret_cast<const char *>(x.data());
+    const char *yptr = reinterpret_cast<const char *>(y.data());
+    const int64_t xsize = x.size();
+    const int64_t ysize = y.size();
+    EdlibAlignResult result = edlibAlign(xptr, xsize, yptr, ysize, CONFIG);
+    return result.editDistance;
+}
+
 template<typename T>
 std::pair<size_t, size_t> mmer_edit_distance_f(std::FILE *lfp, std::FILE *rfp) noexcept {
     // Compute exact edit distance at char level, then divide by the ratio of the size of these registers to characters
     // IE, the edit distance calculated is by chars rather than T
     const auto lhs(load_file<T>(lfp));
     const auto rhs(load_file<T>(rfp));
-    size_t ret = levenshteinSSE::levenshtein((const uint8_t *)lhs.data(), (const uint8_t *)&lhs[lhs.size()], (const uint8_t *)rhs.data(), (const uint8_t *)&rhs[rhs.size()]);
-    assert(ret % sizeof(T) == 0);
+    const std::span lh_span((const uint8_t *)lhs.data(), (const uint8_t *)(lhs.data() + lhs.size()));
+    const std::span rh_span((const uint8_t *)rhs.data(), (const uint8_t *)(rhs.data() + rhs.size()));
+    size_t ret = edlib_edit_distance(lh_span, rh_span);
     return {ret / sizeof(T), std::max(lhs.size(), rhs.size())};
 }
+
 std::pair<size_t, size_t> mmer_edit_distance(std::FILE *lfp, std::FILE *rfp, bool use128) noexcept {
     auto ptr = use128 ? &mmer_edit_distance_f<u128_t>: &mmer_edit_distance_f<uint64_t>;
     return ptr(lfp, rfp);

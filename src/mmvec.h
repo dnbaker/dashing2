@@ -184,7 +184,7 @@ public:
     vector(): offset_(-1), capacity_(0), size_(0) {
     }
     vector(vector &&o): vector((vector &)o) {}
-    vector(vector &o): offset_(o.offset_), capacity_(o.capacity_), size_(o.size_), path_(o.path_), ms_(std::move(o.ms_)), memthreshold_(o.memthreshold_), ram_(std::move(ram_)) {
+    vector(vector &o): offset_(o.offset_), capacity_(o.capacity_), size_(o.size_), path_(o.path_), ms_(std::move(o.ms_)), memthreshold_(o.memthreshold_), ram_(std::move(o.ram_)) {
         o.offset_ = o.capacity_ = o.size_ = 0;
         o.path_.clear();
     }

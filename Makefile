@@ -12,17 +12,22 @@ GIT_VERSION?=v2.1.19
 # Otherwise, use march=native
 UNAME_P := $(shell uname -p)
 ifeq ($(UNAME_P),arm)
-	TARGET_FLAG=-target arm64-apple-macos11 -mmacosx-version-min=11.0
+    ifneq (,$(findstring clang,$(CXX)))
+	    TARGET_FLAG?=-target arm64-apple-macos11 -mmacosx-version-min=11.0
+    else
+	    TARGET_FLAG?=-march=native
+    endif
 else
     TARGET_FLAG=-march=native
 endif
 
 LIB=-lz # -lfmt
 INC=-IlibBigWig -Ibonsai/include -Ibonsai -Ibonsai/hll -Ibonsai/hll/include -Ibonsai -I. -Isrc -Ifmt/include
-OPT+= -O3 \
-    $(TARGET_FLAG) \
+OPT_LEVEL?= -O3
+OPT+= $(TARGET_FLAG) \
     -fopenmp -pipe $(CACHE_SIZE_FLAG)
 
+OPT+=$(OPT_LEVEL)
 OPTMV:=$(OPT)
 CXXSTD?=-std=c++20
 OPT+= $(CXXSTD)
@@ -74,6 +79,9 @@ LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS)) src/osfmt.o
 
 printv:
 	echo $(GIT_VERSION)
+
+opt:
+	echo $(OPT)
 
 dashing2: dashing2-tmp
 	cp $< $@
@@ -218,6 +226,14 @@ dashing2_s512: $(D2SRC) $(wildcard src/*.h) $(EXTRA_STATIC) $(BWF)
 dashing2_s512bw: $(D2SRC) $(wildcard src/*.h) $(EXTRA_STATIC) $(BWF)
 	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) $(LIB) -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc \
     $(EXTRA_STATIC) $(BWF) -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -ldl -lz -DNDEBUG
+
+dashing2_saarch: $(D2SRC) $(wildcard src/*.h) $(EXTRA_STATIC) $(BWF)
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) -static-libstdc++ -static-libgcc -march=native  \
+    $(EXTRA_STATIC) $(BWF) -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -DNDEBUG
+
+dashing2_fsaarch: $(D2SRC) $(wildcard src/*.h) $(EXTRA_STATIC) $(BWF)
+	$(CXX) $(CXXFLAGS) $(OPT) $(WARNING) $(MACH) $(INC) -static -march=native  \
+    $(EXTRA_STATIC) $(BWF) -DNDEBUG $(D2SRC) -o $@ $(EXTRA) $(LIB) -DNDEBUG
 
 dashing2_static: dashing2_s128 dashing2_savx dashing2_savx2 dashing2_s512 dashing2_s512bw
 static: dashing2_static

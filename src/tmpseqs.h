@@ -163,7 +163,7 @@ struct MemoryOrRAMSequences {
     struct Iterator {
         const MemoryOrRAMSequences& container;
         int64_t idx;
-        std::string_view operator*() const {
+        std::string operator*() const {
             return container[idx];
         }
         Iterator& operator++() {

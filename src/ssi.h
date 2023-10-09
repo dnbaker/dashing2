@@ -177,10 +177,7 @@ public:
                 assert(j < subtab.size());
                 auto &table = subtab[j];
                 KeyT myhash = hash_index(item, i, j);
-                std::optional<std::lock_guard<std::mutex>> lock;
-                if(mptr) {
-                    lock = std::optional<std::lock_guard<std::mutex>>((*mptr)[j]);
-                }
+                const std::optional<std::lock_guard<std::mutex>> lock = maybe_lock(mptr, j);
                 auto it = table.find(myhash);
                 if(it == table.end()) {
                     table.emplace(myhash, std::vector<IdT>{static_cast<IdT>(my_id)});

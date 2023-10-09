@@ -8,6 +8,7 @@
 #include "wcompare.h"
 #include "levenshtein-sse.hpp"
 #include "options.h"
+#include "edlib.h"
 
 #include <span>
 
@@ -328,6 +329,24 @@ static inline long double g_b(long double b, long double arg) {
 std::atomic<uint64_t> compare_count{0};
 #endif
 
+static constexpr EdlibAlignConfig CONFIG {
+    .k = -1,
+    .mode = EDLIB_MODE_NW,
+    .task = EDLIB_TASK_DISTANCE,
+    .additionalEqualities = nullptr,
+    .additionalEqualitiesLength = 0,
+};
+
+template<typename T>
+int32_t edlib_edit_distance(const T&x, const T& y) {
+    const char *xptr = reinterpret_cast<const char *>(x.data());
+    const char *yptr = reinterpret_cast<const char *>(y.data());
+    const int64_t xsize = x.size();
+    const int64_t ysize = y.size();
+    EdlibAlignResult result = edlibAlign(xptr, xsize, yptr, ysize, CONFIG);
+    return result.editDistance;
+}
+
 LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
 #if COUNT_COMPARE_CALLS
     ++compare_count;
@@ -429,14 +448,14 @@ case v: {\
                 default: ;
             }
         }
-    } else if((opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_) || opts.measure_ == M_EDIT_DISTANCE) {
-        assert(size_t(result.sequences_.size()) > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zd vs %zu/%zu)\n", size_t(result.sequences_.size()), size_t(i), size_t(j)));
-        auto lhs = result.sequences_[i];
-        auto rhs = result.sequences_[j];
+    } else if(opts.sspace_ == SPACE_EDIT_DISTANCE && (opts.exact_kmer_dist_ || opts.measure_ == M_EDIT_DISTANCE)) {
+        assert(result.sequences_.size() > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zu vs %zu/%zu)\n", result.sequences_.size(), i, j));
+        const auto& lhs = result.sequences_[i];
+        const auto& rhs = result.sequences_[j];
         if(verbosity >= DEBUG) {
-            std::fprintf(stderr, "Lhs %s, rhs %s\n", std::string(lhs).data(), std::string(rhs).data());
+            std::fprintf(stderr, "Lhs %s, rhs %s\n", lhs.data(), rhs.data());
         }
-        return levenshteinSSE::levenshtein(result.sequences_[i], result.sequences_[j]);
+        return edlib_edit_distance(lhs, rhs);
     } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET && opts.truncation_method_ <= 0) {
@@ -777,7 +796,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         if(verbosity >= DEBUG) {
             std::fprintf(stderr, "Emitting neighbors\n");
         }
-        
+
         emit_neighbors(neighbor_lists, opts, result);
     } else if(opts.output_kind_ == DEDUP) {
         // The ID corresponds to the representative of a cluster;
