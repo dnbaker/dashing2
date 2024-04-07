@@ -111,25 +111,28 @@ D2SRC=$(wildcard src/*.cpp)
 OFS=$(patsubst %.cpp,%.o,$(wildcard src/*.cpp)) $(patsubst %.c,%.o, $(wildcard src/*.c))
 OBJ=$(OFS) src/osfmt.o
 OBJLD=$(patsubst %.o,%.ldo,$(OFS)) src/osfmt.o
+#linking with different types of floating-point precision. I assumed this is not needed in the static library build
 OBJF=$(patsubst %.o,%.fo,$(OFS)) src/osfmt.o
 OBJF64=$(patsubst %.o,%.f64o,$(OFS)) src/osfmt.o
 OBJLD64=$(patsubst %.o,%.ld64o,$(OFS)) src/osfmt.o
 OBJ64=$(patsubst %.o,%.64o,$(OFS)) src/osfmt.o
+#various debugging options, assumed not needed in the static library build
 OBJDBG=$(patsubst %.o,%.do,$(OFS)) src/osfmt.o
 OBJADD=$(patsubst %.o,%.sano,$(OFS)) src/osfmt.o
 OBJLTO=$(patsubst %.o,%.lto,$(OFS)) src/osfmt.o
+# different optimization levels, assumed not needed in the static library build
 OBJ0=$(patsubst %.o,%.0,$(OFS)) src/osfmt.o
 OBJV=$(patsubst %.o,%.vo,$(OFS)) src/osfmt.o
 OBJG=$(patsubst %.o,%.gobj,$(OFS)) src/osfmt.o
 OBJW=$(patsubst %.o,%.wo,$(OFS)) src/osfmt.o
 OBJNLTO=$(patsubst %.o,%.nlto,$(OFS)) src/osfmt.o
 
-# Preprocessing commands for AVX2 and AVX512BW specific object files
+# Preprocessing commands for AVX2 and AVX512BW specific object files, assumed not needed in the static library build
 D2SRCSTATICAVX2=$(patsubst %.cpp,%.static-avx2.o,$(D2SRC))
 D2SRCSTATICAVX512BW=$(patsubst %.cpp,%.static-avx512bw.o,$(D2SRC))
 
 all: dashing2 dashing2-64 # main build targets -> builds the binaries
-unit: readfx readbw readbed
+unit: readfx readbw readbed 
 obh: echo $(OBJ)
 
 all3d: dashing2 dashing2-f dashing2-ld dashing2-64 dashing2-f64 dashing2-ld64
@@ -138,7 +141,7 @@ ifeq ($(shell uname -s ),Darwin)
     SEDSTR = " '' "
 endif
 
-
+# different build configurations, assumed not needed in the static library build
 OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp src/bwreduce.cpp
 LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))  src/osfmt.o
 LIB0=$(patsubst %.cpp,%.0,$(OBJFS)) src/osfmt.o
@@ -152,6 +155,7 @@ LDLIBOBJ=$(patsubst %.cpp,%.ldo,$(OBJFS)) src/osfmt.o
 printv:
 	echo $(GIT_VERSION)
 
+# compiling & linking binaries for different build configurations/optimization flags, assumed not needed in the static library build
 dashing2: dashing2-tmp
 	cp $< $@
 dashing2-tmp: $(OBJ) libBigWig.a $(wildcard src/*.h)
@@ -195,6 +199,7 @@ read%-f: test/read%.fo $(FLIBOBJ)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
 %.o: %.c # compiles .c files to .o files
 	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
+#special rules for different build configurations, assumed not needed in the static library build
 %.64o: %.cpp
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -DLSHIDTYPE="uint64_t"
 %.64o: %.c

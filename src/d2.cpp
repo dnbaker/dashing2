@@ -130,7 +130,7 @@ int main_usage() {
 using namespace dashing2;
 
 
-int main(int argc, char **argv) {
+int dashing2_main(int argc, char **argv) {
     std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[0])));
     for(char **s = (argv + 1); *s; cmd += std::string(" ") + *s++);
     std::fprintf(stderr, "#Calling Dashing2 version %s with command '%s'\n", DASHING2_VERSION, cmd.data());

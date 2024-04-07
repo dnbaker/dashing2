@@ -39,7 +39,6 @@ using LSHDistType = DASHING2_INDEX_FLOAT_TYPE;
 #undef DASHING2_INDEX_FLOAT_TYPE
 
 
-
 struct IntervalSketchResult {
     using Map = flat_hash_map<std::string, std::vector<RegT>>;
     std::unique_ptr<Map> chrmap_;
@@ -314,5 +313,7 @@ extern std::atomic<uint64_t> compare_count;
 
 } // namespace dashing2
 //std::vector<RegT> reduce(flat_hash_map<std::string, std::vector<RegT>> &map);
+
+int dashing2_main(int argc, char **argv);
 
 #endif
