@@ -30,20 +30,20 @@ OBJ=$(OFS) src/osfmt.o
 
 # Rule to compile .cpp files to .o files
 %.o: %.cpp
-    $(CXX) $(INC) $(OPT) $(WARNING) $< -c -o $@ $(EXTRA) -DNDEBUG
+	$(CXX) $(INC) $(OPT) $(WARNING) $< -c -o $@ $(EXTRA) -DNDEBUG
 
 # Rule to compile .c files to .o files
 %.o: %.c
-    $(CC) $(INC) $(OPTMV) $(WARNING) $< -c -o $@ $(EXTRA) -DNDEBUG -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $< -c -o $@ $(EXTRA) -DNDEBUG -std=c11
 
 src/osfmt.o: fmt/src/os.cc
-    $(CXX) -I fmt/include $(OPT) $(WARNING) $< -c -o $@ $(EXTRA)
+	$(CXX) -I fmt/include $(OPT) $(WARNING) $< -c -o $@ $(EXTRA)
 
 # Main target to build the static library
 all: libdashing2.a
 
 libdashing2.a: $(OBJ)
-    ar rcs $@ $^
+	ar rcs $@ $^
 
 clean:
-    rm -f libdashing2.a $(OBJ)
+	rm -f libdashing2.a $(OBJ)
