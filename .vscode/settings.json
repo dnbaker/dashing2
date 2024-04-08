@@ -84,5 +84,6 @@
         "variant": "cpp",
         "vector": "cpp",
         "algorithm": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "/Users/lino/CodeProjects/dashing2/bonsai/hll/include/blaze"
 }
