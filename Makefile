@@ -18,7 +18,7 @@ ifeq ($(UNAME_P),arm)
 	    TARGET_FLAG?=-march=native
     endif
 else
-    TARGET_FLAG?=-march=native
+    TARGET_FLAG=-march=native
 endif
 
 LIB=-lz # -lfmt

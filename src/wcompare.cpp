@@ -5,6 +5,7 @@
 #include "wcompare.h"
 #include <numeric>
 #include "enums.h"
+#include "edit-distance.h"
 #include <cstring>
 #include "edlib.h"
 
@@ -77,10 +78,7 @@ std::pair<size_t, size_t> mmer_edit_distance_f(std::FILE *lfp, std::FILE *rfp) n
     // IE, the edit distance calculated is by chars rather than T
     const auto lhs(load_file<T>(lfp));
     const auto rhs(load_file<T>(rfp));
-    const std::span lh_span((const uint8_t *)lhs.data(), (const uint8_t *)(lhs.data() + lhs.size()));
-    const std::span rh_span((const uint8_t *)rhs.data(), (const uint8_t *)(rhs.data() + rhs.size()));
-    size_t ret = edlib_edit_distance(lh_span, rh_span);
-    return {ret / sizeof(T), std::max(lhs.size(), rhs.size())};
+    return {edit_distance(std::span((const T *)lhs.data(), lhs.size()), std::span((const T *)rhs.data(), rhs.size())), std::max(lhs.size(), rhs.size())};
 }
 
 std::pair<size_t, size_t> mmer_edit_distance(std::FILE *lfp, std::FILE *rfp, bool use128) noexcept {

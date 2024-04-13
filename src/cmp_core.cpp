@@ -6,7 +6,6 @@
 #include "emitnn.h"
 #include "mio.hpp"
 #include "wcompare.h"
-#include "levenshtein-sse.hpp"
 #include "options.h"
 #include "edlib.h"
 
