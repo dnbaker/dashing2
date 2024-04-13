@@ -129,7 +129,7 @@ public:
     struct Iterator {
         const Seqs& container;
         int64_t idx;
-        std::string_view operator*() const {
+        std::string operator*() const {
             return container[idx];
         }
         Iterator& operator++() {
