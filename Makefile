@@ -5,7 +5,7 @@ CC?=gcc
 
 CACHE_SIZE?=4194304
 CACHE_SIZE_FLAG:=-DD2_CACHE_SIZE=${CACHE_SIZE}
-GIT_VERSION?=v2.1.19
+GIT_VERSION?=v2.1.20
 
 
 # If on M1, use -target arm64-apple-macos11 -mmacosx-version-min=11.0
