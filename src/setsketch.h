@@ -85,10 +85,7 @@ std::tuple<T, T, uint64_t> brent_find_minima(const F &f, T min, T max, int bits=
    return std::make_tuple(x, fx, max_iter - count);
 }
 
-static INLINE std::pair<long double, long double> optimal_parameters(long double maxreg, long double minreg, long double q) {
-    long double b = std::exp(std::log((long double)maxreg / (long double)minreg) / (long double)q);
-    return {b, (long double)maxreg / b};
-}
+std::pair<long double, long double> optimal_parameters(const long double maxreg, const long double minreg, const long double q) noexcept;
 
 }
 
