@@ -283,7 +283,7 @@ class CSetSketch {
     // SetSketch 1
 protected:
     size_t m_; // Number of registers
-    std::unique_ptr<FT[], detail::Deleter> data_;
+    std::unique_ptr<FT[], detail::Deleter> data_; //unique pointer to array of FT values
     fy::LazyShuffler ls_;
     mvt_t<FT> mvt_;
     std::vector<uint64_t> ids_;
@@ -484,12 +484,12 @@ public:
         gzclose(fp);
     }
     void read(gzFile fp) {
-        gzread(fp, &m_, sizeof(m_));
+        gzread(fp, &m_, sizeof(m_)); //read m := number of registers
         FT mv;
-        gzread(fp, &mv, sizeof(mv));
+        gzread(fp, &mv, sizeof(mv)); //read maximum value (for initialising mvt variable)
         data_.reset(allocate(m_));
         mvt_.assign(data_.get(), m_, mv);
-        gzread(fp, (void *)data_.get(), m_ * sizeof(FT));
+        gzread(fp, (void *)data_.get(), m_ * sizeof(FT)); //read data array that holds register values of sketch
         for(size_t i = 0;i < m_; ++i) mvt_.update(i, data_[i]);
         ls_.resize(m_);
     }
