@@ -484,7 +484,8 @@ public:
         gzclose(fp);
     }
     void read(gzFile fp) {
-        gzread(fp, &m_, sizeof(m_)); //read m := number of registers
+        //commented out, because #registers isn't stored in the sketch binaries
+        //gzread(fp, &m_, sizeof(m_)); //read m := number of registers
         FT mv;
         gzread(fp, &mv, sizeof(mv)); //read maximum value (for initialising mvt variable)
         data_.reset(allocate(m_));
