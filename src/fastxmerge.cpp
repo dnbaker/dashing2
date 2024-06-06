@@ -1,15 +1,18 @@
 #include "fastxsketch.h"
 
 namespace dashing2 {
+//This merge function only merges multiple sketches into one vector of sketches, it doesn't actually merge sketches. I think this function is needed after the parallel sketching part
 SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const std::vector<std::string> &names=std::vector<std::string>()) {
     DBG_ONLY(std::fprintf(stderr, "About to merge from %p of size %zu, names has size %zu\n", (void *)start, n, names.size());)
     SketchingResult ret;
-    if(n == 0) return ret;
-    else if(n == 1) {
+    if(n == 0) return ret; //no Sketches: return result in SketchingResult directly
+    else if(n == 1) { //One sketch: move it to the result and prepend the first name from the names vector to each name in the sketch, then return.
         ret = std::move(*start);
         std::transform(ret.names_.begin(), ret.names_.end(), ret.names_.begin(), [&names](const auto &x) {return names.front() + ":" + x;});
         return ret;
     }
+
+    //Prepare for Merging: Loop through files and collect information
     //ret.nperfile_.resize(total_seq);
     for(size_t i = 0; i < n; ++i) {
         ret.nperfile_.insert(ret.nperfile_.end(), start[i].nperfile_.begin(), start[i].nperfile_.end());
@@ -26,6 +29,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
         offsets[i + 1] = total_seqs;
         sig_offsets[i + 1] = total_sig_size;
     }
+    //Resize the result containers
     ret.names_.resize(total_seqs);
     if(std::any_of(start, start + n, [](auto &x) {return x.sequences_.size();})) {
         seq_resize(ret.sequences_, total_seqs);
@@ -43,6 +47,7 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     }
     const bool seqsz = total_seqs,
                kmercountsz = !start->kmercounts_.empty();
+    //Copy data from each sketch -> does the concatenation
     for(size_t i = 0; i < n; ++i) {
         auto &src = start[i];
         assert(src.names_.size() == offsets[i + 1] - offsets[i]);
@@ -67,6 +72,8 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
     return ret;
 }
 
+//creates the filename for the sketchfile, but doesn't create the file yet
+//opts: holds infos about sketch, path: base path for filename, iskmer: say wether file is related to k-mers
 std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer) {
     std::string ret(path);
     ret = ret.substr(0, ret.find_first_of(' '));

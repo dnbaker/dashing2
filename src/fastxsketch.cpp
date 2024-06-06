@@ -231,6 +231,8 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         if(ctrs.size() > unsigned(tid)) ctrs[tid].reset();\
     } while(0)
 
+
+    //initialization for output to file
     const uint64_t nitems = paths.size();
     std::string kmeroutpath, kmernamesoutpath;
     if(outpath.size() && outpath != "-" && outpath != "/dev/stdout") {
