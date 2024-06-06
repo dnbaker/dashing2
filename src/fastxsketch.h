@@ -62,6 +62,10 @@ void seq_resize(tmpseq::Seqs&seqs, const size_t num_seqs) noexcept;
 void seq_resize(tmpseq::MemoryOrRAMSequences& , const size_t num_seqs);
 int32_t num_threads();
 
+//Added declaration of load_copy from fastxsketch.cpp so that I can call it in my own project to load sketches from files into SketchingResult objects
+template<typename T, size_t chunk_size = 65536> //this makes load copy callable with all points of types for T, e.g. doubles, ints etc. 
+size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss);
+
 
 FastxSketchingResult &fastx2sketch(FastxSketchingResult &res, Dashing2Options &opts, const std::vector<std::string> &paths, std::string path);
 FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &res, Dashing2DistOptions &opts, const std::string &path, kseq_t *kseqs, std::string outpath, bool parallel=false, const size_t seqs_per_batch = 8192);
