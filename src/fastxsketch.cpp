@@ -60,7 +60,7 @@ int32_t num_threads() {
 template<typename T, size_t chunk_size = 65536>
 size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss) {
     T *const origptr = ptr;
-    if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
+    if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) { //case for .gz files
         gzFile fp = gzopen(path.data(), "rb");
         if(!fp) return 0; //THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
         gzread(fp, cardinality, sizeof(*cardinality));
@@ -69,7 +69,7 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality, const siz
             ptr += nr / sizeof(T));
         gzclose(fp);
         return ptr - origptr;
-    } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
+    } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) { //case for .xz files
         auto cmd = std::string("xz -dc ") + path;
         std::FILE *fp = ::popen(cmd.data(), "r");
         if(fp == 0) return 0;
@@ -354,6 +354,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                         std::fclose(ifp);
                     } else {
                         assert(mss + ss <= ret.signatures_.size() || !std::fprintf(stderr, "mss %zu, ss %zu, sig size %zu\n", mss, ss, ret.signatures_.size()));
+                        //load copy reads sketch data from file and stores register values in ret.signatures, if successfull
                         if(load_copy(destination, &ret.signatures_[mss], &ret.cardinalities_[myind], ss) == 0) {
                             std::fprintf(stderr, "Sketch was not available in file %s... resketching.\n", destination.data());
                             goto perform_sketch;
@@ -362,9 +363,9 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                     //ret.cardinalities_[myind] = compute_cardest(&ret.signatures_[mss], ss);
                     DBG_ONLY(std::fprintf(stderr, "Sketch was loaded from %s and has card %g\n", destination.data(), ret.cardinalities_[myind]);)
                 }
-                if(ret.kmers_.size())
+                if(ret.kmers_.size()) //load cached kmer IDs from file
                     load_copy(destkmer, &ret.kmers_[mss], &ret.cardinalities_[myind], ss);
-                if(ret.kmercounts_.size())
+                if(ret.kmercounts_.size()) //load cached kmer counts from file
                     load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind], ss);
             } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                 DBG_ONLY(std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());)

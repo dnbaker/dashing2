@@ -39,7 +39,7 @@ struct SketchingResult {
     tmpseq::MemoryOrRAMSequences sequences_;
     // This is only filled if sspace is SPACE_EDIT_DISTANCE and
     // we are using LSH only for pre-filtering but performing exact distance calculations via edit distance
-    mm::vector<RegT> signatures_;
+    mm::vector<RegT> signatures_; //holds register values of sketches
     // TODO: mmap these matrices to reduce peak memory footprint
     mm::vector<uint64_t> kmers_;
     std::vector<float> kmercounts_; // Contains counts for k-mers, if desired
