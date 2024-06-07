@@ -60,7 +60,7 @@ int32_t num_threads() {
     ptr: where the sketch will be loaded into memory
     returns number of elements/registers in sketch
 */
-template<typename T, size_t chunk_size = 65536>
+template<typename T, size_t chunk_size> // = 65536, deleted definition of chunk_size, because this now takes place in the headerfile
 size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss) {
     T *const origptr = ptr;
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) { //case for .gz files
