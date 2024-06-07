@@ -56,17 +56,20 @@ int32_t num_threads() {
 #endif
     return nt;
 }
-
+/*  T: type of elements in sketch
+    ptr: where the sketch will be loaded into memory
+    returns number of elements/registers in sketch
+*/
 template<typename T, size_t chunk_size = 65536>
 size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss) {
     T *const origptr = ptr;
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) { //case for .gz files
         gzFile fp = gzopen(path.data(), "rb");
         if(!fp) return 0; //THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
-        gzread(fp, cardinality, sizeof(*cardinality));
-        for(int nr;
+        gzread(fp, cardinality, sizeof(*cardinality)); //read cardinality into cardinality variable
+        for(int nr; 
             !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
-            ptr += nr / sizeof(T));
+            ptr += nr / sizeof(T)); //read the registers into 
         gzclose(fp);
         return ptr - origptr;
     } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) { //case for .xz files
@@ -144,6 +147,7 @@ std::string FastxSketchingResult::str() const {
     return msg;
 }
 
+//Cardinality Estimation
 INLINE double compute_cardest(const RegT *ptr, const size_t m) {
     double s = 0.;
 #if _OPENMP >= 201307L

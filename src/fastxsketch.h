@@ -35,7 +35,7 @@ struct SketchingResult {
     // kmerfiles and kmercountfiles are unset for bed files
     std::vector<uint32_t> nperfile_; // This is either empty (in which case each filename/row has its own sketch)
                                      // Or, this contains a list indicating the number of sketches created for each file/line
-    std::vector<double> cardinalities_;
+    std::vector<double> cardinalities_; //apparently holds the cardinalties of a particular input sequence
     tmpseq::MemoryOrRAMSequences sequences_;
     // This is only filled if sspace is SPACE_EDIT_DISTANCE and
     // we are using LSH only for pre-filtering but performing exact distance calculations via edit distance
