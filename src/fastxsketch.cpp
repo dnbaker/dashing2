@@ -59,7 +59,10 @@ int32_t num_threads() {
 /*  T: type of elements in sketch
     ptr: where the sketch will be loaded into memory
     returns number of elements/registers in sketch
+
+    Commented it out because I moved the definition of the complete load_copy template to the headerfile
 */
+/*
 template<typename T, size_t chunk_size> // = 65536, deleted definition of chunk_size, because this now takes place in the headerfile
 size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss) {
     T *const origptr = ptr;
@@ -112,7 +115,7 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality, const siz
     }
     std::fclose(fp);
     return sz;
-}
+}*/
 
 std::string FastxSketchingResult::str() const {
     std::string msg = "FastxSketchingResult @" + to_string(this) + ';';
