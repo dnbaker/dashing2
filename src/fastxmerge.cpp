@@ -1,3 +1,4 @@
+#include "fastxmerge.h" //added this line, along creating the header file
 #include "fastxsketch.h"
 
 namespace dashing2 {

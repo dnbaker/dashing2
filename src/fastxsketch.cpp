@@ -58,6 +58,7 @@ int32_t num_threads() {
 }
 /*  T: type of elements in sketch
     ptr: where the sketch will be loaded into memory
+    ss: sketch size
     returns number of elements/registers in sketch
 
     Commented it out because I moved the definition of the complete load_copy template to the headerfile
