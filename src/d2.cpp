@@ -130,6 +130,29 @@ int main_usage() {
 using namespace dashing2;
 
 
+void sketch_wrapper(const std::string &input_filepaths, const std::string &sketch_output_dir) {
+    std::vector<std::string> args = {
+        "dashing2",               // Command (not actually used but placeholders for argv[0])
+        "sketch",                 
+        "--cache", //cache sketches
+        "--outprefix", sketch_output_dir, //specify where to save sketches
+        "-F",                     // Indicate to read files from a list
+        input_filepaths,             // path to file that holds paths to the fasta files needed to be sketched
+    };
+
+    std::vector<char*> argv;
+    for (auto& arg : args) { // Convert std::string arguments to char*
+        argv.push_back(&arg.front());
+    }
+    int argc = argv.size();
+    int result = dashing2_main(argc, argv.data());
+
+    if (result != 0) {
+       throw std::runtime_error("d2.cpp/sketch_wrapper() failed"); 
+    }
+}
+
+
 int dashing2_main(int argc, char **argv) {
     std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[0])));
     for(char **s = (argv + 1); *s; cmd += std::string(" ") + *s++);

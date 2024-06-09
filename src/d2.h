@@ -8,6 +8,7 @@
 #include <memory>
 #include <atomic>
 #include <vector>
+#include <stdexcept> //added for throwing errors
 #include "bonsai/encoder.h"
 #include "xxHash/xxh3.h"
 #include "src/setsketch.h"
@@ -314,6 +315,7 @@ extern std::atomic<uint64_t> compare_count;
 } // namespace dashing2
 //std::vector<RegT> reduce(flat_hash_map<std::string, std::vector<RegT>> &map);
 
+void sketch_wrapper(const std::string &input_filepaths, const std::string &sketch_output_dir);
 int dashing2_main(int argc, char **argv);
 
 #endif
