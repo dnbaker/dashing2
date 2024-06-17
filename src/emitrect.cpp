@@ -112,6 +112,10 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     const size_t ns = result.names_.empty() ? result.nqueries(): result.names_.size();
     const std::string outp = opts.outfile_path_.empty() || opts.outfile_path_.front() == '-'
             ? "/dev/stdout"s: opts.outfile_path_;
+
+    if(verbosity >= Verbosity::INFO) {
+        std::cout << "outfile_path_ = " << opts.outfile_path_ << std::endl;
+    }     
     // Only make fmt::ostream if emitting in human-readable form
     std::optional<fmt::ostream> ofopt(opts.output_format_ == HUMAN_READABLE
                 ? std::optional<fmt::ostream>(fmt::output_file(outp, fmt::buffer_size=131072))

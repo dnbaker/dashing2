@@ -215,7 +215,7 @@ int cmp_main(int argc, char **argv) {
     DataType dt = DataType::FASTX;
     std::string outprefix;
     OutputKind ok = SYMMETRIC_ALL_PAIRS;
-    std::string cmpout; // Only used if distances are also requested -> this should hold the output path to file where distances are written to
+    std::string cmpout = "/workspaces/BMI_Project/lib_integration_tests/dashing2/distout.txt"; // Only used if distances are also requested -> this should hold the output path to file where distances are written to -> CURRENTLY HARDCODED PATH
     bool normalize_bed = false;
     int topk_threshold = -1;
     int truncate_mode = 0;
