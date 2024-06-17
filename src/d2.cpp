@@ -130,11 +130,15 @@ int main_usage() {
 using namespace dashing2;
 
 
+void set_verbosity(Verbosity level) {
+    verbosity = level;
+}
+
 void sketch_wrapper(const std::string &input_filepaths, const std::string &sketch_output_dir) {
     std::vector<std::string> args = {
         "dashing2",               // Command (not actually used but placeholders for argv[0])
         "sketch",                 
-        "--cache", //cache sketches
+        "--cache", //cache sketches -> CHECK IF THIS IS NEEDED
         "--outprefix", sketch_output_dir, //specify where to save sketches
         "-F",                     // Indicate to read files from a list
         input_filepaths,             // path to file that holds paths to the fasta files needed to be sketched

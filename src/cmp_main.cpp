@@ -92,7 +92,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         const size_t offset = (num_entities + 2) * sizeof(uint64_t);
         assert((st.st_size - offset) % sizeof(RegT) == 0);
         result.signatures_.assign(pf, offset, (st.st_size - offset) / sizeof(RegT));
-    } else { // Else, we have to load sketches from each file
+    } else { // Else, we have to load sketches from each file -> The vector paths stores the paths to the precomputed sketches
         if(verbosity >= Verbosity::INFO ) {
             std::fprintf(stderr, "Parsing in data from file\n");
         }

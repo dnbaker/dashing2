@@ -315,7 +315,8 @@ extern std::atomic<uint64_t> compare_count;
 } // namespace dashing2
 //std::vector<RegT> reduce(flat_hash_map<std::string, std::vector<RegT>> &map);
 
-void sketch_wrapper(const std::string &input_filepaths, const std::string &sketch_output_dir);
-int dashing2_main(int argc, char **argv);
+void sketch_wrapper(const std::string &input_filepaths, const std::string &sketch_output_dir); //wrapper function to perform "dashing2 sketch -F" call
+void set_verbosity(Verbosity level); //Function to expose verbosity so it can be set from outside
+int dashing2_main(int argc, char **argv); //was originally the main function
 
 #endif
