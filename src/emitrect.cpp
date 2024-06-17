@@ -113,7 +113,8 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
     const std::string outp = opts.outfile_path_.empty() || opts.outfile_path_.front() == '-'
             ? "/dev/stdout"s: opts.outfile_path_;
 
-    if(verbosity >= Verbosity::INFO) {
+    //added this if clause to check outfile_path_ value
+    if(verbosity >= Verbosity::DEBUG) {
         std::cout << "outfile_path_ = " << opts.outfile_path_ << std::endl;
     }     
     // Only make fmt::ostream if emitting in human-readable form

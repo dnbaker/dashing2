@@ -9,6 +9,7 @@
 #include <atomic>
 #include <vector>
 #include <stdexcept> //added for throwing errors
+#include <functional> //added for callback function in cmp_main
 #include "bonsai/encoder.h"
 #include "xxHash/xxh3.h"
 #include "src/setsketch.h"

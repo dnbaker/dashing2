@@ -111,7 +111,7 @@ bool entmin = false;
 int verbosity = 0;
 
 
-void set_verbosity(Verbosity level) {
+void set_verbosity(Verbosity level) { //added to be able to modify verbosity from outside the library
     verbosity = level;
 }
 
@@ -156,6 +156,7 @@ void sketch_wrapper(const std::string &input_filepaths, const std::string &sketc
        throw std::runtime_error("d2.cpp/sketch_wrapper() failed"); 
     }
 }
+
 
 
 int dashing2_main(int argc, char **argv) {

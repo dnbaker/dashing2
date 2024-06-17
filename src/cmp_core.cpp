@@ -341,7 +341,8 @@ LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &resu
     const long double lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const long double invdenom = 1.L / opts.sketchsize_;
     auto sim2dist = [poisson_mult=-1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
-    if(opts.compressed_ptr_) {
+    //comparison of compressed representations
+    if(opts.compressed_ptr_) { 
         if(verbosity >= EXTREME) {
             std::fprintf(stderr, "Comparing compressed representations.\n");
         }
@@ -429,7 +430,8 @@ case v: {\
                 default: ;
             }
         }
-    } else if((opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_) || opts.measure_ == M_EDIT_DISTANCE) {
+    } //Exact kmer or edit distance calculation
+    else if((opts.sspace_ == SPACE_EDIT_DISTANCE && opts.exact_kmer_dist_) || opts.measure_ == M_EDIT_DISTANCE) { 
         assert(size_t(result.sequences_.size()) > std::max(i, j) || !std::fprintf(stderr, "Expected sequences to be non-null for exact edit distance calculation (%zd vs %zu/%zu)\n", size_t(result.sequences_.size()), size_t(i), size_t(j)));
         auto lhs = result.sequences_[i];
         auto rhs = result.sequences_[j];
@@ -437,7 +439,8 @@ case v: {\
             std::fprintf(stderr, "Lhs %s, rhs %s\n", std::string(lhs).data(), std::string(rhs).data());
         }
         return levenshteinSSE::levenshtein(result.sequences_[i], result.sequences_[j]);
-    } else if(opts.kmer_result_ <= FULL_SETSKETCH) {
+    } //SetSketch comparison
+    else if(opts.kmer_result_ <= FULL_SETSKETCH) {
         const RegT *lhsrc = &result.signatures_[opts.sketchsize_ * i], *rhsrc = &result.signatures_[opts.sketchsize_ * j];
         if(opts.sspace_ == SPACE_SET && opts.truncation_method_ <= 0) {
             const auto gtlt = sketch::eq::count_gtlt(lhsrc, rhsrc, opts.sketchsize_);
@@ -497,7 +500,8 @@ case v: {\
                 ret = (lhcard + rhcard - isz);
             }
         }
-    } else {
+    } //exact representation commparison
+    else {
 #define CORRECT_RES(res, measure, lhc, rhc)\
             if(measure == SYMMETRIC_CONTAINMENT) \
                 res = res / std::min(lhc, rhc);\
