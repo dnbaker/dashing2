@@ -197,7 +197,7 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
     }
 }
 
-int cmp_main(int argc, char **argv) {
+int cmp_main(int argc, char **argv, DistanceCallback callback) {
     int c;
     int k = -1, w = 0, nt = -1;
     SketchSpace sketch_space = SPACE_SET;
@@ -362,7 +362,7 @@ int cmp_main(int argc, char **argv) {
             }
         }
     }
-    cmp_core(distopts, result);
+    cmp_core(distopts, result, callback);
     return 0;
 }
 

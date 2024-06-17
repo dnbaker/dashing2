@@ -10,6 +10,7 @@
 #include <vector>
 #include <stdexcept> //added for throwing errors
 #include <functional> //added for callback function in cmp_main
+#include <any> //added for general callback functionality
 #include "bonsai/encoder.h"
 #include "xxHash/xxh3.h"
 #include "src/setsketch.h"
@@ -318,7 +319,10 @@ void set_verbosity(Verbosity level); //Function to expose verbosity so it can be
 } // namespace dashing2
 //std::vector<RegT> reduce(flat_hash_map<std::string, std::vector<RegT>> &map);
 
+// using GeneralCallback = std::function<void(std::any)>; // not doing the general case yet
+using DistanceCallback = std::function<void(size_t, size_t, float)>;
+
 void sketch_wrapper(const std::string &input_filepaths, const std::string &sketch_output_dir); //wrapper function to perform "dashing2 sketch -F" call
-int dashing2_main(int argc, char **argv); //was originally the main function
+int dashing2_main(int argc, char **argv, DistanceCallback callback = nullptr); //was originally the main function
 
 #endif

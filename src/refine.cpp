@@ -28,7 +28,7 @@ void refine_results(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
             // -- as above, for the KNN-format
             for(size_t j = 0; j < lsz; ++j) {
                 auto &[dist, id] = l[j];
-                dist = mult * compare(opts, result, lhid, id);
+                dist = mult * compare(opts, result, lhid, id, nullptr);
             }
             std::sort(beg, e);
             if(!distance(opts.measure_)) {
@@ -49,7 +49,7 @@ void refine_results(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
             size_t failures = 0;
             for(size_t j = 0; j < lsz; ++j) {
                 auto &[dist, id] = l[j];
-                auto v = compare(opts, result, lhid, id);
+                auto v = compare(opts, result, lhid, id, nullptr);
                 const bool pass = distance(opts.measure_) ? v < opts.min_similarity_: v >= opts.min_similarity_;
                 if(!pass) {
                     dist = MDIST;
@@ -67,7 +67,7 @@ void refine_results(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
             }), l.end());
             std::sort(l.begin(), l.end());
         } else {
-            std::transform(beg, e, beg, [&](PairT x) -> PairT {return {mult * compare(opts, result, lhid, x.second), x.second};});
+            std::transform(beg, e, beg, [&](PairT x) -> PairT {return {mult * compare(opts, result, lhid, x.second, nullptr), x.second};});
             std::sort(beg, e);
         }
         // Now that we've selected the top-k/bottom-k (similarity/distance), multiply

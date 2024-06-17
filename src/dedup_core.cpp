@@ -59,7 +59,7 @@ struct GreedyClustering {
             auto vp = vals.data();
             const auto vps = vp;
             for(const auto id: hits) {
-                *vp++ = mult * compare(opts, result, orep, ids_[id]);
+                *vp++ = mult * compare(opts, result, orep, ids_[id], nullptr);
             }
             auto mv = std::min_element(vps, vp);
             if(hits.empty() || (mv != vp && mult * *mv < simt)) {
@@ -130,7 +130,7 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
     for(size_t i = 0; i < nh; ++i) {
         const auto id = hitptr[i];
         assert(id < ids.size());
-        vals[i] = mult * compare(opts, result, oid, ids[id]);
+        vals[i] = mult * compare(opts, result, oid, ids[id], nullptr);
     }
     auto mv = std::min_element(vals.begin(), vals.end());
     if(hits.empty() || (mv != vals.end() && mult * *mv < simt)) {
@@ -197,7 +197,7 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     for(const auto id: hits) {
         assert(id < ids.size());
-        *vp++ = mult * compare(opts, result, oid, ids[id]);
+        *vp++ = mult * compare(opts, result, oid, ids[id], nullptr);
     }
     auto mv = std::min_element(vals.begin(), vals.end());
     if(hits.empty() || (mv != vals.end() && mult * *mv < simt)) {
@@ -271,7 +271,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
             #pragma omp parallel for schedule(dynamic) reduction(min:bestc)
 #endif
             for(size_t j = 0; j < ids.size(); ++j) {
-                bestc = std::min(bestc, std::pair<LSHDistType, LSHIDType>{compare(opts, result, i, ids[j]) * mult, j});
+                bestc = std::min(bestc, std::pair<LSHDistType, LSHIDType>{compare(opts, result, i, ids[j], nullptr) * mult, j});
             }
             if(bestc.first * mult < simt || bestc.second == LSHIDType(-1)) {
                 ids.push_back(i);
@@ -329,7 +329,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
                                 std::fprintf(stderr, "ids of size %zu yielded a hit index %zu at %zu. Skipping, but this shouldn't happen...\n", ids.size(), size_t(hits[i]), i);
                                 continue;
                             }
-                            vals[i] = mult * compare(opts, result, oid, ids.at(hits[i]));
+                            vals[i] = mult * compare(opts, result, oid, ids.at(hits[i]), nullptr);
                         }
                         mv = std::min_element(vals.begin(), vals.end());
                         if(mult * *mv < simt) {

@@ -328,7 +328,7 @@ static inline long double g_b(long double b, long double arg) {
 std::atomic<uint64_t> compare_count{0};
 #endif
 
-LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j) {
+LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j, DistanceCallback callback) {
 #if COUNT_COMPARE_CALLS
     ++compare_count;
 #endif
@@ -557,6 +557,10 @@ case v: {\
         // Compare exact representations, not compressed shrunk
     }
     if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<decltype(ret)>::max();
+
+    if (callback) { // For now added callback just here and not in other branches where also something is returned
+        callback(i, j, ret);
+    }
     return ret;
 }
 
@@ -598,7 +602,7 @@ inline size_t densify(std::span<MHT> minhashes, uint64_t *const kmers, const sch
     return ne;
 }
 
-void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
+void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result, DistanceCallback callback) {
     if(verbosity >= EXTREME) {
         std::fprintf(stderr, "Beginning cmp_core");
     }
@@ -733,7 +737,7 @@ void cmp_core(const Dashing2DistOptions &opts, SketchingResult &result) {
         if(verbosity >= Verbosity::DEBUG) {
             std::fprintf(stderr, "before calling emit_rectangular, output format is %s\n", to_string(opts.output_format_).data());
         }
-        emit_rectangular(opts, result);
+        emit_rectangular(opts, result, callback);
         return;
     }
     // This is LSH-index assisted KNN graphs +

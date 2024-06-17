@@ -188,7 +188,7 @@ std::vector<pqueue> build_exact_graph(SetSketchIndex<LSHIDType, LSHIDType> &, co
         auto &nl = neighbor_lists[id];
         for(size_t rhid = 0; rhid < ns; ++rhid) {
             if(rhid == id) continue; // skip self.
-            auto sim = mult * compare(opts, result, id, rhid);
+            auto sim = mult * compare(opts, result, id, rhid, nullptr);
             if(opts.output_kind_ == KNN_GRAPH) {
                 // Don't include as a nearest-neighbor if the similarity is 0.
                 if(!isdist && !sim)

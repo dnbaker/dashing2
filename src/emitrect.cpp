@@ -105,7 +105,7 @@ void batched_write(const float * &src, std::back_insert_iterator<fmt::memory_buf
     fmt::format_to(biof, "\n");
 }
 
-void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result) {
+void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result, DistanceCallback callback) {
     if(verbosity >= Verbosity::DEBUG) {
         std::fprintf(stderr, "output format should be %s based on value at emit_rectangular start\n", to_string(opts.output_format_).data());
     }
@@ -225,7 +225,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 }
                 OMP_PFOR_DYN
                 for(size_t j = 0; j < nq; ++j) {
-                    dat[j] = compare(opts, result, i, j + nf);
+                    dat[j] = compare(opts, result, i, j + nf, callback);
                 }
                 std::lock_guard<std::mutex> guard(datq_lock);
                 datq.emplace_back(QTup{std::move(dat), i, i + 1, nq});
@@ -244,7 +244,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 OMP_PFOR_DYN
                 for(size_t i = 0; i < nrow; ++i) {
                     for(size_t j = 0; j < nq; ++j)
-                        dat[i * nq + j] = compare(opts, result, i + firstrow, j + nf);
+                        dat[i * nq + j] = compare(opts, result, i + firstrow, j + nf, callback);
                 }
                 std::lock_guard<std::mutex> guard(datq_lock);
                 datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
@@ -266,7 +266,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 for(size_t fs = firstrow; fs < erow; ++fs) {
                     auto datp = &dat[(fs - firstrow) * ns];
                     for(size_t j = 0; j < ns; ++j)
-                        datp[j] = compare(opts, result, fs, j);
+                        datp[j] = compare(opts, result, fs, j, callback);
                 }
                 std::lock_guard<std::mutex> guard(datq_lock);
                 datq.emplace_back(QTup{std::move(dat), firstrow, erow, nwritten});
@@ -286,7 +286,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                     }
                     OMP_PFOR_DYN
                     for(size_t start = start_index;start < ns; ++start) {
-                        datp[start] = compare(opts, result, i, start);
+                        datp[start] = compare(opts, result, i, start, callback);
                     }
                     std::lock_guard<std::mutex> guard(datq_lock);
                     datq.emplace_back(QTup{std::move(dat), i, i + 1, nelem});
@@ -318,7 +318,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                         auto datp = &dat[offsets[myoff]] - fs - 1;
                         for(size_t j = fs + 1; j < ns; ++j) {
                             DBG_ONLY(++totalused;)
-                            datp[j] = compare(opts, result, fs, j);
+                            datp[j] = compare(opts, result, fs, j, callback);
                         }
                     }
                     assert(totalused.load() == nwritten);

@@ -127,9 +127,9 @@ struct Dashing2DistOptions: public Dashing2Options {
 #endif
     }
 };
-void cmp_core(const Dashing2DistOptions &ddo, SketchingResult &res);
-LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j);
-void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result);
+void cmp_core(const Dashing2DistOptions &ddo, SketchingResult &res, DistanceCallback callback);
+LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &result, size_t i, size_t j, DistanceCallback callback);
+void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &result, DistanceCallback callback);
 size_t default_batchsize(size_t &batch_size, const Dashing2DistOptions &opts);
 
 

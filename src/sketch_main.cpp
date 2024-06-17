@@ -144,7 +144,7 @@ int sketch_main(int argc, char **argv) {
     if(cmpout.size()) {
         distopts.measure_ = measure;
         distopts.cmp_batch_size_ = default_batchsize(batch_size, distopts);
-        cmp_core(distopts, result);
+        cmp_core(distopts, result, nullptr); //passing nullptr as callback function here, because I assume that we will never call sketch & compare simultaneously in my application
     }
     return 0;
 }

@@ -2,7 +2,7 @@
 #include <filesystem>
 
 namespace dashing2 {
-int cmp_main(int argc, char **argv);
+int cmp_main(int argc, char **argv, DistanceCallback callback);
 int contain_main(int argc, char **argv);
 int wsketch_main(int argc, char **argv);
 int sketch_main(int argc, char **argv);
@@ -159,7 +159,9 @@ void sketch_wrapper(const std::string &input_filepaths, const std::string &sketc
 
 
 
-int dashing2_main(int argc, char **argv) {
+
+
+int dashing2_main(int argc, char **argv, DistanceCallback callback) {
     std::string cmd(std::filesystem::absolute(std::filesystem::path(argv[0])));
     for(char **s = (argv + 1); *s; cmd += std::string(" ") + *s++);
     std::fprintf(stderr, "#Calling Dashing2 version %s with command '%s'\n", DASHING2_VERSION, cmd.data());
@@ -167,7 +169,7 @@ int dashing2_main(int argc, char **argv) {
         if(std::strcmp(argv[1], "sketch") == 0)
             return sketch_main(argc - 1, argv + 1);
         if(std::strcmp(argv[1], "cmp") == 0 || std::strcmp(argv[1], "dist") == 0)
-            return cmp_main(argc - 1, argv + 1);
+            return cmp_main(argc - 1, argv + 1, callback);
         if(std::strcmp(argv[1], "wsketch") == 0)
             return wsketch_main(argc - 1, argv + 1);
         if(std::strcmp(argv[1], "contain") == 0)
