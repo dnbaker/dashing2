@@ -281,6 +281,7 @@ const std::vector<std::string> VALID_LONG_OPTION_STRINGS {{
     "verbose",
     "window-size",
     "seqs-in-ram",
+    //"machine-readable", // added this line so that I can use --machine-readable as a terminal flag to enable outputting distance computations to binary files
 }};
 
 // This function takes a vector of additional strings,

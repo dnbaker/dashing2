@@ -215,7 +215,7 @@ int cmp_main(int argc, char **argv) {
     DataType dt = DataType::FASTX;
     std::string outprefix;
     OutputKind ok = SYMMETRIC_ALL_PAIRS;
-    std::string cmpout; // Only used if distances are also requested
+    std::string cmpout; // Only used if distances are also requested -> this should hold the output path to file where distances are written to
     bool normalize_bed = false;
     int topk_threshold = -1;
     int truncate_mode = 0;
@@ -237,7 +237,7 @@ int cmp_main(int argc, char **argv) {
     if(verbosity >= Verbosity::DEBUG) {
         std::fprintf(stderr, "output format should be %s based on value at start\n", to_string(of).data());
     }
-    validate_options(argv, std::vector<std::string>{{"presketched"}});
+    validate_options(argv, std::vector<std::string>{{"presketched"}}); 
     CMP_OPTS(cmp_long_options);
     std::vector<std::string> paths;
     if(verbosity >= Verbosity::INFO) {
