@@ -110,6 +110,11 @@ void Dashing2Options::validate() const {
 bool entmin = false;
 int verbosity = 0;
 
+
+void set_verbosity(Verbosity level) {
+    verbosity = level;
+}
+
 } // dashing2
 
 int main_usage() {
@@ -129,10 +134,6 @@ int main_usage() {
 }
 using namespace dashing2;
 
-
-void set_verbosity(Verbosity level) {
-    verbosity = level;
-}
 
 void sketch_wrapper(const std::string &input_filepaths, const std::string &sketch_output_dir) {
     std::vector<std::string> args = {
