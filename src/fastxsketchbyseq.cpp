@@ -368,17 +368,17 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
             auto fsfunc = [&](auto x) __attribute__((always_inline)) {
                 x = maskfn(x);
                 if(opts.fs_->in_set(x)) return;
-                if(isop)    sketchers.opss->update(x);
+                if(isop)    sketchers.opss->update(fold64(x));
                 else if(isctr) sketchers.ctr->add(x);
-                else if(isfs) sketchers.fss->update(x);
-                else if(iscfss) std::visit([&x](auto &sketch) __attribute__((always_inline)) {sketch.update(x);}, *sketchers.cfss);
+                else if(isfs) sketchers.fss->update(fold64(x));
+                else if(iscfss) std::visit([&x](auto &sketch) __attribute__((always_inline)) {sketch.update(fold64(x));}, *sketchers.cfss);
             };
             auto nofsfunc = [&](auto x) __attribute__((always_inline)) {
                 x = maskfn(x);
-                if(isop) sketchers.opss->update(x);
+                if(isop) sketchers.opss->update(fold64(x));
                 else if(isctr) sketchers.ctr->add(x);
-                else if(isfs) sketchers.fss->update(x);
-                else if(iscfss) std::visit([&x](auto &sketch) __attribute__((always_inline)) {sketch.update(x);}, *sketchers.cfss);
+                else if(isfs) sketchers.fss->update(fold64(x));
+                else if(iscfss) std::visit([&x](auto &sketch) __attribute__((always_inline)) {sketch.update(fold64(x));}, *sketchers.cfss);
             };
             if(opts.fs_) {
                 sketchers.for_each(fsfunc, seqp, seql);
@@ -421,10 +421,10 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
                             sketchers.for_each([&](auto x) {
                                 x = maskfn(x);
                                 if(opts.fs_->in_set(x)) return;
-                                ids.insert(x);
+                                ids.insert(fold64(x));
                             }, seqp, seql);
                         } else {
-                            sketchers.for_each([&](auto x) {ids.insert(maskfn(x));}, seqp, seql);
+                            sketchers.for_each([&](auto x) {ids.insert(fold64(maskfn(x)));}, seqp, seql);
                         }
                         ret.cardinalities_[i] = ids.size();
                         DBG_ONLY(std::fprintf(stderr, "Cardinality exact counting fall-back complete\n"););

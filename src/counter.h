@@ -122,7 +122,7 @@ struct Counter {
                 if(!src.empty()) {
                     for(const auto &pair: src)
                         if(pair.second > threshold)
-                            dst.update(pair.first, pair.second);
+                            dst.update(fold64(pair.first), pair.second);
                     return true;
                 }
                 return false;

@@ -151,6 +151,13 @@ INLINE u128_t invmaskfn(u128_t x) {
     auto upper = u128_t(sketch::hash::WangHash().inverse(uint64_t(x >> 64))) << 64;
     return (lower | upper) ^ XORMASK2;
 }
+// Set sketches take 64-bit identifiers. Reduce a masked 128-bit k-mer so that
+// both halves contribute; hashing the high half again keeps the reduction
+// asymmetric, so k-mers whose two halves are swapped do not collide.
+INLINE uint64_t fold64(uint64_t x) {return x;}
+INLINE uint64_t fold64(u128_t x) {
+    return uint64_t(x) ^ sketch::hash::WangHash::hash(uint64_t(x >> 64) ^ UINT64_C(0x9e3779b97f4a7c15));
+}
 void seed_mask(uint64_t); // This function sets the seeds
 
 

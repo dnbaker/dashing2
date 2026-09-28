@@ -562,19 +562,19 @@ do {\
                 assert(opss.size() > unsigned(tid));
                 assert(opss.at(tid).total_updates() == 0);
                 auto p = &opss[tid];
-                perf_for_substrs([p](auto hv) {p->update(hv);});
+                perf_for_substrs([p](auto hv) {p->update(fold64(hv));});
                 assert(ret.cardinalities_.size() > i);
                 cret = p->getcard();
             } else {
                 if(opts.sketch_compressed_set) {
                     std::visit([&](auto &x) {
                         perf_for_substrs([&x](auto hv) {
-                            x.update(hv);
+                            x.update(fold64(hv));
                         });
                         cret = x.cardinality();
                     }, cfss.at(tid));
                 } else {
-                    perf_for_substrs([p=&fss[tid]](auto hv) {p->update(hv);});
+                    perf_for_substrs([p=&fss[tid]](auto hv) {p->update(fold64(hv));});
                     cret = fss[tid].getcard();
                 }
             }
