@@ -410,7 +410,9 @@ do {\
                             FUNC_FE(encoder.for_each);
                         }
                     } else {
-                        FUNC_FE(opts.rh128_.for_each_hash);
+                        // RollingHasher keeps per-sequence state, so each thread needs its own copy.
+                        auto rh128(opts.rh128_);
+                        FUNC_FE(rh128.for_each_hash);
                     }
                 } else if(unsigned(opts.k_) <= opts.nremperres64()) {
                     if(entmin) {
@@ -421,7 +423,8 @@ do {\
                         FUNC_FE(encoder.for_each);
                     }
                 } else {
-                    FUNC_FE(opts.rh_.for_each_hash);
+                    auto rh(opts.rh_);
+                    FUNC_FE(rh.for_each_hash);
                 }
 #undef FUNC_FE
             }, path);
