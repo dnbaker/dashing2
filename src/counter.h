@@ -81,11 +81,10 @@ struct Counter {
         if(ct() == EXACT_COUNTING) {
             auto update_if = [&](auto &src) {
                 if(!src.empty()) {
-                    tmp.resize(src.size());
-                    auto tmpit = tmp.begin();
+                    tmp.reserve(src.size());
                     for(const auto &pair: src)
-                        if(pair.second > threshold)
-                            *tmpit++ = {pair.first, pair.second};
+                        if(pair.second >= threshold)
+                            tmp.push_back({pair.first, pair.second});
                     return true;
                 }
                 return false;
@@ -98,7 +97,7 @@ struct Counter {
             #pragma omp simd
 #endif
             for(size_t i = 0; i < cssz; ++i) {
-                if(auto v = std::abs(csp[i]); v > threshold) {
+                if(auto v = std::abs(csp[i]); v > 0 && v >= threshold) {
                    tmp.push_back({maskfn(uint64_t(i)), v});
                 }
             }
@@ -121,7 +120,7 @@ struct Counter {
             auto update_if = [&](auto &src) {
                 if(!src.empty()) {
                     for(const auto &pair: src)
-                        if(pair.second > threshold)
+                        if(pair.second >= threshold)
                             dst.update(fold64(pair.first), pair.second);
                     return true;
                 }

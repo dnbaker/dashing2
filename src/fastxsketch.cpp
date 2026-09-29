@@ -29,7 +29,7 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
     for(size_t i = 0; i < sz; ++i) {
         const auto item = src[i];
         const CountT count = ptr ? ptr[i]: CountT(1);
-        if(count > threshold) {
+        if(count >= threshold) {
             if(weighted) {
                 const std::pair<double, BKRegT> key {double(item / count), item};
                 pop_push(wpq, key, k);
@@ -39,10 +39,13 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
             }
         }
     }
+    // With fewer than k qualifying items, the trailing slots hold the all-ones empty value.
+    const size_t n = weighted ? wpq.size(): pq.size();
+    std::fill(ret.begin() + n, ret.end(), ~BKRegT(0));
     if(weighted) {
-        for(size_t i = k; i > 0;ret[--i] = wpq.top().second, wpq.pop());
+        for(size_t i = n; i > 0;ret[--i] = wpq.top().second, wpq.pop());
     } else {
-        for(size_t i = k; i > 0;ret[--i] = pq.top(), pq.pop());
+        for(size_t i = n; i > 0;ret[--i] = pq.top(), pq.pop());
     }
 }
 
