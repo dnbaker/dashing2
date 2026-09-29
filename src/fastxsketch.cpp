@@ -528,7 +528,7 @@ do {\
                     std::copy(tmp.begin(), tmp.begin() + ss, &ret.kmercounts_[mss]);
                 }
             }
-            std::fclose(ofp);
+            if(ofp) std::fclose(ofp);
         } else if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
             ret.kmers_.clear();
             DBG_ONLY(std::fprintf(stderr, "Full mmer sequence\n");)

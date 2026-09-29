@@ -122,6 +122,8 @@ std::FILE *bfopen(const char *s, const char *fmt) {
     return ifp;
 }
 std::FILE *bfreopen(const char *s, const char *fmt, std::FILE *fp) {
+    // freopen requires an open stream; callers may pass null when nothing was opened yet.
+    if(!fp) return bfopen(s, fmt);
     if((fp = std::freopen(s, fmt, fp)))
         buffer_to_blksize(fp);
     return fp;
