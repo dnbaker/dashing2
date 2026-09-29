@@ -409,7 +409,8 @@ case v: {\
             const long double b2pow = -std::ldexp(1.L, -static_cast<int>(opts.fd_level_ * 8.));
             ret = std::max(0.L, std::fma(res.first, invdenom, b2pow) / (1.L + b2pow));
             if(opts.measure_ == INTERSECTION || opts.measure_ == UNION_SIZE) {
-                const long double isz = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L);
+                // (|A| + |B|) / (1 + J) is the union; the intersection is J times it.
+                const long double isz = std::max((lhcard + rhcard) / (2.L - (1.L - ret)), 0.L) * ret;
                 if(opts.measure_ == INTERSECTION) {
                     ret = isz;
                 } else { // UNION_SIZE
