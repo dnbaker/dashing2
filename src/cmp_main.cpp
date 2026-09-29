@@ -92,7 +92,18 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         const size_t offset = (num_entities + 2) * sizeof(uint64_t);
         assert((st.st_size - offset) % sizeof(RegT) == 0);
         result.signatures_.assign(pf, offset, (st.st_size - offset) / sizeof(RegT));
+    } else if(opts.kmer_result_ >= FULL_MMER_SET) {
+        // K-mer sets and sequences are compared from the files themselves, each of which starts with its cardinality
+        result.names_ = result.destination_files_ = result.kmerfiles_ = paths;
+        result.cardinalities_.resize(paths.size());
+        for(size_t i = 0; i < paths.size(); ++i) {
+            std::FILE *ifp = bfopen(paths[i].data(), "rb");
+            if(!ifp || std::fread(&result.cardinalities_[i], sizeof(double), 1, ifp) != 1u)
+                THROW_EXCEPTION(std::runtime_error("Failed to read cardinality from "s + paths[i]));
+            std::fclose(ifp);
+        }
     } else { // Else, we have to load sketches from each file
+        result.names_ = paths;
         if(verbosity >= Verbosity::INFO ) {
             std::fprintf(stderr, "Parsing in data from file\n");
         }
@@ -139,7 +150,8 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
             }
             result.cardinalities_.resize(totalsize / opts.sketchsize_);
         } else {
-            std::fprintf(stderr, "Warning: uneven file sizes. This is expected for hash sets but not sketches.");
+            std::fprintf(stderr, "--presketched: sketch files have different sizes, so they were made with different sketch sizes or types\n");
+            std::exit(EXIT_FAILURE);
         }
         if(verbosity >= Verbosity::INFO) {
             std::fprintf(stderr, "[%s:%d] Resized signatures\n", __FILE__, __LINE__);
@@ -303,18 +315,25 @@ int cmp_main(int argc, char **argv) {
     distopts.cmp_batch_size_ = default_batchsize(batch_size, distopts);
     SketchingResult result;
     if(presketched) {
+        // The sketch type is inferred from the file name's extension, if any
+        auto suffix = [](const std::string &p) {
+            const std::string name = trim_folder(p);
+            const auto pos = name.find_last_of('.');
+            return pos == std::string::npos ? std::string(): name.substr(pos);
+        };
         std::set<std::string> suffixset;
         for(const auto &p: paths) {
-            suffixset.insert(p.substr(p.find_last_of('.'), std::string::npos));
+            suffixset.insert(suffix(p));
         }
         std::string suf;
         if(suffixset.size() != 1) {
             auto joinstrings =  [](const auto& strings) {
                 return std::accumulate(std::cbegin(strings), std::cend(strings), std::string{},[](auto x, const auto&y) {return x + ',' + y;});
             };
-            std::fprintf(stderr, "Multiple suffixes in set (%s). Picking the first one. Paths: %s\n", joinstrings(suffixset).data(), joinstrings(paths).data());
-            suf = paths.front().substr(paths.front().find_last_of('.'), std::string::npos);
-        } else suf = *suffixset.begin();
+            std::fprintf(stderr, "--presketched: files of different sketch types cannot be compared (extensions %s)\n", joinstrings(suffixset).substr(1).data());
+            std::exit(EXIT_FAILURE);
+        }
+        suf = *suffixset.begin();
         if(suf == ".bmh") {
             distopts.sspace_ = SPACE_MULTISET;
             distopts.kmer_result(FULL_SETSKETCH);
@@ -332,22 +351,31 @@ int cmp_main(int argc, char **argv) {
             distopts.sspace_ = SPACE_SET;
             distopts.kmer_result(FULL_MMER_SET);
             distopts.use128(true);
-        } else if(suf == "mmerseq64") {
+        } else if(suf == ".mmerseq64") {
             distopts.sspace_ = SPACE_SET;
             auto &path = paths.front();
-            std::string countg = path.substr(0, path.find_last_of('.')) + "kmercounts.f64";
+            std::string countg = path.substr(0, path.find_last_of('.')) + ".kmercounts.f64";
             if(bns::isfile(countg)) {
                 distopts.kmer_result(FULL_MMER_COUNTDICT);
             } else distopts.kmer_result(FULL_MMER_SEQUENCE);
             distopts.use128(false);
-        } else if(suf == "mmerseq128") {
+        } else if(suf == ".mmerseq128") {
             distopts.sspace_ = SPACE_SET;
             auto &path = paths.front();
-            std::string countg = path.substr(0, path.find_last_of('.')) + "kmercounts.f64";
+            std::string countg = path.substr(0, path.find_last_of('.')) + ".kmercounts.f64";
             if(bns::isfile(countg)) {
                 distopts.kmer_result(FULL_MMER_COUNTDICT);
             } else distopts.kmer_result(FULL_MMER_SEQUENCE);
             distopts.use128(true);
+        } else if(paths.size() > 1) {
+            std::fprintf(stderr, "--presketched: cannot infer the sketch type of '%s' from its extension\n", paths.front().data());
+            std::exit(EXIT_FAILURE);
+        }
+        // A single file holds stacked sketches of the type given on the command line (or by its extension).
+        // Stacked files from exact modes hold only bottom-k hashes, which cannot be compared exactly.
+        if(paths.size() == 1 && distopts.kmer_result_ >= FULL_MMER_SET) {
+            std::fprintf(stderr, "--presketched: stacked files from --set, --countdict or --seq cannot be compared; pass the per-input k-mer files instead\n");
+            std::exit(EXIT_FAILURE);
         }
         load_results(distopts, result, paths);
     } else {
