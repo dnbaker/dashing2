@@ -19,19 +19,20 @@ void pqueue::erase(typename std::priority_queue<PairT>::container_type::iterator
 
 void update(pqueue &x, flat_hash_set<LSHIDType> &xset, const PairT &item, const int topk, size_t k, std::mutex &mut) {
     const auto [dist, id] = item;
+    // Several threads update the same list, so the membership, size and top checks
+    // happen under the list's lock together with the change they decide.
+    std::lock_guard<std::mutex> lock(mut);
     if(xset.find(id) != xset.end()) {
         DBG_ONLY(std::fprintf(stderr, "id %u is already present\n", int(id));)
         return;
     }
     if(topk <= 0 || x.size() < k) {
-        std::lock_guard<std::mutex> lock(mut);
         xset.insert(id);
         x.push(item);
         return;
     }
     if(item.first <= x.top().first) {
         DBG_ONLY(std::fprintf(stderr, "New top before update: %g/Size %zu, with new item %g/%u added\n", x.front().first, x.size(), item.first, item.second);)
-        std::lock_guard<std::mutex> lock(mut);
         auto old = x.top();
         // If the rank is the same as k - 1, save both
         // otherwise, discard the old one, since it's not good enough
@@ -39,6 +40,7 @@ void update(pqueue &x, flat_hash_set<LSHIDType> &xset, const PairT &item, const 
             xset.erase(old.second);
             x.pop();
         }
+        xset.insert(id);
         x.push(item);
     } DBG_ONLY(else std::fprintf(stderr, "Count %g was not sufficient to be included. Current top: %g\n", item.first, x.top().first);)
 }
