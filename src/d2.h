@@ -246,7 +246,32 @@ using KmerSigT = std::conditional_t<(sizeof(RegT) == 8), uint64_t, std::conditio
 using FullSetSketch = sketch::setsketch::CountFilteredCSetSketch<RegT>;
 using OPSetSketch = LazyOnePermSetSketch<KmerSigT>;
 using BagMinHash = sketch::BagMinHash2<RegT>;
-using ProbMinHash = sketch::pmh3_t<RegT>;
+// ProbMinHash estimates the probability Jaccard index as the fraction of
+// registers in which two sketches select the same item. A register's value
+// depends on the selected item's normalized weight, which usually differs
+// between inputs, so signatures are derived from the selected item ids.
+struct ProbMinHash: public sketch::pmh3_t<RegT> {
+    using base_t = sketch::pmh3_t<RegT>;
+    using base_t::base_t;
+    static RegT id2sig(uint64_t id) {
+        // Hash to a finite value in (0, 1] so that equal ids give equal
+        // signatures and distinct ids collide with negligible probability.
+        return RegT((wy::wyhash64_stateless(&id) >> 11) + 1) * RegT(0x1p-53);
+    }
+    template<typename IT=RegT>
+    std::vector<IT> to_sigs() const {
+        std::vector<IT> ret(this->size());
+        std::transform(this->res_.begin(), this->res_.end(), ret.begin(), [](uint64_t id) {return static_cast<IT>(id2sig(id));});
+        return ret;
+    }
+    RegT *data() {
+        sigs_.resize(this->size());
+        std::transform(this->res_.begin(), this->res_.end(), sigs_.begin(), id2sig);
+        return sigs_.data();
+    }
+private:
+    std::vector<RegT> sigs_;
+};
 using OrderMinHash = sketch::omh::OMHasher<RegT>;
 template<typename T>
 INLINE auto total_weight(const T &x) {return x.total_weight();}
