@@ -90,20 +90,9 @@ size_t hamming_compare_f(std::FILE *lfp, std::FILE *rfp) {
     using RT = std::conditional_t<NB == 1, uint8_t, std::conditional_t<NB == 2, uint16_t, std::conditional_t<NB == 4, uint32_t, std::conditional_t<NB == 8, uint64_t, u128_t>>>>;
     size_t ret = 0;
     RT lv, rv;
-    for(;;) {
-        if(std::feof(lfp)) {
-            if(!std::feof(rfp))
-                for(;std::fread(&rv, NB, 1, rfp) == 1u;++ret);
-            break;
-        } else if(std::feof(rfp)) {
-            while(std::fread(&lv, NB, 1, lfp) == 1u) ++ret;
-            break;
-        } else {
-            std::fread(&rv, NB, 1, rfp);
-            std::fread(&lv, NB, 1, lfp);
-            ret += lv == rv;
-        }
-    }
+    // Count equal positions; positions past the end of the shorter sequence are mismatches.
+    while(std::fread(&lv, NB, 1, lfp) == 1u && std::fread(&rv, NB, 1, rfp) == 1u)
+        ret += lv == rv;
     return ret;
 }
 size_t hamming_compare_f64(std::FILE *lfp, std::FILE *rfp) noexcept {return hamming_compare_f<8>(lfp, rfp);}

@@ -566,7 +566,7 @@ case v: {\
                 auto [edit_dist, max_edit_dist] = mmer_edit_distance(lhk, rhk, opts.use128());
                 ret = opts.measure_ == M_EDIT_DISTANCE ? edit_dist: max_edit_dist - edit_dist;
             } else {
-                ret = hamming_compare_f64(lhk, rhk);
+                ret = opts.use128() ? hamming_compare_f128(lhk, rhk): hamming_compare_f64(lhk, rhk);
             }
         } else {
             double lhc, rhc;
