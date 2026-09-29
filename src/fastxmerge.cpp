@@ -85,6 +85,9 @@ std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer
     if(opts.kmer_result_ <= FULL_SETSKETCH)
         ret = ret + std::string(".sketchsize") + std::to_string(opts.sketchsize_);
     ret = ret + std::string(".k") + std::to_string(opts.k_);
+    // -2 sketches are built from folded 128-bit k-mers and differ from 64-bit ones
+    if(opts.use128())
+        ret += ".u128";
     if(opts.w_ > opts.k_) {
         ret = ret + std::string(".w") + std::to_string(opts.w_);
     }
