@@ -482,7 +482,7 @@ case v: {\
             switch(opts.measure_) {
                 case SIMILARITY: ret = sim; break;
                 case INTERSECTION: ret = isz; break;
-                case CONTAINMENT: ret = isz / rhcard; break;
+                case CONTAINMENT: ret = isz / lhcard; break;
                 case SYMMETRIC_CONTAINMENT: ret = isz / (std::min(lhcard, rhcard)); break;
                 case POISSON_LLR: ret = sim2dist(sim); break;
                 case UNION_SIZE: ret = lhcard + rhcard - isz; break;
