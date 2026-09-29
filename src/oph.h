@@ -254,7 +254,10 @@ public:
         if(!as_sigs_.empty()) return as_sigs_.data();
         as_sigs_ = std::vector<SigT>(registers_.size());
         SigT *asp = as_sigs_.data();
-        const long double mul = -SigT(1) / (m_ - std::count(registers_.begin(), registers_.end(), std::numeric_limits<T>::max()));
+        // The scale must be the same for every sketch of size m_, so that equal
+        // per-bucket minima map to equal signatures regardless of how many
+        // buckets are empty in each sketch.
+        const long double mul = -SigT(1) / m_;
         std::transform(registers_.begin(), registers_.end(), asp, [mul](const auto x) -> SigT {
             if(x == std::numeric_limits<T>::max() || x == T(0)) {return 0.;}
             return mul * std::log(omul * (std::numeric_limits<T>::max() - x + 1));
