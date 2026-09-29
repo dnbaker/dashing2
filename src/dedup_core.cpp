@@ -62,7 +62,7 @@ struct GreedyClustering {
                 *vp++ = mult * compare(opts, result, orep, ids_[id]);
             }
             auto mv = std::min_element(vps, vp);
-            if(hits.empty() || (mv != vp && mult * *mv < simt)) {
+            if(hits.empty() || (mv != vp && *mv > mult * simt)) {
                 ids_.push_back(orep);
                 constituents_.emplace_back(std::move(ocon));
                 continue;
@@ -124,6 +124,8 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
     const size_t nh = hits.size();
     std::fprintf(stderr, "Total number of items to compare against: %zu\n", nh);
     std::vector<LSHDistType> vals(hits.size());
+    // Scores are mult * value, so the best candidate has the smallest score for both
+    // similarities (mult = -1) and distances (mult = 1); it is too far when its score exceeds mult * simt.
     const LSHDistType mult = distance(opts.measure_) ? 1.: -1.;
     const auto hitptr = hits.data();
     OMP_PFOR_DYN
@@ -133,7 +135,7 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
         vals[i] = mult * compare(opts, result, oid, ids[id]);
     }
     auto mv = std::min_element(vals.begin(), vals.end());
-    if(hits.empty() || (mv != vals.end() && mult * *mv < simt)) {
+    if(hits.empty() || (mv != vals.end() && *mv > mult * simt)) {
         //DBG_ONLY(if(mv != vals.end()) std::fprintf(stderr, "mult* mv: %g. simt: %g\n", mult * *mv, simt);)
         ids.push_back(oid);
         constituents.emplace_back();
@@ -200,7 +202,7 @@ void update_res(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::vec
         *vp++ = mult * compare(opts, result, oid, ids[id]);
     }
     auto mv = std::min_element(vals.begin(), vals.end());
-    if(hits.empty() || (mv != vals.end() && mult * *mv < simt)) {
+    if(hits.empty() || (mv != vals.end() && *mv > mult * simt)) {
         ids.push_back(oid);
         constituents.emplace_back();
         if(indexing_compressed) {
@@ -267,13 +269,13 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
         for(size_t i = 0; i < nelem; ++i) {
             std::pair<LSHDistType, LSHIDType> bestc = {std::numeric_limits<LSHDistType>::max(), -1};
 #ifdef _OPENMP
-#pragma omp declare reduction(min: std::pair<LSHDistType, LSHIDType>: omp_out = std::min(omp_in, omp_out))
+#pragma omp declare reduction(min: std::pair<LSHDistType, LSHIDType>: omp_out = std::min(omp_in, omp_out)) initializer(omp_priv = std::pair<LSHDistType, LSHIDType>{std::numeric_limits<LSHDistType>::max(), LSHIDType(-1)})
             #pragma omp parallel for schedule(dynamic) reduction(min:bestc)
 #endif
             for(size_t j = 0; j < ids.size(); ++j) {
                 bestc = std::min(bestc, std::pair<LSHDistType, LSHIDType>{compare(opts, result, i, ids[j]) * mult, j});
             }
-            if(bestc.first * mult < simt || bestc.second == LSHIDType(-1)) {
+            if(bestc.first > mult * simt || bestc.second == LSHIDType(-1)) {
                 ids.push_back(i);
                 constituents.emplace_back();
             } else {
@@ -332,7 +334,7 @@ std::pair<std::vector<LSHIDType>, std::vector<std::vector<LSHIDType>>> dedup_cor
                             vals[i] = mult * compare(opts, result, oid, ids.at(hits[i]));
                         }
                         mv = std::min_element(vals.begin(), vals.end());
-                        if(mult * *mv < simt) {
+                        if(*mv <= mult * simt) {
                             auto cluster_id = hits.at(mv - vals.begin());
                             std::lock_guard<std::mutex> global(global_lock);
                             if(cluster_id >= constituents.size()) std::fprintf(stderr, "constit %zu hitting cluster_id %zu\n", constituents.size(), cluster_id);
