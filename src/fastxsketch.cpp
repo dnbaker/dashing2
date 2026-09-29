@@ -244,7 +244,8 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
     }
     if(kmeroutpath.size()) {
         std::FILE *fp = bfopen(kmeroutpath.data(), "w");
-        uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8);
+        // Bit 8 marks canonical k-mers and bit 9 marks 128-bit (--long-kmers) k-mers.
+        uint32_t dtype = (uint32_t)opts.input_mode() | (int(opts.canonicalize()) << 8) | (int(opts.use128()) << 9);
         uint32_t sketchsize = opts.sketchsize_;
         uint32_t k = opts.k_;
         uint32_t w = opts.w_ < 0 ? opts.k_: opts.w_;

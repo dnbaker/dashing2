@@ -31,14 +31,42 @@ INLINE flat_hash_map<uint64_t, uint64_t> & operator+=(flat_hash_map<uint64_t, ui
     return lhs;
 }
 
-std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::vector<std::string> input_files, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer) {
+// Enumerates k-mers with the encoding the database was sketched with. Sketches
+// store fold64(maskfn(kmer)), so k-mers from --long-kmers databases are encoded
+// as 128-bit integers and folded to 64-bit ids in the same way.
+struct ContainEncoders {
+    bns::Encoder<bns::score::Lex, uint64_t> e64;
+    bns::RollingHasher<uint64_t> rh64;
+    bns::RollingHasher<u128_t> rh128;
+    bool use128;
+    template<typename Func, typename...Args>
+    void for_each(const Func &func, Args &&...args) const {
+        auto idfunc = [&func](auto kmer) __attribute__((always_inline)) {func(fold64(maskfn(kmer)));};
+        if(use128) {
+            if(e64.k() <= e64.nremperres128()) {
+                auto e = e64.to_u128();
+                e.for_each(idfunc, std::forward<Args>(args)...);
+            } else {
+                auto r = rh128;
+                r.for_each_hash(idfunc, std::forward<Args>(args)...);
+            }
+        } else if(e64.k() <= e64.nremperres64()) {
+            auto e = e64;
+            e.for_each(idfunc, std::forward<Args>(args)...);
+        } else {
+            auto r = rh64;
+            r.for_each_hash(idfunc, std::forward<Args>(args)...);
+        }
+    }
+};
+
+std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(const ContainEncoders &encs, std::vector<std::string> input_files, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer) {
     std::vector<flat_hash_map<uint64_t, uint64_t>> res(input_files.size());
     //KSeqHolder kseqs(nthreads);
     OMP_PFOR_DYN
     for(size_t i = 0; i < input_files.size(); ++i) {
         auto &myres = res[i];
-        auto func = [&](auto kmer) {
-            kmer = maskfn(kmer);
+        auto func = [&](const uint64_t kmer) {
             if(kmer < minkmer || kmer > maxkmer) return;
             auto kmeridit = kmer2ids.find(kmer);
             if(kmeridit == kmer2ids.end()) return;
@@ -46,14 +74,7 @@ std::vector<flat_hash_map<uint64_t, uint64_t>> get_results(bns::Encoder<bns::sco
             if(it == myres.end()) myres.emplace(kmer, 1);
             else ++it->second;
         };
-        auto path = input_files[i].data();
-        if(eenc.k() <= eenc.nremperres64()) {
-            bns::Encoder<bns::score::Lex, uint64_t> mye(eenc);
-            mye.for_each(func, path);
-        } else {
-            bns::RollingHasher<uint64_t> myr(renc);
-            myr.for_each_hash(func, path);
-        }
+        encs.for_each(func, input_files[i].data());
     }
     return res;
 }
@@ -73,18 +94,16 @@ void par_reduce(T *x, size_t n) {
     }
 }
 
-flat_hash_map<uint64_t, uint64_t> get_results_sf(bns::Encoder<bns::score::Lex, uint64_t> &eenc, bns::RollingHasher<uint64_t> &renc, std::string input_file, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer, const int nthreads) {
+flat_hash_map<uint64_t, uint64_t> get_results_sf(const ContainEncoders &encs, std::string input_file, const flat_hash_map<uint64_t, std::vector<uint64_t>> &kmer2ids, const uint64_t maxkmer, const uint64_t minkmer, const int nthreads) {
     std::vector<flat_hash_map<uint64_t, uint64_t>> res(nthreads);
     std::vector<std::string> sf;
     for_each_substr([&sf](const auto &x) {sf.push_back(x);}, input_file);
     std::vector<std::thread> threads;
     fastx_parser::FastxParser<fastx_parser::ReadSeq> parser(sf, nthreads, 1);
-    const bool use_direct_encoding = eenc.k() <= eenc.nremperres64();
     parser.start();
     for(size_t i = 0; i < size_t(nthreads); ++i) {
         threads.emplace_back([&,i]() {
-            auto func = [minkmer,maxkmer,&kmer2ids,&myres=res[i]](auto kmer) __attribute__((always_inline)) {
-                kmer = maskfn(kmer);
+            auto func = [minkmer,maxkmer,&kmer2ids,&myres=res[i]](const uint64_t kmer) __attribute__((always_inline)) {
                 if(kmer < minkmer || kmer > maxkmer) return;
                 auto kmeridit = kmer2ids.find(kmer);
                 if(kmeridit == kmer2ids.end()) return;
@@ -92,14 +111,8 @@ flat_hash_map<uint64_t, uint64_t> get_results_sf(bns::Encoder<bns::score::Lex, u
                 if(it == myres.end()) myres.emplace(kmer, 1);
                 else ++it->second;
             };
-            bns::Encoder<bns::score::Lex, uint64_t> mye(eenc);
-            bns::RollingHasher<uint64_t> myr(renc);
             for(auto rg = parser.getReadGroup();parser.refill(rg);) {
-                if(use_direct_encoding) {
-                    for(const auto &seq: rg) mye.for_each(func, seq.seq.data(), seq.seq.size());
-                } else {
-                    for(const auto &seq: rg) myr.for_each_hash(func, seq.seq.data(), seq.seq.size());
-                }
+                for(const auto &seq: rg) encs.for_each(func, seq.seq.data(), seq.seq.size());
             }
         });
     }
@@ -163,6 +176,7 @@ int contain_main(int argc, char **argv) {
     const void *dbptr = (void *)db.data();
     bns::InputType rht = static_cast<bns::InputType>(*((uint32_t *)dbptr) & 0xFF);
     const bool canon = *(uint32_t *)dbptr & 0x100;
+    const bool use128 = *(uint32_t *)dbptr & 0x200;
 
     const uint32_t sketchsize = ((const uint32_t *)dbptr)[1];
     const uint32_t k = ((const uint32_t *)dbptr)[2];
@@ -183,8 +197,7 @@ int contain_main(int argc, char **argv) {
     const size_t nitems = names.size();
     if(nitems != ((db.size() - headerlen) / sketchsize / sizeof(uint64_t))) THROW_EXCEPTION(std::runtime_error("Database corrupted; wrong number of names."));
     bns::Spacer sp(k, w);
-    bns::Encoder<bns::score::Lex, uint64_t> e64(sp, nullptr, canon);
-    bns::RollingHasher<uint64_t> rh64(k, canon, rht, w);
+    const ContainEncoders encs{bns::Encoder<bns::score::Lex, uint64_t>(sp, nullptr, canon), bns::RollingHasher<uint64_t>(k, canon, rht, w), bns::RollingHasher<u128_t>(k, canon, rht, w), use128};
     flat_hash_map<uint64_t, std::vector<uint64_t>> kmer2ids;
     for(size_t i = 0; i < nitems; ++i) {
         uint64_t *ptr = ((uint64_t *)dbptr + 3 + sketchsize * i);
@@ -209,10 +222,10 @@ int contain_main(int argc, char **argv) {
     std::vector<flat_hash_map<uint64_t, uint64_t>> res;
     if(nthreads > 1 && nq < size_t(nthreads)) {
         for(const auto &sf: streamfiles) {
-            res.emplace_back(get_results_sf(e64, rh64, sf, kmer2ids, maxkmer, minkmer, nthreads));
+            res.emplace_back(get_results_sf(encs, sf, kmer2ids, maxkmer, minkmer, nthreads));
         }
     } else {
-        res = get_results(e64, rh64, streamfiles, kmer2ids, maxkmer, minkmer);
+        res = get_results(encs, streamfiles, kmer2ids, maxkmer, minkmer);
     }
     const size_t tablesize = nitems * streamfiles.size();
     const size_t table2size = tablesize * 2;
