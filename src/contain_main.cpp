@@ -200,7 +200,10 @@ int contain_main(int argc, char **argv) {
     const size_t nitems = names.size();
     if(nitems != ((db.size() - headerlen) / sketchsize / sizeof(uint64_t))) THROW_EXCEPTION(std::runtime_error("Database corrupted; wrong number of names."));
     bns::Spacer sp(k, w);
-    const ContainEncoders encs{bns::Encoder<bns::score::Lex, uint64_t>(sp, nullptr, canon), bns::RollingHasher<uint64_t>(k, canon, rht, w), bns::RollingHasher<u128_t>(k, canon, rht, w), use128};
+    // The encoder defaults to DNA; its alphabet also sets how many residues fit in 64 or 128 bits.
+    bns::Encoder<bns::score::Lex, uint64_t> e64(sp, nullptr, canon);
+    e64.hashtype(rht);
+    const ContainEncoders encs{e64, bns::RollingHasher<uint64_t>(k, canon, rht, w), bns::RollingHasher<u128_t>(k, canon, rht, w), use128};
     flat_hash_map<uint64_t, std::vector<uint64_t>> kmer2ids;
     for(size_t i = 0; i < nitems; ++i) {
         uint64_t *ptr = ((uint64_t *)dbptr + 3 + sketchsize * i);
