@@ -488,6 +488,7 @@ case v: {\
                 std::fprintf(stderr, "gtlt: %d/%d between %zu and %zu. Out of %d. Number equal simd/manual: %d/%d.  alpha: %g. beta: %g. ucard: %g\n", int(gtlt.first), int(gtlt.second), i, j, int(opts.sketchsize_), int(sketch::eq::count_eq(lhsrc, rhsrc, opts.sketchsize_)), counteqman, double(alpha), double(beta), double(ucard));
             }
             if(eq <= 0.) {
+                if(opts.measure_ == UNION_SIZE) return lhcard + rhcard;
                 return opts.measure_ != POISSON_LLR ? 0.: std::numeric_limits<double>::max();
             }
             static constexpr long double EPS = 1e-15;
