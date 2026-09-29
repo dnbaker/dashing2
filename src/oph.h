@@ -243,7 +243,12 @@ public:
             [](auto x, auto y) {return x + y * omul;}
         );
         if(!sum) return std::numeric_limits<double>::infinity();
-        return m_ * (m_ / sum);
+        // Maximum-likelihood estimate under Poisson bucket loads: each bucket
+        // minimum, scaled to [0, 1), is approximately exponential with rate n/m
+        // truncated at 1. An empty bucket is the truncated outcome; it adds 1 to
+        // the sum but does not count towards the numerator.
+        const size_t nonempty = m_ - std::count(registers_.begin(), registers_.end(), std::numeric_limits<T>::max());
+        return m_ * (nonempty / sum);
     }
     SigT *data() {
         if(!as_sigs_.empty()) return as_sigs_.data();
