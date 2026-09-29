@@ -472,6 +472,9 @@ do {\
                 if(!ofp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open std::FILE * at") + destination));
             }
             if(ofp) checked_fwrite(&ret.cardinalities_[myind], sizeof(ret.cardinalities_[myind]), 1, ofp);
+            // Exact k-mer sets are compared from disk, so record the file just written
+            if(opts.kmer_result_ == FULL_MMER_SET && ret.kmerfiles_.size() > myind)
+                ret.kmerfiles_[myind] = destination;
             const void *buf = nullptr;
             size_t nb;
             const RegT *srcptr = nullptr;
