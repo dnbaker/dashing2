@@ -603,7 +603,7 @@ do {\
                     const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
                     for(size_t i = 0; i < opts.sketchsize_; i += 2) {
                         uint8_t reg = (srcptr[i] << 4) | srcptr[i + 1];
-                        if(ofp) checked_fwrite(ptr, sizeof(reg), 1, ofp);
+                        if(ofp) checked_fwrite(&reg, sizeof(reg), 1, ofp);
                     }
                 } else {
                     if(ofp) checked_fwrite(ptr, sizeof(RegT), ss >> sigshift, ofp);
@@ -613,7 +613,7 @@ do {\
             }
             if(ofp) std::fclose(ofp);
             if(ptr && ret.signatures_.size()) {
-                if(!opts.sketch_compressed_set) {
+                if(!opts.sketch_compressed_set || opts.fd_level_ != 0.5) {
                     std::memcpy(&ret.signatures_[mss >> sigshift], ptr, ((ss * sizeof(RegT)) >> sigshift));
                 } else {
                     const uint8_t *srcptr = std::get<NibbleSetS>(cfss[tid]).data();
