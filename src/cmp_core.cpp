@@ -541,6 +541,7 @@ case v: {\
                 res = res / (lhc + rhc - res);\
                 if(measure == POISSON_LLR) res = sim2dist(res);\
             } else if(measure == CONTAINMENT) res /= lhc;\
+            else if(measure == UNION_SIZE) res = lhc + rhc - res;\
             ret = res;
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
