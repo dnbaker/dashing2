@@ -366,7 +366,15 @@ LSHDistType compare(const Dashing2DistOptions &opts, const SketchingResult &resu
     long double ret = std::numeric_limits<LSHDistType>::max();
     const long double lhcard = result.cardinalities_.at(i), rhcard = result.cardinalities_.at(j);
     const long double invdenom = 1.L / opts.sketchsize_;
-    auto sim2dist = [poisson_mult=-1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log(2. * x / (1. + x)) * poisson_mult; return std::numeric_limits<double>::infinity();};
+    // -log(2x / (1 + x)) / k, written so that x = 1 gives +0 rather than -0.
+    auto sim2dist = [kinv=1. / std::max(1, opts.k_)](auto x) -> double {if(x) return std::log((1. + x) / (2. * x)) * kinv; return std::numeric_limits<double>::infinity();};
+    if((lhcard == 0. || rhcard == 0.) && opts.sspace_ != SPACE_EDIT_DISTANCE && opts.kmer_result_ != FULL_MMER_SEQUENCE
+       && (opts.measure_ == SIMILARITY || opts.measure_ == CONTAINMENT || opts.measure_ == SYMMETRIC_CONTAINMENT || opts.measure_ == POISSON_LLR)) {
+        // Ratios involving an input with no k-mers are 0/0. Two such inputs are
+        // identical, and one shares nothing with a non-empty input.
+        const long double sim = lhcard == rhcard;
+        return opts.measure_ == POISSON_LLR ? sim2dist(sim): sim;
+    }
     if(opts.compressed_ptr_) {
         if(verbosity >= EXTREME) {
             std::fprintf(stderr, "Comparing compressed representations.\n");
