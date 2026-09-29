@@ -2,6 +2,7 @@
 #include "mio.hpp"
 #include "sketch_core.h"
 #include <variant>
+#include <sys/stat.h>
 
 //#include <optional>
 namespace dashing2 {
@@ -161,6 +162,28 @@ INLINE double compute_cardest(const RegT *ptr, const size_t m) {
 
 
 
+
+// Modification time in nanoseconds, or -1 if the file cannot be stat'ed
+static int64_t mtime_ns(const std::string &path) {
+    struct stat st;
+    if(::stat(path.data(), &st)) return -1;
+#ifdef __APPLE__
+    const auto &ts = st.st_mtimespec;
+#else
+    const auto &ts = st.st_mtim;
+#endif
+    return int64_t(ts.tv_sec) * 1000000000 + ts.tv_nsec;
+}
+// A cached file is stale if any of its (space-separated) input files was modified after it was written.
+static bool cache_is_stale(const std::string &cachepath, const std::string &inputs) {
+    const int64_t cachetime = mtime_ns(cachepath);
+    if(cachetime < 0) return false;
+    bool stale = false;
+    for_each_substr([&](const std::string &input) {
+        if(mtime_ns(input) > cachetime) stale = true;
+    }, inputs);
+    return stale;
+}
 
 FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &opts, const std::vector<std::string> &paths, std::string outpath) {
     if(paths.empty()) THROW_EXCEPTION(std::invalid_argument("Can't sketch empty path set"));
@@ -329,6 +352,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         const bool dkcif = check_compressed(destkmercounts, dct);
         if(ret.kmercountfiles_.size() > myind) ret.kmercountfiles_[myind] = destkmercounts;
         if(opts.cache_sketches_ &&
+           !cache_is_stale(destisfile ? destination: destkmer, path) &&
            (destisfile || (opts.kmer_result_ == FULL_MMER_COUNTDICT && dkif)) &&
            (!opts.save_kmers_ || dkif) &&
            ((!opts.save_kmercounts_ && opts.kmer_result_ != FULL_MMER_COUNTDICT) || dkcif)
