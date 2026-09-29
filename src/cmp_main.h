@@ -119,6 +119,9 @@ struct Dashing2DistOptions: public Dashing2Options {
                 THROW_EXCEPTION(std::invalid_argument("Sketch compressed is only available for FullSetSketch."));
             if(this->compressed_b_ < 1.L) THROW_EXCEPTION(std::invalid_argument("base must be >= 1."));
             if(this->compressed_a_ <= 0.L) THROW_EXCEPTION(std::invalid_argument("offset a must be > 0."));
+            // a and b only parameterize registers narrower than RegT, so a register size must be chosen with them.
+            if(fd_level_ >= sizeof(RegT))
+                THROW_EXCEPTION(std::invalid_argument("--setsketch-ab requires --fastcmp 1, 2 or 4 (or use --fastcmp-bytes, --fastcmp-shorts or --fastcmp-words)."));
         }
 #ifdef __aarch64__
         if((truncation_method_ <= 0) && (fd_level_ < 1.)) {
