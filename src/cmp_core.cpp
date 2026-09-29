@@ -311,8 +311,8 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
                 ptr[i] = (sig1 & 0xfu) | ((sig2 & 0xfu) << 4);
             }
         } else {
-            static constexpr int shift [] {0, 58, 48, 0, 32, 0, 0, 0, 0, 0};
-            static_assert(shift[1] == 58, "Shift 1 must be 58");
+            static constexpr int shift [] {0, 56, 48, 0, 32, 0, 0, 0, 0, 0};
+            static_assert(shift[1] == 56, "Shift 1 must be 56");
             static_assert(shift[2] == 48, "Shift 2 must be 48");
             static_assert(shift[4] == 32, "Shift 4 must be 32");
             static_assert(shift[8] == 0, "Shift 8 must be 0");
