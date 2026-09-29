@@ -75,6 +75,11 @@ std::string makedest(Dashing2Options &opts, const std::string &path, bool iskmer
         if(opts.outprefix_.size())
             ret = opts.outprefix_ + '/' + ret;
     }
+    if(path.find(' ') != std::string::npos) {
+        // A joint entry (several space-separated paths) must not share files with its first member
+        char buf[32];
+        ret.append(buf, std::snprintf(buf, sizeof(buf), ".joint%016llx", static_cast<unsigned long long>(XXH3_64bits(path.data(), path.size()))));
+    }
     if(opts.seedseed_ != 0)
         ret += ".seed" + std::to_string(opts.seedseed_);
     if(opts.canonicalize())
