@@ -94,6 +94,7 @@ struct OptSketcher {
         else if(pmh) pmh->reset();
         else if(opss) opss->reset();
         else if(fss) fss->reset();
+        else if(cfss) std::visit([](auto &x) {x.clear();}, *cfss);
         //if(omh) omh->reset();
     }
 };
