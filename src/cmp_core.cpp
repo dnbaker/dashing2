@@ -256,9 +256,17 @@ void make_compressed(CompressedRet &ret, int truncation_method, double fd, const
                 maxreg = std::max(maxreg, v);
             }
             assert(q > 0.);
-            const auto tailored = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
-            b = tailored.first;
-            a = tailored.second;
+            if(minreg > maxreg) {
+                // No register holds a value, so no input has a k-mer and there is nothing to fit. Every
+                // register compresses to the same value under any a and b; use the presets for this width.
+                using namespace sketch::setsketch;
+                a = fd == 1. ? ByteSetS::DEFAULT_A: fd == 2. ? ShortSetS::DEFAULT_A: fd == 4. ? UintSetS::DEFAULT_A: NibbleSetS::DEFAULT_A;
+                b = fd == 1. ? ByteSetS::DEFAULT_B: fd == 2. ? ShortSetS::DEFAULT_B: fd == 4. ? UintSetS::DEFAULT_B: NibbleSetS::DEFAULT_B;
+            } else {
+                const auto tailored = sketch::CSetSketch<RegT>::optimal_parameters(minreg, maxreg, q);
+                b = tailored.first;
+                a = tailored.second;
+            }
             std::fprintf(stderr, "Truncated via setsketch, a = %0.20Lg and b = %0.24Lg from min, max regs %Lg, %Lg\n", a, b, static_cast<long double>(minreg), static_cast<long double>(maxreg));
         }
         if(a == 0. || std::isinf(b)) {
