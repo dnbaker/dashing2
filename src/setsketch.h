@@ -727,7 +727,6 @@ public:
         return std::tie(b_, a_, m_, q_) == std::tie(o.b_, o.a_, o.m_, o.q_);
     }
     double harmean(const SetSketch<ResT, FT> *ptr=static_cast<const SetSketch<ResT, FT> *>(nullptr)) const {
-        static std::unordered_map<FT, std::vector<FT>> powers;
         if constexpr(sizeof(ResT) >= 4) {
             dashing2::flat_hash_map<ResT, uint32_t> counts;
             if(ptr) {
@@ -736,29 +735,26 @@ public:
             } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
             return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [b=b_](long double s, const auto&reg) {return std::fma(reg.second, std::pow(b, -static_cast<ptrdiff_t>(reg.first)), s);});
         }
-        auto it = powers.find(b_);
-        if(it == powers.end()) {
-            it = powers.emplace(b_, std::vector<FT>()).first;
-            it->second.resize(q_ + 2);
-            for(size_t i = 0; i < it->second.size(); ++i) {
-                it->second[i] = std::pow(static_cast<long double>(b_), -static_cast<ptrdiff_t>(i));
-            }
-        }
+        // b^-k is computed per call for the register values present, with no table shared between
+        // sketches, because different threads build and summarize sketches concurrently.
+        auto power = [b=static_cast<long double>(b_)](size_t k) -> FT {return std::pow(b, -static_cast<ptrdiff_t>(k));};
         if(q_ <= 256) {
             std::vector<uint32_t> counts(q_ + 2);
             if(ptr) {
                 for(size_t i = 0; i < m_; ++i)
                     ++counts[std::max(data_[i], ptr->data()[i])];
             } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
-            return std::inner_product(&counts[lowkh_.klow()], &counts[q_ + 2], &it->second[lowkh_.klow()], 0.L);
+            long double s = 0.L;
+            for(size_t i = lowkh_.klow(); i < counts.size(); ++i)
+                if(counts[i]) s += counts[i] * power(i);
+            return s;
         } else {
             dashing2::flat_hash_map<ResT, uint32_t> counts; counts.reserve(q_ + 2);
             if(ptr) {
                 for(size_t i = 0; i < m_; ++i)
                     ++counts[std::max(data_[i], ptr->data()[i])];
             } else for(size_t i = 0; i < m_; ++counts[data_[i++]]);
-            auto &ptable = it->second;
-            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [&ptable](long double s, auto &reg) {return std::fma(reg.second, ptable[reg.first], s);});
+            return std::accumulate(counts.begin(), counts.end(), static_cast<FT>(0.L), [&power](long double s, auto &reg) {return std::fma(reg.second, power(reg.first), s);});
         }
     }
     double jaccard_by_ix(const SetSketch<ResT, FT> &o) const {
@@ -881,7 +877,9 @@ public:
         checkwrite(fp, (const void *)data_.get(), m_ * sizeof(ResT));
     }
     void clear() {
-        std::fill(data_.get(), &data_[m_ * 2 - 1], ResT(0));
+        // assign() zeroes the registers and the min-heap above them and resets the cutoff that update()
+        // uses to skip items, which otherwise would keep the value reached by the previous sketch.
+        lowkh_.assign(data_.get(), m_, b_);
         mycard_ = -1.;
     }
     const std::vector<uint64_t> &ids() const {return ids_;}
@@ -899,6 +897,10 @@ public:
     }
     void reset() {
         CSetSketch<FT>::reset();
+        potentials_.clear();
+    }
+    void clear() {
+        Super::clear();
         potentials_.clear();
     }
     double getlim(const uint64_t id) const {
