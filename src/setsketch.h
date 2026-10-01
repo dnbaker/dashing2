@@ -768,7 +768,13 @@ public:
     }
     double cardinality_estimate() const {return cardinality();}
     double cardinality() const {
-        double num = m_ * (1. - 1. / b_) * logbinv_ * ainv_;
+        // A register stays 0 when none of its values exceeds 1 / a (probability exp(-a n)), so 0 is a
+        // censored observation: it contributes b^0 = 1 to the sum but is not counted as an observed
+        // register. As b approaches 1 this is the maximum likelihood estimate for exponentials censored
+        // at the cutoff. Without zero registers it is the usual estimate, and an empty sketch gives 0.
+        const size_t nzero = std::count(data(), data() + m_, ResT(0));
+        if(nzero == m_) return 0.;
+        double num = (m_ - nzero) * (1. - 1. / b_) * logbinv_ * ainv_;
         return num / harmean();
     }
     void merge(const SetSketch<ResT, FT> &o) {
