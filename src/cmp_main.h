@@ -41,9 +41,11 @@ static constexpr inline bool symmetric(Measure msr) {
         default: return true;
     }
 }
+// Distances rank smaller values as closer; every other measure, including symmetric
+// containment, is a similarity for --topk, --similarity-threshold and --greedy.
 static constexpr inline bool distance(Measure msr) {
     switch(msr) {
-        case UNION_SIZE: case INTERSECTION: case SIMILARITY: case CONTAINMENT: return false;
+        case UNION_SIZE: case INTERSECTION: case SIMILARITY: case CONTAINMENT: case SYMMETRIC_CONTAINMENT: return false;
         default: return true;
     }
 }
