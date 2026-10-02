@@ -2,6 +2,7 @@
 #include "fmt/format.h"
 #include "fmt/os.h"
 #include <optional>
+#include <atomic>
 
 namespace dashing2 {
 using namespace std::literals::string_literals;
@@ -155,20 +156,25 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
      *  If the queue is empty, it sleeps.
      */
     const size_t nq = result.nqueries(), nf = ns ? (ns - nq): 0;
-    volatile int loopint = 0;
+    // Compute threads append to datq under datq_lock; this thread takes items off
+    // the front under the same lock and formats them without holding it.
+    std::atomic<int> loopint{0};
     std::thread sub = std::thread([&](){
-        while(loopint == 0) {
-            if(datq.empty()) {
+        while(loopint.load(std::memory_order_acquire) == 0) {
+            std::optional<QTup> item;
+            {
+                std::lock_guard<std::mutex> guard(datq_lock);
+                if(!datq.empty()) {
+                    item.emplace(std::move(datq.front()));
+                    datq.pop_front();
+                }
+            }
+            if(!item) {
                 std::this_thread::sleep_for(std::chrono::duration<size_t, std::nano>(500));
                 continue;
             }
-            auto &f = datq.front();
+            auto &f = *item;
             auto fs = f.start(), fe = f.stop();
-#ifndef NDEBUG
-            if(loopint) {
-                std::fprintf(stderr, "Writing data from queue of size %zu after the loopint is terminated. This means all computation is done and we are just formatting and emitting data.\n", datq.size());
-            }
-#endif
             if(opts.output_format_ == HUMAN_READABLE) {
                 auto &of = ofopt.value();
                 const float *datp = f.data();
@@ -187,12 +193,10 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 }
             } else {
                 assert(opts.output_format_ == MACHINE_READABLE);
-                const size_t nwritten = datq.front().nwritten();
-                if(std::fwrite(datq.front().data(), sizeof(float), nwritten, ofp) != nwritten)
-                    THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(datq.front().start()) + "-" + std::to_string(datq.front().stop()) + " to disk"));
+                const size_t nwritten = f.nwritten();
+                if(std::fwrite(f.data(), sizeof(float), nwritten, ofp) != nwritten)
+                    THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(fs) + "-" + std::to_string(fe) + " to disk"));
             }
-            std::lock_guard<std::mutex> guard(datq_lock);
-            datq.pop_front();
         }
     });
     const size_t batch_size = std::max(std::min(unsigned(opts.cmp_batch_size_), opts.nthreads()), 1u);
@@ -324,7 +328,7 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
             }
         }
     }
-    loopint = 1;
+    loopint.store(1, std::memory_order_release);
     if(sub.joinable()) sub.join();
     static constexpr size_t BUFSIZE = 131072;
     static constexpr size_t BUFSIZEM1 = BUFSIZE - 1;
