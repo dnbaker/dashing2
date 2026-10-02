@@ -555,7 +555,7 @@ static constexpr const char *siglen =
         " 5. K-mer Sets.\n"\
         "   This generates a sorted hash set for k-mers in the data. If the parser is windowed (-w is fairly large), this could even be rather small.\n"\
         "   -H/--set to enable\n"\
-        "   If an LSH table is generated, then weighted bottom-k hashes are used to build an LSH table\n"\
+        "   If an LSH table is generated, then bottom-k hashes (the smallest k-mer hashes) are used to build an LSH table\n"\
         " 6. Full k-mer countdict. \n"\
         "    This generates a sorted hash set for k-mers in the data, and additionally saves the associated counts for these k-mers.\n"\
         "    If an LSH table is generated, then weighted bottom-k hashes as in Cohen, E. \"Summarizing Data using Bottom-K Sketches\"\n"\

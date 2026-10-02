@@ -50,6 +50,39 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
     }
 }
 
+// Rebuilds the cardinality and bottom-k registers of a --set or --countdict input from its cached
+// files (the cardinality followed by the sorted k-mers, and for --countdict the counts), as sketching
+// the input would. Returns false if the files cannot be read, so the caller sketches the input instead.
+template<typename KmerT>
+bool load_exact_cache(const std::string &kmerpath, const std::string &countpath, bool weighted, double threshold, double *card, BKRegT *regs, size_t ss) {
+    auto read_all = [](const std::string &path, size_t skip, auto &vec, double *head) {
+        using T = typename std::decay_t<decltype(vec)>::value_type;
+        if(path.size() > 3 && (path.substr(path.size() - 3) == ".gz" || path.substr(path.size() - 3) == ".xz")) return false;
+        std::FILE *fp = std::fopen(path.data(), "rb");
+        if(!fp) return false;
+        struct stat st;
+        bool ok = ::fstat(::fileno(fp), &st) == 0 && size_t(st.st_size) >= skip && (st.st_size - skip) % sizeof(T) == 0;
+        if(ok && skip) ok = std::fread(head, sizeof(double), 1, fp) == 1;
+        if(ok) {
+            vec.resize((st.st_size - skip) / sizeof(T));
+            ok = std::fread(vec.data(), sizeof(T), vec.size(), fp) == vec.size();
+        }
+        std::fclose(fp);
+        return ok;
+    };
+    std::vector<KmerT> kmers;
+    std::vector<double> counts;
+    if(!read_all(kmerpath, sizeof(double), kmers, card)) return false;
+    if(weighted && (!read_all(countpath, 0, counts, nullptr) || counts.size() != kmers.size())) return false;
+    // Sketching leaves the registers of an input without k-mers untouched
+    if(kmers.empty()) return true;
+    std::vector<BKRegT> keys(ss);
+    if(weighted) bottomk(kmers, keys, threshold, counts.data());
+    else bottomk(kmers, keys, 0., static_cast<const double *>(nullptr));
+    std::copy(keys.begin(), keys.end(), regs);
+    return true;
+}
+
 int32_t num_threads() {
     int nt = 1;
 #ifdef _OPENMP
@@ -394,6 +427,19 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                     load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind], ss);
             } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                 DBG_ONLY(std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());)
+                if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
+                    const std::string &kmerpath = destisfile ? destination: destkmer;
+                    const bool weighted = opts.kmer_result_ == FULL_MMER_COUNTDICT;
+                    std::vector<BKRegT> scratch(ret.signatures_.empty() ? ss: 0);
+                    BKRegT *const regs = scratch.size() ? scratch.data(): (BKRegT *)&ret.signatures_[mss];
+                    const bool loaded = opts.use128()
+                        ? load_exact_cache<u128_t>(kmerpath, destkmercounts, weighted, opts.count_threshold_, &ret.cardinalities_[myind], regs, ss)
+                        : load_exact_cache<uint64_t>(kmerpath, destkmercounts, weighted, opts.count_threshold_, &ret.cardinalities_[myind], regs, ss);
+                    if(!loaded) {
+                        std::fprintf(stderr, "Cached k-mers could not be read from %s... resketching.\n", kmerpath.data());
+                        goto perform_sketch;
+                    }
+                }
             }
             if(ret.kmerfiles_.size() > myind) {
                 ret.kmerfiles_[myind] = destkmer;
@@ -483,9 +529,13 @@ do {\
             if(kmervec64.size() || kmervec128.size()) {
                 if(ret.signatures_.size()) {
                     std::vector<BKRegT> keys(ss);
-                    double *const kvcp = kmerveccounts.empty() ? static_cast<double *>(nullptr): kmerveccounts.data();
-                    if(kmervec128.size()) bottomk(kmervec128, keys, opts.count_threshold_, kvcp);
-                    else bottomk(kmervec64, keys, opts.count_threshold_, kvcp);
+                    // A k-mer set takes its plain bottom-k (its k-mers already passed the count threshold), so that
+                    // it can be rebuilt from the cached set alone; a count dictionary takes the count-weighted bottom-k.
+                    const bool weighted = opts.kmer_result_ == FULL_MMER_COUNTDICT && !kmerveccounts.empty();
+                    double *const kvcp = weighted ? kmerveccounts.data(): static_cast<double *>(nullptr);
+                    const double threshold = weighted ? double(opts.count_threshold_): 0.;
+                    if(kmervec128.size()) bottomk(kmervec128, keys, threshold, kvcp);
+                    else bottomk(kmervec64, keys, threshold, kvcp);
                     std::copy(keys.begin(), keys.end(), (BKRegT *)&ret.signatures_[mss]);
                 }
             }
