@@ -306,6 +306,12 @@ int cmp_main(int argc, char **argv) {
         if(!opts.homopolymer_compress_minimizers_) THROW_EXCEPTION(std::runtime_error("Failed to hpcompress minimizers"));
     }
     opts.filterset(fsarg);
+    // The long forms of -B and -P (--multiset, --prob, ...) and --edit-distance set only the
+    // sketch space; these sketches are full sketches, as in sketch_main, so the header names them.
+    if((opts.sspace_ == SPACE_PSET || opts.sspace_ == SPACE_MULTISET || opts.sspace_ == SPACE_EDIT_DISTANCE)
+            && opts.kmer_result_ == ONE_PERM) {
+        opts.kmer_result_ = FULL_SETSKETCH;
+    }
     // Ensure we pad the number of registers to a multiple of 64 bits.
     opts.bed_parse_normalize_intervals_ = normalize_bed;
     opts.downsample(downsample_frac);

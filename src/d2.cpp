@@ -21,7 +21,7 @@ std::string Dashing2Options::to_string() const {
             kmer_result_ == ONE_PERM ? "onepermsetsketch"
                   : kmer_result_ == FULL_SETSKETCH ? (sspace_ == SPACE_SET ? "fullsetsketch": sspace_ == SPACE_MULTISET ? "bagminhash": sspace_ == SPACE_PSET ? "probminhash": sspace_ == SPACE_EDIT_DISTANCE ? "orderminhash": "unknown")
                   : kmer_result_ == FULL_MMER_SEQUENCE ? (use128() ? "mmerseq128": "mmerseq64")
-                  : kmer_result_ == FULL_MMER_SET ? (use128() ? "mmerset128": "mmerset64"): "fullyunknown"
+                  : (kmer_result_ == FULL_MMER_SET || kmer_result_ == FULL_MMER_COUNTDICT) ? (use128() ? "mmerset128": "mmerset64"): "fullyunknown"
     );
     if(kmer_result_ == FULL_MMER_COUNTDICT)
         pos += std::sprintf(&ret[pos], ",kmercountsf64");
