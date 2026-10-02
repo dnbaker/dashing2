@@ -138,8 +138,11 @@ INLINE void interleave_512_ps(__m512 &lhs, __m512 &rhs) {
 #ifdef __AVX2__
 INLINE void interleave_256_ps(__m256 &lhs, __m256 &rhs) {
     const __m256i select = _mm256_setr_epi32(0, 4, 1, 5, 2, 6, 3, 7);
-    lhs = _mm256_permutevar8x32_ps(_mm256_permute2f128_ps(lhs, rhs, 0b00100000), select);
-    rhs = _mm256_permutevar8x32_ps(_mm256_permute2f128_ps(lhs, rhs, 0b00110001), select);
+    // Both halves are taken from the original inputs before either is overwritten.
+    const __m256 lo = _mm256_permute2f128_ps(lhs, rhs, 0b00100000);
+    const __m256 hi = _mm256_permute2f128_ps(lhs, rhs, 0b00110001);
+    lhs = _mm256_permutevar8x32_ps(lo, select);
+    rhs = _mm256_permutevar8x32_ps(hi, select);
 }
 #endif
 
