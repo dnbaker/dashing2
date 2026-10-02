@@ -521,7 +521,16 @@ case v: {\
                     sptr = reinterpret_cast<const RegT *>(result.kmers_.data());
                 }
             }
-            const auto neq = sketch::eq::count_eq(&sptr[opts.sketchsize_ * i], &sptr[opts.sketchsize_ * j], opts.sketchsize_);
+            size_t neq = 0;
+            if(opts.sspace_ == SPACE_EDIT_DISTANCE) {
+                // OrderMinHash registers hold hash values rather than numbers, and some
+                // of them are NaN bit patterns, which never compare equal as floating point.
+                const RegT *lp = &sptr[opts.sketchsize_ * i], *rp = &sptr[opts.sketchsize_ * j];
+                for(size_t r = 0; r < opts.sketchsize_; ++r)
+                    neq += std::memcmp(lp + r, rp + r, sizeof(RegT)) == 0;
+            } else {
+                neq = sketch::eq::count_eq(&sptr[opts.sketchsize_ * i], &sptr[opts.sketchsize_ * j], opts.sketchsize_);
+            }
             ret = invdenom * neq;
             if(opts.measure_ == INTERSECTION) {
                 ret *= std::max((lhcard + rhcard) / (1.L + ret), 0.L);
