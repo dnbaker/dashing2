@@ -175,7 +175,7 @@ int contain_main(int argc, char **argv) {
     const size_t nq = streamfiles.size();
     static constexpr size_t headerlen = 24;
     mio::mmap_source db(databasefile);
-    assert(db.size() >= headerlen);
+    if(db.size() < headerlen) THROW_EXCEPTION(std::runtime_error(databasefile + " is too small to be a k-mer database; expected at least " + std::to_string(headerlen) + " header bytes"));
     const void *dbptr = (void *)db.data();
     bns::InputType rht = static_cast<bns::InputType>(*((uint32_t *)dbptr) & 0xFF);
     const bool canon = *(uint32_t *)dbptr & 0x100;
@@ -186,7 +186,8 @@ int contain_main(int argc, char **argv) {
     const uint32_t w = ((const uint32_t *)dbptr)[3];
     const uint64_t seed = ((const uint64_t *)dbptr)[2];
     seed_mask(seed);
-    if((db.size() - headerlen) % sketchsize) THROW_EXCEPTION(std::runtime_error("Database corrupted (not a multiple of uint64_t size). Regenerate?"));
+    if(sketchsize == 0 || k == 0) THROW_EXCEPTION(std::runtime_error("Database corrupted: the header holds a zero sketch size or k. Regenerate?"));
+    if((db.size() - headerlen) % (uint64_t(sketchsize) * sizeof(uint64_t))) THROW_EXCEPTION(std::runtime_error("Database corrupted (not a multiple of uint64_t size). Regenerate?"));
     std::vector<std::string> names;
     {
         if(bns::isfile(databasefile + ".names.txt")) {

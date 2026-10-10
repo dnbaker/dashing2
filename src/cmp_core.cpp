@@ -581,8 +581,11 @@ case v: {\
             }
         } else {
             double lhc, rhc;
-            std::fread(&lhc, sizeof(lhc), 1, lhk);
-            std::fread(&rhc, sizeof(rhc), 1, rhk);
+            // The leading double of each k-mer file is its cardinality; a file
+            // too short to hold it is corrupt, and using an unread value would
+            // silently skew every measure derived from it.
+            if(std::fread(&lhc, sizeof(lhc), 1, lhk) != 1u || std::fread(&rhc, sizeof(rhc), 1, rhk) != 1u)
+                THROW_EXCEPTION(std::runtime_error("Failed to read cardinality header from k-mer file for "s + lpath + " or " + rpath));
             const auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc, opts.use128());
             double res = isz_size;
             CORRECT_RES(res, opts.measure_, lhc, rhc)

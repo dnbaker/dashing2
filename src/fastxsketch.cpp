@@ -100,9 +100,12 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality, const siz
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
         gzFile fp = gzopen(path.data(), "rb");
         if(!fp) return 0; //THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
-        gzread(fp, cardinality, sizeof(*cardinality));
+        if(gzread(fp, cardinality, sizeof(*cardinality)) != int(sizeof(*cardinality))) {
+            gzclose(fp);
+            THROW_EXCEPTION(std::runtime_error("Failed to read cardinality from "s + path));
+        }
         for(int nr;
-            !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == sizeof(T) * chunk_size;
+            !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == int(sizeof(T) * chunk_size);
             ptr += nr / sizeof(T));
         gzclose(fp);
         return ptr - origptr;
@@ -110,7 +113,10 @@ size_t load_copy(const std::string &path, T *ptr, double *cardinality, const siz
         auto cmd = std::string("xz -dc ") + path;
         std::FILE *fp = ::popen(cmd.data(), "r");
         if(fp == 0) return 0;
-        std::fread(cardinality, sizeof(*cardinality), 1, fp);
+        if(std::fread(cardinality, sizeof(*cardinality), 1, fp) != 1u) {
+            ::pclose(fp);
+            THROW_EXCEPTION(std::runtime_error("Failed to read cardinality from "s + path));
+        }
         for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
         ::pclose(fp);
         return ptr - origptr;
