@@ -457,27 +457,27 @@ public:
         gzclose(fp);
     }
     void write(gzFile fp) const {
-        gzwrite(fp, &total_ids_, sizeof(total_ids_));
+        dashing2::gzwrite_all(fp, &total_ids_, sizeof(total_ids_));
         size_t nms = packed_maps_.size();
-        gzwrite(fp, &nms, sizeof(nms));
+        dashing2::gzwrite_all(fp, &nms, sizeof(nms));
         for(size_t i = 0; i < nms; ++i) {
             size_t v = packed_maps_[i].size();
-            gzwrite(fp, &v, sizeof(v));
+            dashing2::gzwrite_all(fp, &v, sizeof(v));
         }
-        gzwrite(fp, regs_per_reg_.data(), regs_per_reg_.size() * sizeof(regs_per_reg_.front()));
+        dashing2::gzwrite_all(fp, regs_per_reg_.data(), regs_per_reg_.size() * sizeof(regs_per_reg_.front()));
         uint8_t ibk = is_bottomk_only_, islocked = !mutexes_.empty();
-        gzwrite(fp, &ibk, 1);
-        gzwrite(fp, &islocked, 1);
+        dashing2::gzwrite_all(fp, &ibk, 1);
+        dashing2::gzwrite_all(fp, &islocked, 1);
         for(size_t i = 0; i < packed_maps_.size(); ++i) {
             for(size_t j = 0; j < packed_maps_[i].size(); ++j) {
                 auto &map = packed_maps_[i][j];
                 uint64_t sz = map.size();
-                gzwrite(fp, &sz, sizeof(sz));
+                dashing2::gzwrite_all(fp, &sz, sizeof(sz));
                 for(auto &pair: map) {
                     uint64_t psz = pair.second.size();
-                    gzwrite(fp, &psz, sizeof(psz));
-                    gzwrite(fp, &pair.first, sizeof(pair.first));
-                    gzwrite(fp, pair.second.data(), sizeof(KeyT) * pair.second.size());
+                    dashing2::gzwrite_all(fp, &psz, sizeof(psz));
+                    dashing2::gzwrite_all(fp, &pair.first, sizeof(pair.first));
+                    dashing2::gzwrite_all(fp, pair.second.data(), sizeof(KeyT) * pair.second.size());
                 }
             }
         }
@@ -487,37 +487,37 @@ public:
         std::vector<size_t> mapsizes;
         regs_per_reg_.clear();
 
-        gzread(fp, &total_ids_, sizeof(total_ids_));
-        gzread(fp, &nmapsets, sizeof(size_t));
+        dashing2::gzread_all(fp, &total_ids_, sizeof(total_ids_));
+        dashing2::gzread_all(fp, &nmapsets, sizeof(size_t));
         mapsizes.reserve(nmapsets);
         packed_maps_.resize(mapsizes.size());
         while(mapsizes.size() < nmapsets) {
             size_t v;
-            gzread(fp, &v, sizeof(size_t));
+            dashing2::gzread_all(fp, &v, sizeof(size_t));
             mapsizes.push_back(v);
             packed_maps_.emplace_back(HashV(v));
         }
         while(regs_per_reg_.size() < nmapsets) {
             size_t v;
-            gzread(fp, &v, sizeof(size_t));
+            dashing2::gzread_all(fp, &v, sizeof(size_t));
             regs_per_reg_.push_back(v);
         }
         uint8_t ibk, islocked;
-        gzread(fp, &ibk, 1);
-        gzread(fp, &islocked, 1);
+        dashing2::gzread_all(fp, &ibk, 1);
+        dashing2::gzread_all(fp, &islocked, 1);
         is_bottomk_only_ = ibk;
         for(size_t i = 0; i < packed_maps_.size(); ++i) {
             for(size_t j = 0; j < packed_maps_[i].size(); ++j) {
                 auto &map = packed_maps_[i][j];
                 uint64_t sz;
-                gzread(fp, &sz, sizeof(sz));
+                dashing2::gzread_all(fp, &sz, sizeof(sz));
                 for(size_t k = 0; k < sz; ++k) {
                     uint64_t psz;
                     KeyT key;
-                    gzread(fp, &psz, sizeof(psz));
-                    gzread(fp, &key, sizeof(key));
+                    dashing2::gzread_all(fp, &psz, sizeof(psz));
+                    dashing2::gzread_all(fp, &key, sizeof(key));
                     std::vector<KeyT> vals(psz);
-                    gzread(fp, vals.data(), sizeof(KeyT) * vals.size());
+                    dashing2::gzread_all(fp, vals.data(), sizeof(KeyT) * vals.size());
                     map.emplace(key, vals);
                 }
             }

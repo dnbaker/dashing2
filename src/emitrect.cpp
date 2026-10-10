@@ -389,14 +389,15 @@ void emit_rectangular(const Dashing2DistOptions &opts, const SketchingResult &re
                 static constexpr size_t nfloats_per_block = BUFSIZE / sizeof(float);
                 const ssize_t nblocks = (nbytes + BUFSIZEM1) >> 17;
                 for(ssize_t i = 0; i < nblocks - 1; ++i) {
-                    const ssize_t wrc = ::write(fd, pair.data() + i * nfloats_per_block, BUFSIZE);
+                    // write_all retries short counts and EINTR; it returns -1, with errno set, on error.
+                    const ssize_t wrc = write_all(fd, pair.data() + i * nfloats_per_block, BUFSIZE);
                     if(unlikely(wrc < ssize_t(BUFSIZE)))
                         throw std::runtime_error("Failed to POSIX write. Wrote "s + std::to_string(wrc) + " instead of " + std::to_string(BUFSIZE));
                 }
                 // The last block holds the remainder, which is a full block when the size is a multiple of BUFSIZE.
                 if(nblocks > 0) {
                     const ssize_t lon = nbytes - (nblocks - 1) * BUFSIZE;
-                    const ssize_t wrc = ::write(fd, pair.data() + (nblocks - 1) * nfloats_per_block, lon);
+                    const ssize_t wrc = write_all(fd, pair.data() + (nblocks - 1) * nfloats_per_block, lon);
                     if(wrc != lon) {
                        THROW_EXCEPTION(std::runtime_error(std::string("Failed to write rows ") + std::to_string(pair.start()) + "-" + std::to_string(pair.stop()) + " to disk"));
                     }

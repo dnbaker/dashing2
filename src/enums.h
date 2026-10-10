@@ -8,6 +8,8 @@
 
 #include "robin_hood.h"
 #include <string>
+#include <sys/types.h>
+#include <zlib.h>
 
 namespace dashing2 {
 
@@ -128,6 +130,16 @@ void checked_fread(std::FILE *fp, void *src, const size_t nb);
 inline void checked_fread(void *ptr, const size_t itemsize, const size_t nitems, std::FILE *fp) {
     checked_fread(fp, ptr, itemsize * nitems);
 }
+// Full-count POSIX transfer: loop on short counts and retry EINTR. A write
+// that makes no progress is reported as EIO. On error, errno is whatever the
+// last transfer call set. Both return the number of bytes transferred, or -1
+// when an error left the transfer incomplete; read_all also returns short on
+// end of file.
+ssize_t write_all(int fd, const void *buf, size_t count);
+ssize_t read_all(int fd, void *buf, size_t count);
+// Full-count zlib variants of the same contract, for gzFile streams.
+int gzwrite_all(gzFile fp, const void *buf, unsigned count);
+int gzread_all(gzFile fp, void *buf, unsigned count);
 std::pair<std::FILE *, int> xopen(const std::string &path);
 
 extern uint64_t XORMASK;

@@ -1,6 +1,8 @@
 #include "d2.h"
 #include "enums.h"
 #include <array>
+#include <cerrno>
+#include <unistd.h>
 
 namespace dashing2 {
 
@@ -84,6 +86,53 @@ void checked_fread(std::FILE *const fp, void *const ptr, const size_t nb) {
     unsigned long long lrc = std::fread(static_cast<void *>(ptr), 1, nb, fp);
     if(unlikely(lrc != static_cast<size_t>(nb)))
          throw std::runtime_error(std::string("[E:") + __PRETTY_FUNCTION__ + ':' + __FILE__ + std::to_string(__LINE__) + "] Failed to perform buffered read of " + std::to_string(static_cast<size_t>(nb)) + " bytes, instead reading " + std::to_string(lrc) + " bytes");
+}
+
+ssize_t write_all(const int fd, const void *const buf, const size_t count) {
+    const char *ptr = static_cast<const char *>(buf);
+    size_t total = 0;
+    while(total < count) {
+        const ssize_t n = ::write(fd, ptr + total, count - total);
+        if(n > 0) { total += size_t(n); continue; }
+        if(n == 0) { errno = EIO; return -1; }
+        if(errno == EINTR) continue;
+        return -1;
+    }
+    return ssize_t(total);
+}
+ssize_t read_all(const int fd, void *const buf, const size_t count) {
+    char *ptr = static_cast<char *>(buf);
+    size_t total = 0;
+    while(total < count) {
+        const ssize_t n = ::read(fd, ptr + total, count - total);
+        if(n > 0) { total += size_t(n); continue; }
+        if(n == 0) break; // EOF
+        if(errno == EINTR) continue;
+        return -1;
+    }
+    return ssize_t(total);
+}
+int gzwrite_all(gzFile fp, const void *const buf, const unsigned count) {
+    const char *ptr = static_cast<const char *>(buf);
+    unsigned total = 0;
+    while(total < count) {
+        const int n = gzwrite(fp, ptr + total, count - total);
+        if(n > 0) { total += unsigned(n); continue; }
+        if(n == 0) { errno = EIO; return -1; }
+        return -1;
+    }
+    return int(total);
+}
+int gzread_all(gzFile fp, void *const buf, const unsigned count) {
+    char *ptr = static_cast<char *>(buf);
+    unsigned total = 0;
+    while(total < count) {
+        const int n = gzread(fp, ptr + total, count - total);
+        if(n > 0) { total += unsigned(n); continue; }
+        if(n == 0) break; // EOF
+        return -1;
+    }
+    return int(total);
 }
 
 std::pair<std::FILE *, int> xopen(const std::string &path) {

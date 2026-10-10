@@ -481,24 +481,22 @@ public:
         gzclose(fp);
     }
     void read(gzFile fp) {
-        gzread(fp, &m_, sizeof(m_));
+        dashing2::gzread_all(fp, &m_, sizeof(m_));
         FT mv;
-        gzread(fp, &mv, sizeof(mv));
+        dashing2::gzread_all(fp, &mv, sizeof(mv));
         data_.reset(allocate(m_));
         mvt_.assign(data_.get(), m_, mv);
-        gzread(fp, (void *)data_.get(), m_ * sizeof(FT));
+        dashing2::gzread_all(fp, (void *)data_.get(), m_ * sizeof(FT));
         for(size_t i = 0;i < m_; ++i) mvt_.update(i, data_[i]);
         ls_.resize(m_);
     }
     int checkwrite(std::FILE *fp, const void *ptr, size_t nb) const {
-        auto ret = ::write(::fileno(fp), ptr, nb);
-        if(size_t(ret) != nb) throw ZlibError("Failed to write setsketch to file");
-        return ret;
+        if(dashing2::write_all(::fileno(fp), ptr, nb) < 0) throw ZlibError("Failed to write setsketch to file");
+        return int(nb);
     }
     int checkwrite(gzFile fp, const void *ptr, size_t nb) const {
-        auto ret = gzwrite(fp, ptr, nb);
-        if(size_t(ret) != nb) throw ZlibError("Failed to write setsketch to file");
-        return ret;
+        if(dashing2::gzwrite_all(fp, ptr, unsigned(nb)) < 0) throw ZlibError("Failed to write setsketch to file");
+        return int(nb);
     }
     void write(std::FILE *fp) const {
         checkwrite(fp, (const void *)&m_, sizeof(m_));
@@ -845,28 +843,26 @@ public:
         gzclose(fp);
     }
     void read(gzFile fp) {
-        gzread(fp, &m_, sizeof(m_));
-        gzread(fp, &a_, sizeof(a_));
-        gzread(fp, &b_, sizeof(b_));
-        gzread(fp, &q_, sizeof(q_));
+        dashing2::gzread_all(fp, &m_, sizeof(m_));
+        dashing2::gzread_all(fp, &a_, sizeof(a_));
+        dashing2::gzread_all(fp, &b_, sizeof(b_));
+        dashing2::gzread_all(fp, &q_, sizeof(q_));
         ainv_ = 1.L / a_;
         logbinv_ = 1.L / std::log1p(b_ - 1.);
         data_.reset(allocate(m_));
         lowkh_.assign(data_.get(), m_, b_);
-        gzread(fp, (void *)data_.get(), m_ * sizeof(ResT));
+        dashing2::gzread_all(fp, (void *)data_.get(), m_ * sizeof(ResT));
         std::fill(&data_[m_], &data_[2 * m_ - 1], ResT(0));
         for(size_t i = 0;i < m_; ++i) lowkh_.update(i, data_[i]);
         ls_.resize(m_);
     }
     int checkwrite(std::FILE *fp, const void *ptr, size_t nb) const {
-        auto ret = ::write(::fileno(fp), ptr, nb);
-        if(size_t(ret) != nb) throw ZlibError("Failed to write setsketch to file");
-        return ret;
+        if(dashing2::write_all(::fileno(fp), ptr, nb) < 0) throw ZlibError("Failed to write setsketch to file");
+        return int(nb);
     }
     int checkwrite(gzFile fp, const void *ptr, size_t nb) const {
-        auto ret = gzwrite(fp, ptr, nb);
-        if(size_t(ret) != nb) throw ZlibError("Failed to write setsketch to file");
-        return ret;
+        if(dashing2::gzwrite_all(fp, ptr, unsigned(nb)) < 0) throw ZlibError("Failed to write setsketch to file");
+        return int(nb);
     }
     void write(std::FILE *fp) const {
         checkwrite(fp, (const void *)&m_, sizeof(m_));
