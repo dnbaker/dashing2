@@ -249,6 +249,7 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
         if(opts.kmer_result_ == ONE_PERM) {
             make(opss);
             for(auto &x: opss) x.set_mincount(opts.count_threshold_);
+            if(opts.save_kmercounts_) for(auto &x: opss) x.track_counts(true);
         } else if(opts.kmer_result_ == FULL_SETSKETCH) {
             if(opts.sketch_compressed_set) {
                 cfss.reserve(nt);

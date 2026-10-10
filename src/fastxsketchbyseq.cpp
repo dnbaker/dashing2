@@ -32,7 +32,7 @@ struct OptSketcher {
         if(o.ctr) ctr.reset(new Counter(*o.ctr));
         if(o.bmh) bmh.reset(new BagMinHash(*o.bmh));
         else if(o.pmh) pmh.reset(new ProbMinHash(*o.pmh));
-        else if(o.opss) opss.reset(new OPSetSketch(o.opss->size()));
+        else if(o.opss) opss.reset(new OPSetSketch(o.opss->size())), opss->track_counts(o.opss->track_counts());
         else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
         else if(o.cfss) cfss.reset(new VSetSketch(*o.cfss));
@@ -43,7 +43,7 @@ struct OptSketcher {
         if(o.ctr) ctr.reset(new Counter(*o.ctr));
         if(o.bmh) bmh.reset(new BagMinHash(*o.bmh));
         else if(o.pmh) pmh.reset(new ProbMinHash(*o.pmh));
-        else if(o.opss) opss.reset(new OPSetSketch(o.opss->size()));
+        else if(o.opss) opss.reset(new OPSetSketch(o.opss->size())), opss->track_counts(o.opss->track_counts());
         else if(o.fss) fss.reset(new FullSetSketch(*o.fss));
         else if(o.omh) omh.reset(new OrderMinHash(*o.omh));
         else if(o.cfss) cfss.reset(new VSetSketch(*o.cfss));
@@ -114,6 +114,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
         if(opts.one_perm()) {
             sketcher.opss.reset(new OPSetSketch(opts.sketchsize_));
             if(opts.count_threshold_ > 0) sketcher.opss->set_mincount(opts.count_threshold_);
+            if(opts.save_kmercounts_) sketcher.opss->track_counts(true);
         } else if(!opts.sketch_compressed_set)
             sketcher.fss.reset(new FullSetSketch(opts.count_threshold_, opts.sketchsize_, opts.save_kmers_, opts.save_kmercounts_));
         else {

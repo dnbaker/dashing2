@@ -113,6 +113,11 @@ private:
     // is already enough to pass Rabbit/SmallCrush
     schism::Schismatic<uint32_t> div_;
     double mincount_ = 0.;
+    // Whether per-bucket duplicate counts (counts_) are maintained. They are
+    // observed only through idcounts(), which is produced for --save-kmercounts
+    // and for count filtering (-m > 1); maintaining them costs a store to a
+    // second cache line on every update, so they are skipped otherwise.
+    bool track_counts_ = false;
     std::vector<flat_hash_map<T, uint32_t>> potentials_;
     double card_ = -1.;
 public:
@@ -130,6 +135,7 @@ public:
         total_updates_ = o.total_updates_;
         div_ = o.div_;
         mincount_ = o.mincount_;
+        track_counts_ = o.track_counts_;
         potentials_ = o.potentials_;
         card_ = o.card_;
         as_sigs_ = o.as_sigs_;
@@ -154,9 +160,14 @@ public:
     void set_mincount(double v) {
         if(v > 1.) {
             mincount_ = v;
+            track_counts_ = true;
             potentials_.resize(size());
         }
     }
+    // Request maintenance of per-bucket duplicate counts; needed by
+    // idcounts() (--save-kmercounts) and implied by set_mincount.
+    void track_counts(bool v) {track_counts_ = v;}
+    bool track_counts() const {return track_counts_;}
     template<typename O>
     INLINE void update(T id,  O) {update(id);}
     T decode(T x) const {
@@ -183,9 +194,9 @@ public:
         else
             idx = div_.mod(hashid);
         assert(idx < size());
-        auto &cref = counts_[idx];
         auto &rref = registers_[idx];
         if(mincount_ > 1.) {
+            auto &cref = counts_[idx];
             // If mincount > 0, then
             if(rref > id) {
                 auto &pos = potentials_[idx];
@@ -205,8 +216,9 @@ public:
             } else cref += (rref == id);
         } else {
             if(rref > id) {
-                rref = id; cref = 1.;
-            } else cref += (rref == id);
+                rref = id;
+                if(track_counts_) counts_[idx] = 1.;
+            } else if(track_counts_) counts_[idx] += (rref == id);
         }
     }
 
