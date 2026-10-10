@@ -10,6 +10,8 @@
 #include "edlib.h"
 
 #include <span>
+#include <vector>
+#include <sys/stat.h>
 
 namespace dashing2 {
 //using u128_t = __uint128_t;
@@ -85,9 +87,67 @@ std::pair<size_t, size_t> mmer_edit_distance(std::FILE *lfp, std::FILE *rfp, boo
     auto ptr = use128 ? &mmer_edit_distance_f<u128_t>: &mmer_edit_distance_f<uint64_t>;
     return ptr(lfp, rfp);
 }
+
+// Bulk-loads the remaining content of fp into out when fp is a regular file
+// whose remaining size is a whole number of Ts. Returns false when the size
+// cannot be determined (pipe, tty) or the tail does not fit T; the stream is
+// then left for the caller's per-element path.
+template<typename T>
+static bool load_remaining(std::FILE *fp, std::vector<T> &out) {
+    struct stat st;
+    if(::fstat(::fileno(fp), &st) || !S_ISREG(st.st_mode)) return false;
+    const long pos = std::ftell(fp);
+    if(pos < 0) return false;
+    const uint64_t rem = uint64_t(st.st_size) - uint64_t(pos);
+    if(rem % sizeof(T)) return false;
+    out.resize(rem / sizeof(T));
+    return out.empty() || std::fread(out.data(), sizeof(T), out.size(), fp) == out.size();
+}
+
+// Merge of two sorted in-memory sequences with the same traversal and
+// accumulation as the per-element stream merge below: matches add
+// min(lcount, rcount) (or 1 without counts) in order into a long double.
+template<typename IT>
+static std::pair<double, double> weighted_compare_loaded(const IT *lp, const double *lnp, size_t nl, const double lhsum,
+                                                         const IT *rp, const double *rnp, size_t nr, const double rhsum) noexcept {
+    if(nl == 0 || nr == 0) return {0., lhsum + rhsum};
+    long double isz = 0.;
+    size_t li = 0, ri = 0;
+    for(;;) {
+        const IT &lv = lp[li];
+        const IT &rv = rp[ri];
+        if(lv < rv) {
+            if(++li == nl) break;
+        } else if(rv < lv) {
+            if(++ri == nr) break;
+        } else {
+            const double lhc = lnp ? lnp[li]: 1.;
+            const double rhc = rnp ? rnp[ri]: 1.;
+            isz += std::min(rhc, lhc);
+            if(++li == nl || ++ri == nr) break;
+        }
+    }
+    return {double(isz), double(lhsum + rhsum - isz)};
+}
 template<size_t NB>
 size_t hamming_compare_f(std::FILE *lfp, std::FILE *rfp) {
     using RT = std::conditional_t<NB == 1, uint8_t, std::conditional_t<NB == 2, uint16_t, std::conditional_t<NB == 4, uint32_t, std::conditional_t<NB == 8, uint64_t, u128_t>>>>;
+    // Fast path: compare the common prefix of both files in memory; one bulk
+    // read each instead of a locked stdio read per position. The streams are
+    // restored when either cannot be bulk-loaded.
+    const long l0 = std::ftell(lfp), r0 = std::ftell(rfp);
+    try {
+        std::vector<RT> lbuf, rbuf;
+        if(load_remaining(lfp, lbuf) && load_remaining(rfp, rbuf)) {
+            const size_t n = std::min(lbuf.size(), rbuf.size());
+            size_t ret = 0;
+            for(size_t i = 0; i < n; ++i) ret += lbuf[i] == rbuf[i];
+            return ret;
+        }
+    } catch(...) {
+    }
+    std::fseek(lfp, l0, SEEK_SET);
+    std::fseek(rfp, r0, SEEK_SET);
     size_t ret = 0;
     RT lv, rv;
     // Count equal positions; positions past the end of the shorter sequence are mismatches.
@@ -134,6 +194,39 @@ std::vector<T> load_file(std::FILE *fp) {
 std::pair<double, double>
 weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn, double lhsum, double rhsum, bool use128) noexcept {
     //auto [isz_size, union_size] = weighted_compare(lhk, rhk, lhn, rhn, lhc, rhc);
+
+    // Fast path: load both sorted k-mer sequences (and their count sequences)
+    // with one read each and merge in memory. The per-element path below does
+    // a locked stdio read, and a feof call on top, for every merge step, which
+    // dominates exact-mode all-pairs comparisons. Streams are restored when
+    // either side cannot be bulk-loaded.
+    const long lk0 = std::ftell(lhk), rk0 = std::ftell(rhk);
+    const long ln0 = lhn ? std::ftell(lhn): 0, rn0 = rhn ? std::ftell(rhn): 0;
+    try {
+        std::vector<uint64_t> lk64, rk64;
+        std::vector<u128_t> lk128, rk128;
+        std::vector<double> lcnt, rcnt;
+        bool havek;
+        if(use128) {
+            havek = load_remaining(lhk, lk128) && load_remaining(rhk, rk128);
+        } else {
+            havek = load_remaining(lhk, lk64) && load_remaining(rhk, rk64);
+        }
+        const bool havel = !lhn || load_remaining(lhn, lcnt);
+        const bool haver = !rhn || load_remaining(rhn, rcnt);
+        if(havek && havel && haver) {
+            if(use128)
+                return weighted_compare_loaded(lk128.data(), lhn ? lcnt.data(): nullptr, lk128.size(), lhsum,
+                                               rk128.data(), rhn ? rcnt.data(): nullptr, rk128.size(), rhsum);
+            return weighted_compare_loaded(lk64.data(), lhn ? lcnt.data(): nullptr, lk64.size(), lhsum,
+                                           rk64.data(), rhn ? rcnt.data(): nullptr, rk64.size(), rhsum);
+        }
+    } catch(...) {
+    }
+    std::fseek(lhk, lk0, SEEK_SET);
+    std::fseek(rhk, rk0, SEEK_SET);
+    if(lhn) std::fseek(lhn, ln0, SEEK_SET);
+    if(rhn) std::fseek(rhn, rn0, SEEK_SET);
 
     u128_t lhv2, rhv2;
     uint64_t lhv, rhv;
