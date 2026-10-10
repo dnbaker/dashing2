@@ -1,6 +1,8 @@
 #include "sketch_core.h"
 #include "cmp_main.h"
 #include <cinttypes>
+#include <algorithm>
+#include <thread>
 
 namespace dashing2 {
 extern size_t MEMSIGTHRESH;
@@ -175,10 +177,23 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2DistOptions &opts,
 std::vector<std::pair<size_t, uint64_t>> get_filesizes(const std::vector<std::string> &paths) {
     const size_t npaths = paths.size();
     std::vector<std::pair<size_t, uint64_t>> filesizes(npaths);
-    OMP_PFOR
-    for(size_t i = 0; i < npaths; ++i) {
-        filesizes[i] = {nbytes_from_line(paths[i]), uint64_t(i)};
+    // Sized on joined std::threads rather than an omp parallel for: a thread's
+    // join gives the happens-before edges that ThreadSanitizer can see, which
+    // the implicit barrier of an omp parallel for does not provide when libomp
+    // is not instrumented (every size write then reports as racing the sort).
+    const size_t nt = std::min<size_t>(std::max<size_t>(1, std::thread::hardware_concurrency()), npaths);
+    std::vector<std::thread> threads;
+    threads.reserve(nt);
+    const size_t chunk = (npaths + nt - 1) / nt;
+    for(size_t t = 0; t < nt; ++t) {
+        const size_t first = t * chunk, last = std::min(first + chunk, npaths);
+        if(first >= last) break;
+        threads.emplace_back([&, first, last] {
+            for(size_t i = first; i < last; ++i)
+                filesizes[i] = {nbytes_from_line(paths[i]), uint64_t(i)};
+        });
     }
+    for(auto &t: threads) t.join();
     std::sort(filesizes.begin(), filesizes.end(), std::greater<>());
     return filesizes;
 }
