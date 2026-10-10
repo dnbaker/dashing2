@@ -32,6 +32,9 @@ OPTMV:=$(OPT)
 CXXSTD?=-std=c++20
 OPT+= $(CXXSTD)
 WARNING+=-Wall -Wextra -Wno-unused-function -Wno-char-subscripts -pedantic -Wno-array-bounds # -Wno-shift-count-overflow
+# Compiler-generated header dependencies (one .d beside each object). -MP adds
+# phony targets for headers so that removing a header does not break the build.
+DEPFLAGS+=-MMD -MP
 EXTRA+=-DNOCURL -DDASHING2_VERSION=\"$(GIT_VERSION)\" -DFMT_HEADER_ONLY
 CXXFLAGS+= $(CXXSTD)
 CFLAGS+= -std=c11
@@ -122,60 +125,60 @@ read%-f: test/read%.fo $(FLIBOBJ)
 %: test/%.cpp $(LIBOBJ)
 	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< $(LIBOBJ) -o $@ $(LIB) $(EXTRA) libBigWig.a -DSKETCH_FLOAT_TYPE="float"
 	# $(wildcard src/*.h)
-%.o: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
-%.o: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
+%.o: %.cpp $(wildcard src/*.h)
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
+%.o: %.c $(wildcard src/*.h)
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
 %.64o: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -DLSHIDTYPE="uint64_t"
 %.64o: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -DLSHIDTYPE="uint64_t" -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -DLSHIDTYPE="uint64_t" -std=c11
 %.0: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -O0 -DNDEBUG
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -O0 -DNDEBUG
 %.0: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O0 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O0 -std=c11
 %.vo: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
 %.vo: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
 %.lto: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto
 %.lto: %.c
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -flto -std=c11
 %.do: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -O0
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -O0
 %.do: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -O0 -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -O0 -std=c11
 %.sano: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -fsanitize=address -O1
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -fsanitize=address -O1
 %.sano: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -fsanitize=address -O1
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -fsanitize=address -O1
 %.gobj: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -pg -fno-lto -DNDEBUG
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -pg -fno-lto -DNDEBUG
 %.ldo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto
 %.ldo: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto -std=c11
 %.fo: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG
 %.fo: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPTMV) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG -std=c11
+	$(CC) $(INC) $(OPTMV) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG -std=c11
 %.ld64o: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="long double" -DNDEBUG -flto  -DLSHIDTYPE="uint64_t"
 %.f64o: %.cpp $(wildcard src/*.h)
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DSKETCH_FLOAT_TYPE="float" -DNDEBUG  -flto -DLSHIDTYPE="uint64_t"
 %.nlto: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3
 %.nlto: %.c $(wildcard src/*.h)
-	$(CC) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
+	$(CC) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -std=c11
 %.static-avx2.o: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 -mno-avx512dq -mno-avx512vl -mno-avx512f -mno-avx512bw -mavx -mavx2 -msse2 -msse4.1 -static-libstdc++ -static-libgcc
 %.static-avx512bw.o: %.cpp
-	$(CXX) $(INC) $(OPT) $(WARNING) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 \
+	$(CXX) $(INC) $(OPT) $(WARNING) $(DEPFLAGS) $(MACH) $< -c -o $@ $(EXTRA) -DNDEBUG -O3 \
      -mavx512dq -mavx512vl -mavx512bw -mavx512f -mavx -mavx2 -msse2 -msse4.1 \
      -static-libstdc++ -static-libgcc
 src/osfmt.o: fmt/src/os.cc
-	$(CXX) -I fmt/include $(OPT) $(WARNING) $< -c -o $@ $(EXTRA)
+	$(CXX) -I fmt/include $(OPT) $(WARNING) $(DEPFLAGS) $< -c -o $@ $(EXTRA)
 
 
 %: src/%
@@ -251,3 +254,7 @@ test: readfx readbw
 clean:
 	rm -f dashing2 dashing2-ld dashing2-f libBigWig.a $(OBJ) $(OBJLD) $(OBJF) readfx readfx-f readfx-ld readbw readbw readbw-f readbw-ld src/*.0 src/*.do src/*.fo src/*.gobj src/*.ldo src/*.0\
 		src/*.vo src/*.sano src/*.ld64o src/*.f64o src/*.64o
+
+# Pull in the header dependencies that -MMD writes next to each object. Only
+# files that exist are included, so a fresh tree builds without them.
+-include $(shell find src test -name '*.d' 2>/dev/null)
