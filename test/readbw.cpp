@@ -12,6 +12,7 @@ int main(int argc, char **argv) {
     int nt = 16;
     if(char *s = std::getenv("OMP_NUM_THREADS")) nt = std::atoi(s);
     opts.nthreads(nt);
+    opts.by_chrom_ = true; // bw2sketch only fills chrmap_ (listed below) when by_chrom_ is set
     auto t = gett();
     auto s = bw2sketch(argv[1], opts, /*parallel_process=*/true);
     auto tend = gett();
