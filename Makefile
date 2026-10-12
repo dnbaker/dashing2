@@ -71,7 +71,7 @@ endif
 
 
 OBJFS=src/enums.cpp src/counter.cpp src/fastxsketch.cpp src/merge.cpp src/bwsketch.cpp src/bedsketch.cpp src/fastxsketchbyseq.cpp src/bwreduce.cpp
-LIBOBJ=$(patsubst %.cpp,%.o,$(OBJFS))  src/osfmt.o
+LIBOBJ=$(filter-out src/main.o,$(OBJ))
 LIB0=$(patsubst %.cpp,%.0,$(OBJFS)) src/osfmt.o
 LIBV=$(patsubst %.cpp,%.vo,$(OBJFS)) src/osfmt.o
 DLIBOBJ=$(patsubst %.cpp,%.do,$(OBJFS)) src/osfmt.o

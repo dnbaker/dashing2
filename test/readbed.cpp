@@ -16,17 +16,17 @@ int main(int argc, char **argv) {
     auto t = gett();
     auto s = bed2sketch(argv[1], opts);
     auto tend = gett();
-    std::fprintf(stderr, "Sketching BED file took %gms\n", std::chrono::duration<double, std::milli>(t - tend).count());
+    std::fprintf(stderr, "Sketching BED file took %gms\n", std::chrono::duration<double, std::milli>(tend - t).count());
     opts.cssize(10000);
     t = gett();
     s = bed2sketch(argv[1], opts);
     tend = gett();
-    std::fprintf(stderr, "Sketching BED file with count sketch took %gms\n", std::chrono::duration<double, std::milli>(t - tend).count());
+    std::fprintf(stderr, "Sketching BED file with count sketch took %gms\n", std::chrono::duration<double, std::milli>(tend - t).count());
     opts.cssize(0);
     opts.sspace_ = SPACE_SET;
     t = gett();
     s = bed2sketch(argv[1], opts);
     tend = gett();
-    std::fprintf(stderr, "Sketching BED file in set space took %gms\n", std::chrono::duration<double, std::milli>(t - tend).count());
+    std::fprintf(stderr, "Sketching BED file in set space took %gms\n", std::chrono::duration<double, std::milli>(tend - t).count());
     return 0;
 }

@@ -85,6 +85,7 @@ int main(int argc, char **argv) {
         paths = glob("bonsai/test/*.fna.gz");
         std::fprintf(stderr, "Instead, sketch the bonsai/test/*fna.gz test files\n");
     }
-    FastxSketchingResult result = fastx2sketch(opts, paths);
+    FastxSketchingResult result;
+    fastx2sketch(result, opts, paths, std::string());
     result.print();
 }
