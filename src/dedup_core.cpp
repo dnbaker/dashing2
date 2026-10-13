@@ -122,7 +122,7 @@ void update_res_mt(LSHIDType oid, std::vector<LSHIDType> &ids, std::vector<std::
         }
     } else query_res = idx.query_candidates(minispan<RegT>(&result.signatures_[opts.sketchsize_ * oid], opts.sketchsize_), maxcands);
     const size_t nh = hits.size();
-    std::fprintf(stderr, "Total number of items to compare against: %zu\n", nh);
+    DBG_ONLY(std::fprintf(stderr, "Total number of items to compare against: %zu\n", nh);)
     std::vector<LSHDistType> vals(hits.size());
     // Scores are mult * value, so the best candidate has the smallest score for both
     // similarities (mult = -1) and distances (mult = 1); it is too far when its score exceeds mult * simt.

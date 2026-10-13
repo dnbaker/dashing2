@@ -305,7 +305,7 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
                 std::fprintf(stderr, "EMPTY SEQ at idx %zu for %s in path %s\n", i, ret.names_[i].data(), path.data());
                 std::exit(1);
             }
-            std::fprintf(stderr, "OMH sketching from %s of length %zu\n", ret.names_[i].data(), size_t(seql));
+            DBG_ONLY(std::fprintf(stderr, "OMH sketching from %s of length %zu\n", ret.names_[i].data(), size_t(seql)););
             const std::vector<uint64_t> res = sketchers.omh->hash(seqp, seql);
             auto destp = &ret.signatures_[i * opts.sketchsize_];
             if constexpr(sizeof(RegT) == sizeof(uint64_t)) { // double
