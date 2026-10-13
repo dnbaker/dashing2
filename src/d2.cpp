@@ -100,6 +100,12 @@ void Dashing2Options::validate() const {
     if(canonicalize() && rh_.hashtype() != bns::DNA) {
         canonicalize(false);
     }
+    if((dtype_ == BED || dtype_ == BIGWIG) && kmer_result_ >= FULL_MMER_SET) {
+        // Exact k-mer set, count dictionary, and minimizer sequence modes are
+        // compared from per-input k-mer files, which interval sketching does
+        // not produce; comparing would read whatever the cache holds instead.
+        THROW_EXCEPTION(std::invalid_argument("Exact k-mer set, count dictionary, and minimizer sequence modes are only available for sequence (FASTX) inputs. Use a sketching mode for BED and BigWig data."));
+    }
     const int lim = use128() ? enc_.nremperres128() : enc_.nremperres64();
     if(entmin && (k_ > lim || !sp_.unspaced())) {
         std::fprintf(stderr, "Warning: entropy minimization is not supported for spaced seeds or rolling hashers; falling back to random minimization.\n");
