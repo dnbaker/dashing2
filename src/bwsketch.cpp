@@ -67,14 +67,20 @@ BigWigSketchResult bw2sketch(std::string path, const Dashing2Options &opts, bool
 
     if(parallel_process || opts.by_chrom_) {
         auto ids(get_iterators(fp));
-        for(const auto &p: ids) retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
+        for(const auto &p: ids) {
+            retmap.emplace(fp->cl->chrom[p.first], std::vector<RegT>());
+            ret.cardmap_.emplace(fp->cl->chrom[p.first], 0.);
+        }
         const size_t ss = opts.sketchsize_;
 
         std::vector<FullSetSketch> fss;
         std::vector<OPSetSketch> opss;
         std::vector<BagMinHash> bmhs;
         std::vector<ProbMinHash> pmhs;
-        for(size_t i = 0; i < std::min(size_t(opts.nthreads()), ids.size()); ++i) {
+        // omp_get_thread_num() is not bounded by the number of loop iterations:
+        // with schedule(dynamic) any thread in the team can take any chunk, so
+        // these must be sized for the whole team, not min(threads, contigs).
+        for(size_t i = 0; i < size_t(opts.nthreads()); ++i) {
             if(opts.sspace_ == SPACE_SET) {
                 if(opts.one_perm()) {
                     opss.emplace_back(ss);
