@@ -510,10 +510,10 @@ do {\
                 if(opts.use128()) {
                     if(unsigned(opts.k_) <= opts.nremperres128()) {
                         if(entmin) {
-                            auto encoder(opts.enc_.to_entmin128());
+                            auto encoder = make_encoder<bns::score::Entropy, u128_t>(opts.sp_, opts.hashtype(), opts.canonicalize());
                             FUNC_FE(encoder.for_each);
                         } else {
-                            auto encoder(opts.enc_.to_u128());
+                            auto encoder = make_encoder<bns::score::Lex, u128_t>(opts.sp_, opts.hashtype(), opts.canonicalize());
                             FUNC_FE(encoder.for_each);
                         }
                     } else {
@@ -523,10 +523,10 @@ do {\
                     }
                 } else if(unsigned(opts.k_) <= opts.nremperres64()) {
                     if(entmin) {
-                        auto encoder(opts.enc_.to_entmin64());
+                        auto encoder = make_encoder<bns::score::Entropy, uint64_t>(opts.sp_, opts.hashtype(), opts.canonicalize());
                         FUNC_FE(encoder.for_each);
                     } else {
-                        auto encoder(opts.enc_);
+                        auto encoder(*opts.enc_);
                         FUNC_FE(encoder.for_each);
                     }
                 } else {

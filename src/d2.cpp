@@ -81,14 +81,14 @@ void Dashing2Options::filterset(const std::string &path, bool is_kmer) {
             const auto sp = subpath.data();
             auto lfunc = [&](auto x) {fs_->add(maskfn(x));};
             if(use128()) {
-                if(unsigned(k_) <= enc_.nremperres128()) {
-                    auto encoder(enc_.to_u128());
+                if(unsigned(k_) <= nremperres128()) {
+                    auto encoder = make_encoder<bns::score::Lex, u128_t>(sp_, rht_, canonicalize());
                     encoder.for_each(lfunc, sp);
                 } else {
                     rh128_.for_each_hash(lfunc, sp);
                 }
-            } else if(unsigned(k_) <= enc_.nremperres64()) {
-                enc_.for_each(lfunc, sp);
+            } else if(unsigned(k_) <= nremperres64()) {
+                enc_.value().for_each(lfunc, sp);
             } else {
                 rh_.for_each_hash(lfunc, sp);
             }
@@ -106,7 +106,7 @@ void Dashing2Options::validate() const {
         // not produce; comparing would read whatever the cache holds instead.
         THROW_EXCEPTION(std::invalid_argument("Exact k-mer set, count dictionary, and minimizer sequence modes are only available for sequence (FASTX) inputs. Use a sketching mode for BED and BigWig data."));
     }
-    const int lim = use128() ? enc_.nremperres128() : enc_.nremperres64();
+    const int lim = use128() ? nremperres128() : nremperres64();
     if(entmin && (k_ > lim || !sp_.unspaced())) {
         std::fprintf(stderr, "Warning: entropy minimization is not supported for spaced seeds or rolling hashers; falling back to random minimization.\n");
         entmin = false;
