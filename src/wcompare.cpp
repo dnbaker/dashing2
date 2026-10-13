@@ -235,7 +235,7 @@ weighted_compare(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE *rhn,
     if(std::feof(lhk) || std::feof(rhk)) {
         return {0., lhsum + rhsum};
     }
-    // Skip the cardinalities of both
+    // The caller has already consumed the 8-byte cardinality headers.
     const size_t incbytes = use128 ? 16: 8;
     auto lh2p = &lhv2; auto lh1p = &lhv;
     auto rh1p = &rhv;  auto rh2p = &rhv2;
@@ -276,7 +276,7 @@ double cosine_compare_(std::FILE *lhk, std::FILE *rhk, std::FILE *lhn, std::FILE
     T lhv, rhv;
     CT lhc = 1., rhc = 1.;
     if(std::feof(lhk) || std::feof(rhk)) return 0.;
-    // Skip cardinalities of both files.
+    // The caller has already consumed the 8-byte cardinality headers.
     static constexpr size_t incbytes = sizeof(T);
     const auto lhp = &lhv, rhp = &rhv;
 
