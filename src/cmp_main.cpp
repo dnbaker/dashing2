@@ -117,11 +117,13 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                 std::fprintf(stderr, "File does not exist at %s/%zu\n", paths[i].data(), i);
                 std::exit(EXIT_FAILURE);
             }
+            if(st.st_size < 8 || size_t(st.st_size - 8) % sizeof(RegT)) {
+                THROW_EXCEPTION(std::runtime_error(std::string("File ") + paths[i] + " is too small to hold a cardinality header and a whole number of registers"));
+            }
             const size_t mysz = st.st_size - 8; // 8 bytes for the cardinality (for sketches/kmer sets), length of the sequence for minimizer sequences
             if(verbosity >= Verbosity::DEBUG) {
                 std::fprintf(stderr, "Checking file size for %zu/%zu: %zd\n", i, npaths, mysz);
             }
-            assert(mysz % sizeof(RegT) == 0);
             const auto nelem = mysz / sizeof(RegT);
             fsizes[i] = nelem;
             csizes[i + 1] = csizes[i] + nelem;
