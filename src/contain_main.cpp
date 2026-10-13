@@ -209,9 +209,7 @@ int contain_main(int argc, char **argv) {
     for(size_t i = 0; i < nitems; ++i) {
         uint64_t *ptr = ((uint64_t *)dbptr + 3 + sketchsize * i);
         assert((const char *)ptr < &db.data()[db.size()]);
-#if _OPENMP >= 201307L
-        #pragma omp simd
-#endif
+        // A hash-table mutation cannot be vectorized; no simd claim here.
         for(size_t j = 0; j < sketchsize; ++j) {
             kmer2ids[ptr[j]].push_back(i);
         }
