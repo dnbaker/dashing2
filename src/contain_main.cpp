@@ -194,8 +194,8 @@ int contain_main(int argc, char **argv) {
             std::ifstream ifs(databasefile + ".names.txt");
             for(std::string line;std::getline(ifs, line); names.emplace_back(line));
         } else {
-            const size_t v = ((db.size() - headerlen) / sketchsize);
-            while(names.size() < v) names.push_back(std::to_string(v));
+            const size_t v = (db.size() - headerlen) / sketchsize / sizeof(uint64_t);
+            while(names.size() < v) names.push_back(std::to_string(names.size()));
         }
     }
     const size_t nitems = names.size();
