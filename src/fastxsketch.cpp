@@ -96,61 +96,89 @@ int32_t num_threads() {
     return nt;
 }
 
+// Loads a cached sketch for one input into its preallocated slot. Files with
+// has_card hold an 8-byte cardinality header before the registers; k-mer and
+// count sidecars do not. Returns the number of registers loaded, or 0 when the
+// file does not hold exactly ss registers; the caller treats 0 as a cache miss
+// and resketches. Reads never exceed the ss-register slot they are given.
 template<typename T, size_t chunk_size = 65536>
-size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss) {
-    T *const origptr = ptr;
+size_t load_copy(const std::string &path, T *ptr, double *cardinality, const size_t ss, const bool has_card=true) {
     if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".gz")) {
         gzFile fp = gzopen(path.data(), "rb");
-        if(!fp) return 0; //THROW_EXCEPTION(std::runtime_error(std::string("Failed to open file at ") + path));
-        if(gzread(fp, cardinality, sizeof(*cardinality)) != int(sizeof(*cardinality))) {
+        if(!fp) return 0;
+        if(has_card && gzread(fp, cardinality, sizeof(*cardinality)) != int(sizeof(*cardinality))) {
             gzclose(fp);
             THROW_EXCEPTION(std::runtime_error("Failed to read cardinality from "s + path));
         }
-        for(int nr;
-            !gzeof(fp) && (nr = gzread(fp, ptr, sizeof(T) * chunk_size)) == int(sizeof(T) * chunk_size);
-            ptr += nr / sizeof(T));
+        size_t n = 0;
+        for(int nr; n < ss && (nr = gzread(fp, ptr + n, sizeof(T) * (ss - n))) > 0; n += size_t(nr) / sizeof(T))
+            ;
+        char extra;
+        if(n != ss || gzread(fp, &extra, 1) > 0) {
+            std::fprintf(stderr, "Cached sketch %s holds other than %zu registers; resketching.\n", path.data(), ss);
+            gzclose(fp);
+            return 0;
+        }
         gzclose(fp);
-        return ptr - origptr;
+        return n;
     } else if(path.size() > 3 && std::equal(path.data() + path.size() - 3, &path[path.size()], ".xz")) {
         auto cmd = std::string("xz -dc ") + path;
         std::FILE *fp = ::popen(cmd.data(), "r");
         if(fp == 0) return 0;
-        if(std::fread(cardinality, sizeof(*cardinality), 1, fp) != 1u) {
+        if(has_card && std::fread(cardinality, sizeof(*cardinality), 1, fp) != 1u) {
             ::pclose(fp);
             THROW_EXCEPTION(std::runtime_error("Failed to read cardinality from "s + path));
         }
-        for(auto up = (uint8_t *)ptr;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
+        size_t n = 0;
+        for(size_t nr; n < ss && (nr = std::fread(ptr + n, sizeof(T), ss - n, fp)) > 0; n += nr)
+            ;
+        T extra;
+        if(n != ss || std::fread(&extra, sizeof(T), 1, fp) == 1u) {
+            std::fprintf(stderr, "Cached sketch %s holds other than %zu registers; resketching.\n", path.data(), ss);
+            ::pclose(fp);
+            return 0;
+        }
         ::pclose(fp);
-        return ptr - origptr;
+        return n;
     }
     std::FILE *fp = bfopen(path.data(), "rb");
     if(!fp) THROW_EXCEPTION(std::runtime_error(std::string("Failed to open ") + path));
-    std::fread(cardinality, sizeof(*cardinality), 1, fp);
-    const int fd = ::fileno(fp);
+    if(has_card && std::fread(cardinality, sizeof(*cardinality), 1, fp) != 1u) {
+        std::fclose(fp);
+        return 0;
+    }
     size_t sz = 0;
-    if(!::isatty(fd)) {
+    if(!::isatty(::fileno(fp))) {
         struct stat st;
-        if(::fstat(fd, &st)) THROW_EXCEPTION(std::runtime_error(std::string("Failed to fstat") + path));
+        if(::fstat(::fileno(fp), &st)) THROW_EXCEPTION(std::runtime_error(std::string("Failed to fstat") + path));
         if(!st.st_size) {
             std::fprintf(stderr, "Warning: Empty file found at %s\n", path.data());
+            std::fclose(fp);
             return 0;
         }
-        size_t expected_bytes = st.st_size - 8;
-        const size_t expected_sketch_nb = ss * sizeof(T);
-        if(expected_bytes != expected_sketch_nb) {
-            std::fprintf(stderr, "Expected %zu bytes of sketch, found %zu\n", expected_sketch_nb, expected_bytes);
+        const size_t filebytes = st.st_size - (has_card ? 8: 0);
+        if(filebytes != ss * sizeof(T)) {
+            std::fprintf(stderr, "Cached sketch %s holds %zu bytes, expected %zu; resketching.\n", path.data(), filebytes, ss * sizeof(T));
+            std::fclose(fp);
+            return 0;
         }
-        size_t nb = std::fread(ptr, 1, expected_bytes, fp);
-        if(nb != expected_bytes) {
-            std::fprintf(stderr, "Read %zu bytes instead of %zu for file %s\n", nb, expected_bytes, path.data());
-            perror("Error reading.");
+        if(std::fread(ptr, 1, filebytes, fp) != filebytes) {
+            std::fprintf(stderr, "Failed to read %s\n", path.data());
+            std::fclose(fp);
             THROW_EXCEPTION(std::runtime_error("Error in reading from file"));
         }
-        sz = expected_bytes / sizeof(T);
+        sz = filebytes / sizeof(T);
     } else {
-        auto up = (uint8_t *)ptr;
-        for(;!std::feof(fp) && std::fread(up, sizeof(T), chunk_size, fp) == chunk_size; up += chunk_size * sizeof(T));
-        sz = (up - (uint8_t *)ptr) / sizeof(T);
+        size_t n = 0;
+        for(;n < ss && !std::feof(fp) && std::fread(ptr + n, sizeof(T), std::min(chunk_size, ss - n), fp) == std::min(chunk_size, ss - n); n += std::min(chunk_size, ss - n))
+            ;
+        T extra;
+        if(n != ss || std::fread(&extra, sizeof(T), 1, fp) == 1u) {
+            std::fprintf(stderr, "Cached sketch %s holds other than %zu registers; resketching.\n", path.data(), ss);
+            std::fclose(fp);
+            return 0;
+        }
+        sz = n;
     }
     std::fclose(fp);
     return sz;
@@ -431,9 +459,9 @@ FastxSketchingResult &fastx2sketch(FastxSketchingResult &ret, Dashing2Options &o
                     DBG_ONLY(std::fprintf(stderr, "Sketch was loaded from %s and has card %g\n", destination.data(), ret.cardinalities_[myind]);)
                 }
                 if(ret.kmers_.size())
-                    load_copy(destkmer, &ret.kmers_[mss], &ret.cardinalities_[myind], ss);
+                    load_copy(destkmer, &ret.kmers_[mss], &ret.cardinalities_[myind], ss, /*has_card=*/false);
                 if(ret.kmercounts_.size())
-                    load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind], ss);
+                    load_copy(destkmercounts, &ret.kmercounts_[mss], &ret.cardinalities_[myind], ss, /*has_card=*/false);
             } else if(opts.kmer_result_ <= FULL_MMER_SEQUENCE) {
                 DBG_ONLY(std::fprintf(stderr, "Cached at path %s, %s, %s\n", destination.data(), destkmercounts.data(), destkmer.data());)
                 if(opts.kmer_result_ == FULL_MMER_SET || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
@@ -672,7 +700,7 @@ do {\
                 }
             }
             if(ofp) checked_fwrite(ofp, &cret, sizeof(double));
-            std::fflush(ofp);
+            if(ofp) std::fflush(ofp);
             const uint64_t *ids = nullptr;
             const uint32_t *counts = nullptr;
             // Update this and VSetSketch above to filter down
