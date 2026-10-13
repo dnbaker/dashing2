@@ -32,7 +32,9 @@ void bottomk(const std::vector<SrcT> &src, std::vector<BKRegT> &ret, double thre
         const CountT count = ptr ? ptr[i]: CountT(1);
         if(count >= threshold) {
             if(weighted) {
-                const std::pair<double, BKRegT> key {double(item / count), item};
+                // Divide in floating point: integer division would truncate the
+                // priority and reorder near-ties relative to the true ratio.
+                const std::pair<double, BKRegT> key {double(item) / count, item};
                 pop_push(wpq, key, k);
             } else {
                 const BKRegT key = item;
