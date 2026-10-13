@@ -597,7 +597,7 @@ do {\
             }
             if(opts.save_kmercounts_ || opts.kmer_result_ == FULL_MMER_COUNTDICT) {
                 assert(ret.kmercountfiles_.size());
-                ret.kmercountfiles_.at(i) = destkmercounts;
+                if(ret.kmercountfiles_.size() > myind) ret.kmercountfiles_[myind] = destkmercounts;
                 if((ofp = bfreopen(destkmercounts.data(), "wb", ofp)) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to write k-mer counts"));
                 std::vector<double> tmp(ss);
 #define DO_IF(x) if(x.size()) {std::copy(x[tid].idcounts().begin(), x[tid].idcounts().end(), tmp.data());}
