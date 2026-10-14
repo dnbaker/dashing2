@@ -6,6 +6,7 @@
 #endif
 #include "enums.h"
 #include <memory>
+#include <optional>
 #include <atomic>
 #include <vector>
 #include "bonsai/encoder.h"
@@ -88,12 +89,24 @@ static inline bool check_compressed(std::string &path, int &ft) {
     return false;
 }
 
+// bonsai's Encoder constructor rejects k-mers longer than the integer type
+// holds (k > 32 for uint64_t, k > 64 for u128_t), so dashing2 builds encoders
+// only for paths that use them and hashes longer k-mers with RollingHashers.
+template<typename ScoreType=bns::score::Lex, typename KmerT=uint64_t>
+bns::Encoder<ScoreType, KmerT> make_encoder(const bns::Spacer &sp, bns::RollingHashingType rht, bool canon) {
+    bns::Encoder<ScoreType, KmerT> ret(sp, canon);
+    ret.hashtype(rht);
+    return ret;
+}
+
 struct Dashing2Options {
 
     // K-mer options
     int k_, w_;
     bns::Spacer sp_;
-    mutable bns::Encoder<> enc_;
+    // Engaged only when the 64-bit bonsai Encoder can represent k_ (k <= 32);
+    // longer k-mers are hashed with rh_/rh128_ below.
+    mutable std::optional<bns::Encoder<>> enc_;
     mutable bns::RollingHasher<uint64_t> rh_;
     mutable bns::RollingHasher<u128_t> rh128_;
     bns::RollingHashingType rht_;
@@ -133,8 +146,9 @@ public:
 
     std::shared_ptr<FilterSet> fs_;
     Dashing2Options(int k, int w=-1, bns::RollingHashingType rht=bns::DNA, SketchSpace space=SPACE_SET, DataType dtype=FASTX, size_t nt=0, bool use128=false, std::string spacing="", bool canon=false, KmerSketchResultType kres=ONE_PERM):
-        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), enc_(sp_, canon), rh_(k, canon, rht, w), rh128_(k, canon, rht, w), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
+        k_(k), w_(w), sp_(k, w > 0 ? w: k, spacing.data()), rh_(k, canon, rht, w), rh128_(k, canon, rht, w), rht_(rht), spacing_(spacing), sspace_(space), dtype_(dtype), use128_(use128) {
         kmer_result_ = kres;
+        if(unsigned(k) <= bns::rh2n(bns::DNA, sizeof(uint64_t))) enc_.emplace(sp_, canon);
         ht(rht);
 #ifndef NDEBUG
         if(dtype_ == FASTX) {
@@ -185,9 +199,9 @@ public:
     Dashing2Options &ht(bns::InputType rt) {
         rht_ = rt;
         rh_.hashtype(rt); rh128_.hashtype(rt);
-        enc_.hashtype(rt);
+        if(enc_) enc_->hashtype(rt);
         assert(rh_.hashtype() == rt);
-        assert(enc_.hashtype() == rt);
+        assert(!enc_ || enc_->hashtype() == rt);
         return *this;
     }
     bns::InputType hashtype() const {return rht_;}
@@ -210,17 +224,17 @@ public:
     bool trim_folder_paths() const {
         return trim_folder_paths_ || outprefix_.size();
     }
-    bool canonicalize() const {return enc_.canonicalize();}
+    bool canonicalize() const {return enc_ ? enc_->canonicalize(): rh_.canonicalize();}
     void canonicalize(bool val) const {
-        enc_.canonicalize(val);
+        if(enc_) enc_->canonicalize(val);
         rh_.canonicalize(val);
         rh128_.canonicalize(val);
     }
     auto w() const {return w_;}
     bool one_perm() const {return kmer_result_ == ONE_PERM && sspace_ == SPACE_SET;}
     auto nthreads() const {return nthreads_;}
-    size_t nremperres64() const {return enc_.nremperres64();}
-    size_t nremperres128() const {return enc_.nremperres128();}
+    size_t nremperres64() const {return bns::rh2n(rht_, 8);}
+    size_t nremperres128() const {return bns::rh2n(rht_, 16);}
     uint64_t seedseed() const {return seedseed_;}
     Dashing2Options &seedseed(uint64_t seed) {seedseed_ = seed; seed_mask(seedseed_); return *this;}
     bool sketch_compressed() const {

@@ -117,11 +117,13 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                 std::fprintf(stderr, "File does not exist at %s/%zu\n", paths[i].data(), i);
                 std::exit(EXIT_FAILURE);
             }
+            if(st.st_size < 8 || size_t(st.st_size - 8) % sizeof(RegT)) {
+                THROW_EXCEPTION(std::runtime_error(std::string("File ") + paths[i] + " is too small to hold a cardinality header and a whole number of registers"));
+            }
             const size_t mysz = st.st_size - 8; // 8 bytes for the cardinality (for sketches/kmer sets), length of the sequence for minimizer sequences
             if(verbosity >= Verbosity::DEBUG) {
                 std::fprintf(stderr, "Checking file size for %zu/%zu: %zd\n", i, npaths, mysz);
             }
-            assert(mysz % sizeof(RegT) == 0);
             const auto nelem = mysz / sizeof(RegT);
             fsizes[i] = nelem;
             csizes[i + 1] = csizes[i] + nelem;
@@ -156,11 +158,15 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
         if(verbosity >= Verbosity::INFO) {
             std::fprintf(stderr, "[%s:%d] Resized signatures\n", __FILE__, __LINE__);
         }
-        if(bns::isfile(pf + ".kmerhashes.u64")) {
+        // Sidecars are only consistent when every input has them; a mix of
+        // present and absent files cannot be compared register-for-register.
+        const bool allkmerhash = std::all_of(paths.begin(), paths.end(), [](const std::string &p) {return bns::isfile(p + ".kmerhashes.u64");});
+        const bool allkmercounts = std::all_of(paths.begin(), paths.end(), [](const std::string &p) {return bns::isfile(p + ".kmercounts.f64");});
+        if(allkmerhash) {
             DBG_ONLY(std::fprintf(stderr, "Loading k-mer hashes, too\n");)
             result.kmers_.resize(result.signatures_.size());
         }
-        if(bns::isfile(pf + ".kmercounts.f64")) {
+        if(allkmercounts) {
             DBG_ONLY(std::fprintf(stderr, "Loading k-mer counts, too\n");)
             result.kmercounts_.resize(result.signatures_.size());
         }
@@ -184,7 +190,8 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                 std::exit(1);
             }
             std::fclose(ifp);
-            if(std::string p(path + ".kmerhashes.u64"); bns::isfile(p)) {
+            if(allkmerhash) {
+                const std::string p(path + ".kmerhashes.u64");
                 if((ifp = bfopen(p.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error(std::string("Could not open path ") + p));
                 if(std::fread(&result.kmers_[csizes[i]], sizeof(uint64_t), fsizes[i], ifp) != fsizes[i]) {
                     std::fprintf(stderr, "Failed to read at path %s\n", p.data());
@@ -193,7 +200,8 @@ void load_results(Dashing2DistOptions &opts, SketchingResult &result, const std:
                 }
                 std::fclose(ifp);
             }
-            if(std::string p(path + ".kmercounts.f64"); bns::isfile(p)) {
+            if(allkmercounts) {
+                const std::string p(path + ".kmercounts.f64");
                 if((ifp = bfopen(p.data(), "rb")) == nullptr) THROW_EXCEPTION(std::runtime_error("Failed to open kmer count file"));
                 if(std::fread(&result.kmercounts_[csizes[i]], sizeof(double), fsizes[i], ifp) != fsizes[i]) {
                     std::fprintf(stderr, "Failed to read k-mer counts at path %s\n", p.data());

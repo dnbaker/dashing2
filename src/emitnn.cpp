@@ -36,15 +36,19 @@ void emit_neighbors(std::vector<pqueue> &lists, const Dashing2DistOptions &opts,
         }
         const size_t nnz = indptr.back();
         uint64_t dims [] {lists.size(), nnz};
+        // Gather once and write each array with one call: a locked stdio write
+        // per element dominates emission for large neighbor lists.
         std::vector<LSHIDType> indices(nnz);
+        std::vector<LSHDistType> dists(nnz);
+        for(size_t i = 0; i < lists.size(); ++i) {
+            const auto &l = lists[i];
+            std::transform(l.begin(), l.end(), &indices[indptr[i]], [](const PairT &x) {return x.second;});
+            std::transform(l.begin(), l.end(), &dists[indptr[i]], [](const PairT &x) {return x.first;});
+        }
         checked_fwrite(ofp, dims, sizeof(dims));
         checked_fwrite(ofp, indptr.data(), (indptr.size() * sizeof(uint64_t)));
-        for(size_t i = 0; i < lists.size(); ++i)
-            for(size_t j = 0; j < lists[i].size(); ++j)
-                checked_fwrite(ofp, &lists[i][j].second, sizeof(LSHIDType));
-        for(size_t i = 0; i < lists.size(); ++i)
-            for(size_t j = 0; j < lists[i].size(); ++j)
-                checked_fwrite(ofp, &lists[i][j].first, sizeof(LSHDistType));
+        checked_fwrite(ofp, indices.data(), nnz * sizeof(LSHIDType));
+        checked_fwrite(ofp, dists.data(), nnz * sizeof(LSHDistType));
     }
     if(ofp != stdout) std::fclose(ofp);
     auto emitstop = std::chrono::high_resolution_clock::now();

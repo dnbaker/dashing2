@@ -93,9 +93,6 @@ struct Counter {
         } else {
             const auto csp = count_sketch_.data();
             const auto cssz = count_sketch_.size();
-#ifdef _OPENMP
-            #pragma omp simd
-#endif
             for(size_t i = 0; i < cssz; ++i) {
                 if(auto v = std::abs(csp[i]); v > 0 && v >= threshold) {
                    tmp.push_back({maskfn(uint64_t(i)), v});

@@ -57,7 +57,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2DistOptions &opts,
             for(size_t i = 0; i < npaths; ++i) {
                 auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
                 auto &p(paths[myind]);
-                result.names_[i] = p;
+                result.names_[myind] = p;
                 auto [sig, card] = bed2sketch(p, opts);
                 result.cardinalities_[myind] = card;
                 std::copy(sig.begin(), sig.end(), &result.signatures_[myind * opts.sketchsize_]);
@@ -99,7 +99,7 @@ SketchingResult &sketch_core(SketchingResult &result, Dashing2DistOptions &opts,
                 for(size_t i = 0; i < npaths; ++i) {
                     auto myind = filesizes.size() ? filesizes[i].second: uint64_t(i);
                     auto &p(paths[myind]);
-                    result.names_[i] = p;
+                    result.names_[myind] = p;
                     auto res = bw2sketch(p, opts, /*parallel_process=*/false);
                     std::copy(res.global_->begin(), res.global_->end(), &result.signatures_[myind * opts.sketchsize_]);
                     result.cardinalities_[myind] = res.card_;

@@ -439,9 +439,9 @@ static inline void validate_options(char **const opts, const std::vector<std::st
                 assert(!std::isspace(rhs.back()));\
                 assert(!std::isspace(rhs.front()));\
                 auto lit = pathids.find(lhs);\
-                if(lit == pathids.end()) pathids.emplace(lhs, pathids.size()).first;\
+                if(lit == pathids.end()) lit = pathids.emplace(lhs, pathids.size()).first;\
                 auto rit = pathids.find(rhs);\
-                if(rit == pathids.end()) pathids.emplace(rhs, pathids.size()).first;\
+                if(rit == pathids.end()) rit = pathids.emplace(rhs, pathids.size()).first;\
                 compareids.emplace_back(lit->second, rit->second);\
             }\
             for(auto &pair: pathids) paths.emplace_back(std::move(pair.first));\

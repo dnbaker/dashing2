@@ -29,7 +29,7 @@ template<typename T> INLINE uint64_t reg2sig(const T x) {
         return hashvalue;
     }
     for(size_t i = 1; i < sizeof(T) / sizeof(uint64_t); ++i) {
-        std::memcpy(&v, &x, sizeof(uint64_t));
+        std::memcpy(&v, reinterpret_cast<const uint8_t *>(&x) + i * sizeof(uint64_t), sizeof(uint64_t));
         const uint64_t new_hash_value = sketch::hash::WangHash::hash(v ^ hashvalue);
         hashvalue ^= new_hash_value;
     }

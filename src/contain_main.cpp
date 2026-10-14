@@ -33,9 +33,14 @@ INLINE flat_hash_map<uint64_t, uint64_t> & operator+=(flat_hash_map<uint64_t, ui
 
 // Enumerates k-mers with the encoding the database was sketched with. Sketches
 // store fold64(maskfn(kmer)), so k-mers from --long-kmers databases are encoded
-// as 128-bit integers and folded to 64-bit ids in the same way.
+// as 128-bit integers and folded to 64-bit ids in the same way. The bonsai
+// Encoder constructor rejects k-mers longer than its integer type holds, so
+// encoders are built on demand and longer k-mers go through the rolling hashers.
 struct ContainEncoders {
-    bns::Encoder<bns::score::Lex, uint64_t> e64;
+    uint32_t k;
+    uint32_t w;
+    bool canon;
+    bns::InputType rht;
     bns::RollingHasher<uint64_t> rh64;
     bns::RollingHasher<u128_t> rh128;
     bool use128;
@@ -43,15 +48,15 @@ struct ContainEncoders {
     void for_each(const Func &func, Args &&...args) const {
         auto idfunc = [&func](auto kmer) __attribute__((always_inline)) {func(fold64(maskfn(kmer)));};
         if(use128) {
-            if(e64.k() <= e64.nremperres128()) {
-                auto e = e64.to_u128();
+            if(k <= bns::rh2n(rht, 16)) {
+                auto e = make_encoder<bns::score::Lex, u128_t>(bns::Spacer(k, w), rht, canon);
                 e.for_each(idfunc, std::forward<Args>(args)...);
             } else {
                 auto r = rh128;
                 r.for_each_hash(idfunc, std::forward<Args>(args)...);
             }
-        } else if(e64.k() <= e64.nremperres64()) {
-            auto e = e64;
+        } else if(k <= bns::rh2n(rht, 8)) {
+            auto e = make_encoder<bns::score::Lex, uint64_t>(bns::Spacer(k, w), rht, canon);
             e.for_each(idfunc, std::forward<Args>(args)...);
         } else {
             auto r = rh64;
@@ -194,24 +199,18 @@ int contain_main(int argc, char **argv) {
             std::ifstream ifs(databasefile + ".names.txt");
             for(std::string line;std::getline(ifs, line); names.emplace_back(line));
         } else {
-            const size_t v = ((db.size() - headerlen) / sketchsize);
-            while(names.size() < v) names.push_back(std::to_string(v));
+            const size_t v = (db.size() - headerlen) / sketchsize / sizeof(uint64_t);
+            while(names.size() < v) names.push_back(std::to_string(names.size()));
         }
     }
     const size_t nitems = names.size();
     if(nitems != ((db.size() - headerlen) / sketchsize / sizeof(uint64_t))) THROW_EXCEPTION(std::runtime_error("Database corrupted; wrong number of names."));
-    bns::Spacer sp(k, w);
-    // The encoder defaults to DNA; its alphabet also sets how many residues fit in 64 or 128 bits.
-    bns::Encoder<bns::score::Lex, uint64_t> e64(sp, nullptr, canon);
-    e64.hashtype(rht);
-    const ContainEncoders encs{e64, bns::RollingHasher<uint64_t>(k, canon, rht, w), bns::RollingHasher<u128_t>(k, canon, rht, w), use128};
+    const ContainEncoders encs{k, w, canon, rht, bns::RollingHasher<uint64_t>(k, canon, rht, w), bns::RollingHasher<u128_t>(k, canon, rht, w), use128};
     flat_hash_map<uint64_t, std::vector<uint64_t>> kmer2ids;
     for(size_t i = 0; i < nitems; ++i) {
         uint64_t *ptr = ((uint64_t *)dbptr + 3 + sketchsize * i);
         assert((const char *)ptr < &db.data()[db.size()]);
-#if _OPENMP >= 201307L
-        #pragma omp simd
-#endif
+        // A hash-table mutation cannot be vectorized; no simd claim here.
         for(size_t j = 0; j < sketchsize; ++j) {
             kmer2ids[ptr[j]].push_back(i);
         }

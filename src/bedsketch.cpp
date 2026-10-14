@@ -24,14 +24,17 @@ std::pair<std::vector<RegT>, double> bed2sketch(const std::string &path, const D
     if(opts.cache_sketches_ && bns::isfile(cache_path)) {
         auto [ifp, ispopen] = xopen(cache_path);
         std::fread(&ret.second, sizeof(ret.second), 1, ifp);
-        while(!std::feof(ifp)) {
-            RegT v;
-            std::fread(&v, sizeof(v), 1, ifp);
-            retvec.push_back(v);
-        }
-        ret.second = retvec.size() / std::accumulate(retvec.begin(), retvec.end(), 0.L);
+        retvec.clear();
+        for(RegT v; std::fread(&v, sizeof(v), 1, ifp) == 1u; retvec.push_back(v));
         if(ispopen) ::pclose(ifp); else std::fclose(ifp);
-        return ret;
+        if(retvec.size() == size_t(opts.sketchsize_)) {
+            return ret;
+        }
+        // A truncated or differently-sized cache cannot be used; fall through
+        // and overwrite it with a fresh sketch.
+        std::fprintf(stderr, "Cached sketch at %s holds %zu registers, expected %zu; resketching.\n", cache_path.data(), retvec.size(), size_t(opts.sketchsize_));
+        retvec.assign(opts.sketchsize_, RegT(0));
+        ret.second = 0.;
     }
     for(std::string s;std::getline(ifs, s);) {
         if(s.empty() || s.front() == '#') continue;
