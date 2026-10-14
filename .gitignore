@@ -1,0 +1,3 @@
+*.o
+*.static-avx2.o
+.DS_Store
