@@ -552,6 +552,21 @@ case v: {\
             } else if(measure == CONTAINMENT) res /= lhc;\
             else if(measure == UNION_SIZE) res = lhc + rhc - res;\
             ret = res;
+        if(result.kmersets_.size()) {
+            // --parse-by-seq full k-mer sets: sorted, deduplicated, held in memory
+            const auto &l = result.kmersets_[i], &r = result.kmersets_[j];
+            size_t isz = 0;
+            for(auto a = l.begin(), b = r.begin(); a != l.end() && b != r.end();) {
+                if(*a < *b) ++a;
+                else if(*b < *a) ++b;
+                else ++isz, ++a, ++b;
+            }
+            double res = isz;
+            const double lhc = l.size(), rhc = r.size();
+            CORRECT_RES(res, opts.measure_, lhc, rhc)
+            if(std::isnan(ret) || std::isinf(ret)) ret = std::numeric_limits<decltype(ret)>::max();
+            return ret;
+        }
         const std::string &lpath = result.destination_files_[i], &rpath = result.destination_files_[j];
         if(lpath.empty() || rpath.empty()) THROW_EXCEPTION(std::runtime_error("Destination files for k-mers empty -- cannot load from disk"));
         std::FILE *lhk = 0, *rhk = 0, *lhn = 0, *rhn = 0;

@@ -63,6 +63,11 @@ SketchingResult SketchingResult::merge(SketchingResult *start, size_t n, const s
             std::copy(src.kmers_.begin(), src.kmers_.end(), &ret.kmers_[sofs]);
         if(kmercountsz)
             std::copy(src.kmercounts_.begin(), src.kmercounts_.end(), &ret.kmercounts_[sofs]);
+        // one exact set per sequence (row), so rows are appended: each row stays its own entity
+        if(!src.kmersets_.empty()) {
+            ret.kmersets_.resize(total_seqs);
+            std::move(src.kmersets_.begin(), src.kmersets_.end(), ret.kmersets_.begin() + ofs);
+        }
     }
     return ret;
 }

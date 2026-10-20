@@ -262,6 +262,7 @@ FastxSketchingResult &fastx2sketch_byseq(FastxSketchingResult &ret, Dashing2Dist
     if(!kseqs) kseq_destroy(myseq);
     if(batch_index) resize_fill(opts, ret, batch_index, sketching_data, lastindex, nt, std::string_view(path));
     ret.names_.resize(lastindex);
+    if(ret.kmersets_.size()) ret.kmersets_.resize(lastindex);
     if(!need_to_keep_sequences) {
         ret.sequences_.free_if_possible();
     }
@@ -299,6 +300,8 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
     if(opts.kmer_result_ == FULL_MMER_SEQUENCE) {
         seqmins.reset(new std::vector<uint64_t>[(oldsz - lastindex)]);
     }
+    const bool full_sets = opts.kmer_result_ == FULL_MMER_SET;
+    if(full_sets && ret.kmersets_.size() < oldsz) ret.kmersets_.resize(oldsz);
     OMP_PRAGMA("omp parallel for num_threads(nt) schedule(dynamic)")
     for(size_t i = lastindex; i < oldsz; ++i) {
         const int tid = OMP_ELSE(omp_get_thread_num(), 0);
@@ -486,6 +489,19 @@ void resize_fill(Dashing2DistOptions &opts, FastxSketchingResult &ret, size_t ne
             }
             if(kmercounts.size() && ret.kmercounts_.size()) {
                 std::copy(kmercounts.begin(), kmercounts.end(), &ret.kmercounts_[i * opts.sketchsize_]);
+            }
+            if(full_sets) { // exact set for compare(): same filtering and folding as the sketch
+                auto &ks = ret.kmersets_[i];
+                ks.clear();
+                sketchers.for_each([&](auto x) {
+                    x = maskfn(x);
+                    if(opts.fs_ && opts.fs_->in_set(x)) return;
+                    ks.push_back(fold64(x));
+                }, seqp, seql);
+                std::sort(ks.begin(), ks.end());
+                ks.erase(std::unique(ks.begin(), ks.end()), ks.end());
+                ks.shrink_to_fit();
+                ret.cardinalities_[i] = ks.size();
             }
         }
         if(!need_to_keep_sequences) {
