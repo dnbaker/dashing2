@@ -7,7 +7,7 @@
 
 namespace dashing2 {
 template<typename Key, typename V, typename Hash>
-using flat_hash_map = robin_hood::unordered_flat_map<Key, V, Hash>;
+using flat_hash_map = ankerl::unordered_dense::map<Key, V, Hash>;
 
 int contain_usage() {
     std::fprintf(stderr, "Usage: dashing2 contain <flags> database.kmers <input.fq> <input2.fq>...\n"

@@ -6,7 +6,7 @@
 #include "sketch/hash.h"
 #include "sketch/macros.h"
 
-#include "robin_hood.h"
+#include "ankerl/unordered_dense.h"
 #include <string>
 #include <sys/types.h>
 #include <zlib.h>
@@ -206,15 +206,15 @@ struct FHasher {
 };
 
 template<typename Key, typename V,
-         typename Hash=std::conditional_t<std::is_same_v<u128_t, Key>, FHasher, robin_hood::hash<Key>>>
-using flat_hash_map = robin_hood::unordered_flat_map<Key, V, Hash>;
+         typename Hash=std::conditional_t<std::is_same_v<u128_t, Key>, FHasher, ankerl::unordered_dense::hash<Key>>>
+using flat_hash_map = ankerl::unordered_dense::map<Key, V, Hash>;
 
 template<typename Key,
          typename Hash=std::conditional_t<
-                std::is_same_v<u128_t, Key>, FHasher, robin_hood::hash<Key>
+                std::is_same_v<u128_t, Key>, FHasher, ankerl::unordered_dense::hash<Key>
          >
         >
-using flat_hash_set = robin_hood::unordered_flat_set<Key>;
+using flat_hash_set = ankerl::unordered_dense::set<Key, Hash>;
 
 
 }

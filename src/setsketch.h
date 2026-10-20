@@ -925,8 +925,10 @@ public:
     void update(const IT id, OFT) {update(id);}
     void trim_potentials() {
         const auto lim = this->explim();
-        for(auto it = potentials_.begin(), eit = potentials_.end(); it != eit; ++it) {
-            if(getlim(it->first) < lim) potentials_.erase(it);
+        // erase(it) returns the next element to visit (unordered_dense moves the last element into the hole)
+        for(auto it = potentials_.begin(); it != potentials_.end();) {
+            if(getlim(it->first) < lim) it = potentials_.erase(it);
+            else ++it;
         }
     }
     void update(const uint64_t id) {
@@ -1036,15 +1038,15 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
         long double tv = (lrv >> 32) * 1.2621774483536188887e-29L;
         return mi * std::log(tv);
     }
-    INLINE void erase_if(typename dashing2::flat_hash_map<uint64_t, uint32_t>::iterator it) {
+    INLINE auto erase_if(typename dashing2::flat_hash_map<uint64_t, uint32_t>::iterator it) {
 #ifdef VERBOSE_AF
         ++numremoved;
 #endif
-        potentials_.erase(it);
+        return potentials_.erase(it);
     }
     void trim_potentials(FT mv) {
         using fastlog::flog;
-        for(auto it = potentials_.begin(); it != potentials_.end(); ++it) {
+        for(auto it = potentials_.begin(); it != potentials_.end();) {
             const FT mi = -1.L / m_;
             FT nv;
             uint64_t hid = it->first;
@@ -1059,9 +1061,10 @@ struct CountFilteredCSetSketch: public CSetSketch<FT> {
                 if(nv < mv) nv = mi * std::log(tv);
             }
             if(nv >= mv) {
-                erase_if(it);
+                it = erase_if(it);
                 continue;
             }
+            ++it;
         }
     }
     void update(const uint64_t id) {
